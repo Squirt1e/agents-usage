@@ -3,14 +3,9 @@ import react from '@vitejs/plugin-react';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// Two entry points share this project:
-//
-// - `index.html` (+ `src/client`) is the existing web dashboard, built into
-//   `dist/client` and served by the Node server. It must keep working unchanged.
-// - `src/desktop/index.html` (+ `src/desktop`) is the compact menubar panel of
-//   the Tauri host, built into `dist/desktop-client` and loaded as
-//   `frontendDist` by `src-tauri/tauri.conf.json`.
-const mode = process.env.AGENTS_USAGE_VITE_ENTRY === 'desktop' ? 'desktop' : 'web';
+// One entry point: `src/desktop/index.html` (+ `src/desktop`), the compact menubar
+// panel of the Tauri host. It is built into `dist/desktop-client` and loaded as
+// `frontendDist` by `src-tauri/tauri.conf.json`.
 
 // Rollup mirrors the source path of an HTML entry inside `outDir`
 // (`src/desktop/index.html`), but the Tauri host serves the panel from the output
@@ -39,29 +34,14 @@ function flattenPanelDocument(outputDir: string, sourceDir: string): Plugin {
 
 const desktopOutDir = 'dist/desktop-client';
 
-const desktop = {
-  outDir: desktopOutDir,
-  rollupOptions: {
-    input: { desktop: resolve(__dirname, 'src/desktop/index.html') }
-  }
-};
-
-const web = {
-  outDir: 'dist/client',
-  rollupOptions: {
-    input: { index: resolve(__dirname, 'index.html') }
-  }
-};
-
 export default defineConfig({
-  plugins: [
-    react(),
-    ...(mode === 'desktop' ? [flattenPanelDocument(desktopOutDir, 'src/desktop')] : [])
-  ],
+  plugins: [react(), flattenPanelDocument(desktopOutDir, 'src/desktop')],
   build: {
-    ...(mode === 'desktop' ? desktop : web),
-    // Both outputs live under `dist/`; each build clears only its own directory
-    // through `npm run build:*`, so Vite must not empty the shared parent.
+    outDir: desktopOutDir,
+    rollupOptions: {
+      input: { desktop: resolve(__dirname, 'src/desktop/index.html') }
+    },
+    // The output directory is cleared by `scripts/clear-dir.mjs` before the build.
     emptyOutDir: false
   },
   server: {

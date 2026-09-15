@@ -391,7 +391,7 @@ function parseConfidence(value: unknown): Confidence[] {
  * the value in the wrong place. Dropping is always safer than guessing.
  *
  * A daily metric that carries no `scope` but does carry `details.localDay` (the
- * shape the balance-delta estimator and the retired web service use) gets a
+ * shape an earlier service version used) gets a
  * derived scope: the producer explicitly attributed the value to that local day,
  * which is what the daily gate asks for. A metric with neither stays unscoped and
  * is therefore hidden by a daily gate instead of being relabelled as today.
@@ -554,11 +554,10 @@ export function parseCredentialStatus(value: unknown): CredentialStatus {
  *
  * The desktop service answers `/api/settings` with an array of statuses carrying
  * their own `target` (`CredentialStatus` in Rust serializes one per managed
- * target), while the retired Node dashboard answered with an object keyed by
- * target — under `glmWallet` rather than `glm-wallet`. Reading only the object
- * form made every credential look unconfigured in the panel (a working API key
- * with mask `23cb` was displayed as 尚未配置), so both shapes are read here and
- * the array is the primary one.
+ * target), and an earlier version answered with an object keyed by target —
+ * under `glmWallet` rather than `glm-wallet`. Reading only the object form made
+ * every credential look unconfigured in the panel, so both shapes are read here
+ * and the array is the primary one.
  */
 function parseCredentials(value: unknown): PanelCredentials {
   const byTarget = new Map<string, unknown>();
@@ -571,7 +570,7 @@ function parseCredentials(value: unknown): PanelCredentials {
   } else if (isRecord(value)) {
     for (const [key, entry] of Object.entries(value)) byTarget.set(key, entry);
   }
-  // `glmWallet` is the key the retired web service used for the same account.
+  // `glmWallet` is the key an earlier version used for the same account.
   const read = (...keys: string[]): unknown => {
     for (const key of keys) {
       const entry = byTarget.get(key);
@@ -659,7 +658,8 @@ function parsePeakWindows(value: unknown): PeakWindow[] | undefined {
  *
  * Documented defaults, all of them "show what exists" rather than "assume data":
  * - `timezone` falls back to `UTC` (a display hint, never a data claim),
- * - `glmRegion` falls back to `china` (the region the retired web page used),
+ * - `glmRegion` falls back to `china` (the region this project has always
+ *   defaulted to),
  * - `glmWalletEnabled` falls back to `false` (the experimental connection needs
  *   an explicit opt-in),
  * - `deepseekWebEnabled` falls back to `false` for the same reason,

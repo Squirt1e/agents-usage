@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 // Remove a build output directory, refusing to touch anything outside the repo.
 //
-// `vite build` writes separate output directories for the legacy web entry
-// (`dist/client`) and the desktop panel entry (`dist/desktop-client`). Because
-// both live under `dist/`, the two builds cannot rely on Vite's `emptyOutDir`
-// (it only clears a directory that matches the output dir exactly and warns on
-// anything else), so each build clears its own directory through this script.
+// `vite build` writes the desktop panel into `dist/desktop-client`. Because that
+// directory sits under the project's `dist/`, the build cannot rely on Vite's
+// `emptyOutDir` (it only clears a directory that matches the output dir exactly
+// and warns on anything else), so the build clears it through this script first.
 import { rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative, resolve, sep } from 'node:path';

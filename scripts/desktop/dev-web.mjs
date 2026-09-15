@@ -2,9 +2,9 @@
 // Run the Vite dev server for the desktop panel entry.
 //
 // The panel reads usage data from the Rust service over loopback. The port is
-// announced by the service's discovery file, not assumed; until task 4.3 lands,
-// the dev server exposes the same `/api` and `/events` proxy as the legacy web
-// entry so the panel entry point can be exercised. The Tauri host loads
+// announced by the service's discovery file, not assumed; the dev server also
+// exposes a `/api` and `/events` proxy so the panel can be exercised in a plain
+// browser before that handshake exists. The Tauri host loads
 // `http://127.0.0.1:5174/src/desktop/` (see `devUrl` in `src-tauri/tauri.conf.json`).
 import net from 'node:net';
 import { spawn } from 'node:child_process';

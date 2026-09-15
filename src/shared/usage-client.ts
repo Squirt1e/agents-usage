@@ -6,17 +6,12 @@
  * implement it:
  *
  * - `createHttpUsageClient()` (this file) talks to the local service over
- *   `/api/...` and `/events`, mirroring the retired web dashboard exactly:
- *   `GET /api/bootstrap` hands out the `X-Session-Token` used by every mutation
- *   (`PUT /api/settings`, `PUT|DELETE /api/credentials/:target`,
- *   `POST /api/refresh/:provider`).
+ *   `/api/...` and `/events`: `GET /api/bootstrap` hands out the `X-Session-Token`
+ *   used by every mutation (`PUT /api/settings`,
+ *   `PUT|DELETE /api/credentials/:target`, `POST /api/refresh/:provider`).
  * - `createDesktopUsageClient(bridge)` (`src/desktop/desktop-client.ts`) talks
  *   to the Tauri host and degrades to the HTTP client when no bridge exists, so
  *   the panel stays testable in a plain browser.
- *
- * The legacy web entry (`src/client/**`) is untouched: it keeps its own inline
- * fetch calls. This client reproduces its observable behaviour so the new views
- * can be mounted in the companion web page without a second data path.
  */
 
 import type { CollectorError, ProviderId } from './contracts';
@@ -494,8 +489,9 @@ export function createHttpUsageClient(options: HttpUsageClientOptions = {}): Usa
 /**
  * Normalize a `provider` event.
  *
- * The retired web service sends `{ provider, result: { status, snapshot } }`
- * while the Rust host sends the provider state directly. Both are accepted;
+ * An earlier service version sent `{ provider, result: { status, snapshot } }`
+ * while the current Rust host sends the provider state directly. Both are
+ * accepted;
  * anything without a snapshot or an error makes the caller re-read the snapshot.
  */
 export function unwrapProviderEvent(payload: unknown): unknown {

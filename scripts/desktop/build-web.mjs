@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 // Build the desktop panel web assets for the Tauri host.
 //
-// The panel is a second Vite entry point of the existing project
-// (`src/desktop/index.html`), emitted to `dist/desktop-client`, which is the
-// `frontendDist` used by `src-tauri/tauri.conf.json`. The legacy web entry
-// (`dist/client`) is built separately by `npm run build:client`; both are part of
-// `npm run build`, so one command still keeps both entry points working.
+// The panel is the project's only front end (`src/desktop/index.html`), emitted to
+// `dist/desktop-client`, which is the `frontendDist` used by
+// `src-tauri/tauri.conf.json`.
 import { spawnSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -27,12 +25,7 @@ rmSync(outDir, { recursive: true, force: true });
 
 const result = spawnSync(process.execPath, [viteBin, 'build'], {
   cwd: repoRoot,
-  stdio: 'inherit',
-  env: {
-    ...process.env,
-    // Selects the panel entry point of `vite.config.ts` (`dist/desktop-client`).
-    AGENTS_USAGE_VITE_ENTRY: 'desktop'
-  }
+  stdio: 'inherit'
 });
 
 process.exit(result.status ?? 1);

@@ -1,11 +1,11 @@
 /**
  * Status vocabulary of the panel.
  *
- * The Chinese wording is the one the retired web dashboard already used
- * (需要配置 / 认证失败 / 请求受限 / 接口不兼容 / 网络异常), extended with 等待刷新 for an
- * elapsed quota reset and 采集进程异常 / 存储异常 / 状态未知 for the remaining error
- * kinds. Keeping one vocabulary means the desktop panel and the companion web page
- * describe the same failure the same way.
+ * The Chinese wording (需要配置 / 认证失败 / 请求受限 / 接口不兼容 / 网络异常) is the
+ * vocabulary this project has always used, extended with 等待刷新 for an elapsed
+ * quota reset and 采集进程异常 / 存储异常 / 状态未知 for the remaining error kinds.
+ * One vocabulary means the panel and the companion web page describe the same
+ * failure the same way.
  *
  * A cached reading carries no notice of its own. It is still shown — dropping it
  * would turn a half-hour-old number into a blank card — but the panel does not
