@@ -107,6 +107,7 @@ Apple Silicon 通用的单一安装包。
 ## 从源码构建
 
 需要 macOS、Node.js 24+、Rust 1.98+（用 `rustup` 安装）与 Xcode Command Line Tools。
+Node 只用于前端构建与测试，最终的 app 不依赖 Node 运行。
 
 ```bash
 npm install
@@ -152,30 +153,6 @@ docs/desktop/          桌面版工程说明：构建、语义对照、组件与
 
 工程入口与命令见 [`docs/desktop/README.md`](docs/desktop/README.md)，界面与语义约定见
 [`docs/desktop/component-and-style-guide.md`](docs/desktop/component-and-style-guide.md)。
-
-## 旧版网页仪表盘（Node）
-
-仓库里保留了早期在浏览器里使用的版本：同一套采集核心的 Node 实现 + Vite 网页，默认监听
-`http://127.0.0.1:4715`。它与桌面版共用 Keychain 凭据，但使用各自的数据目录。
-
-```bash
-npm run build && npm start     # 开发模式：npm run dev
-```
-
-常用环境变量：
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `AGENTS_USAGE_HOST` | `127.0.0.1` | 仅接受 `127.0.0.1` 或 `::1` |
-| `AGENTS_USAGE_PORT` | `4715` | 本地 HTTP 端口 |
-| `AGENTS_USAGE_TIMEZONE` | 系统时区 | 日界线与显示时区 |
-| `AGENTS_USAGE_DATA_DIR` | `~/Library/Application Support/agents-usage` | SQLite 数据目录 |
-| `AGENTS_USAGE_OBSERVATION_RETENTION_DAYS` | `30` | 余额明细保留天数 |
-| `AGENTS_USAGE_EXPERIMENTAL_GLM_WALLET` | `false` | 实验钱包的初始开关 |
-| `AGENTS_USAGE_GLM_WALLET_ENDPOINT` | 空 | 实验钱包 HTTPS 读取端点 |
-
-各平台还支持 `AGENTS_USAGE_<PROVIDER>_REFRESH_MS`、`_TIMEOUT_MS`、`_COOLDOWN_MS`、
-`_MAX_BACKOFF_MS`（`<PROVIDER>` 为 `CODEX`、`GLM`、`DEEPSEEK`）。
 
 ## 已知限制
 

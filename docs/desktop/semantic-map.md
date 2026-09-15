@@ -1,8 +1,9 @@
-# 新旧语义对照（任务 1.3）
+# 采集语义对照
 
-本文件把现有 Node 运行时（`src/shared/contracts.ts`、`src/server/adapters/*`）的语义逐项对照
-到 Rust 运行时（`crates/usage-core`）。目的是让迁移后的采集结果与界面行为保持一致：字段名、
-枚举拼写、缺失值规则、日期/范围口径和连接身份都必须逐条对上，而不是只重写成功请求。
+本文件把各平台的上游接口语义逐项对照到 Rust 采集核心（`crates/usage-core`）与面板侧契约
+（`src/shared/contracts.ts`、`src/shared/desktop-contract.ts`）。目的是让采集结果与界面行为
+保持一致：字段名、枚举拼写、缺失值规则、日期/范围口径和连接身份都必须逐条对上，而不是只处理
+成功请求。表中「早先实现」一列记录历史行为，用于解释为什么某些命名与兼容规则保留至今。
 
 对照样例（脱敏）存放在 [`fixtures/contracts/`](../../fixtures/contracts/)：
 
@@ -15,12 +16,13 @@
 | `daily-statistics.json` | 时区、本地日界线、Codex 日期桶、GLM 查询区间、余额估算 |
 | `redaction.json` | 请求头、嵌套字段、进程输出、账号掩码的脱敏结果 |
 
-样例的 `input` 与 `expect` 是双方共同的验收依据，任一侧行为变化都必须同时更新样例对应的
-测试。TypeScript 侧由 `tests/contracts-fixtures.test.ts` 校验（`npm run test:contracts`）。
+样例的 `input` 与 `expect` 是采集实现的验收依据，行为变化必须同时更新样例对应的测试。
+Rust 侧由 `crates/usage-core/tests/contract_conformance.rs` 校验（`npm run rust:test`），
+面板侧共享契约由 `tests/contracts.test.ts` 校验（`npm test`）。
 
 ## 1. 窗口（quota window）
 
-| 项 | 旧实现 | 新实现要求 |
+| 项 | 早先实现 | 当前要求 |
 | --- | --- | --- |
 | Codex 主/次窗口 | `primary` / `secondary`，`windowDurationMins` × 60 = `windowSeconds` | 保持同一字段与换算，缺 `windowDurationMins` 时该指标不带 `windowSeconds` |
 | Codex 重置时间 | `resetsAt`（Unix 秒）× 1000 → ISO-8601 | 仍是秒转毫秒后输出带偏移的 ISO-8601；缺 `resetsAt` 时不写 `resetAt` |
@@ -36,7 +38,7 @@
 
 ## 2. 币种与金额
 
-| 项 | 旧实现 | 新实现要求 |
+| 项 | 早先实现 | 当前要求 |
 | --- | --- | --- |
 | DeepSeek 余额 | `balance_infos[]` 每项拆成 `total` / `granted` / `topped-up` 三个指标，`unit` = 币种，`direction` = `balance` | 同前；每个币种各自成组，不合并、不换算汇率 |
 | 数值形态 | `"86.42"` 字符串金额 → number；`0` 是可靠零值 | 同前；解析失败按不兼容处理，不落 0 |
@@ -48,7 +50,7 @@
 
 ## 3. 来源标识（source）
 
-| 来源字符串 | 产生者 | 新实现要求 |
+| 来源字符串 | 产生者 | 当前要求 |
 | --- | --- | --- |
 | `codex-app-server` | Codex stdio JSON-RPC | 保持 |
 | `glm-monitor` | GLM 套餐监控接口 | 保持 |
@@ -56,13 +58,13 @@
 | `deepseek-balance` | DeepSeek 余额接口 | 保持 |
 | `deepseek-web-usage` | DeepSeek 实验网页用量连接（开发者后台同款接口） | 实验通道，默认关闭；失败不影响稳定通道 |
 | `balance-delta-estimator` | 余额差分估算 | 保持 |
-| `<source>+experimental` | 旧编排器对「稳定 + 实验」合并结果的标记 | 不作为新实现依据：新契约按连接保存来源与健康状态，不靠字符串拼接表达 |
+| `<source>+experimental` | 旧编排器对「稳定 + 实验」合并结果的标记 | 不作为当前实现依据：新契约按连接保存来源与健康状态，不靠字符串拼接表达 |
 
 新契约在保留 `source` 的同时增加**连接标识**与数据能力标记；界面按连接渲染，不解析来源字符串。
 
 ## 4. 错误与状态
 
-| 项 | 旧实现 | 新实现要求 |
+| 项 | 早先实现 | 当前要求 |
 | --- | --- | --- |
 | 错误种类 | `missing_config` / `authentication` / `compatibility` / `network` / `rate_limit` / `process` / `storage` / `unknown` | 枚举拼写完全一致；未知种类不得导致解析失败 |
 | 无数据快照状态 | `missing_config`、`authentication` → `disconnected`；其余 → `unavailable` | 同前 |
@@ -75,22 +77,22 @@
 
 ## 5. 统计日期与范围
 
-| 项 | 旧实现 | 新实现要求 |
+| 项 | 早先实现 | 当前要求 |
 | --- | --- | --- |
 | 时区 | 启动时读取 `AGENTS_USAGE_TIMEZONE`，默认系统时区；非敏感设置可改 | 同前，持久化在非敏感设置中 |
 | 本地日界线 | 余额观测用 `Intl.DateTimeFormat('en-CA', { timeZone })` 求 `YYYY-MM-DD` | 同一口径；同一瞬间在两侧必须落到同一天 |
-| Codex 每日 Tokens | `dailyUsageBuckets` 中 `startDate` **等于 UTC 当日** 的桶才生成 `activity.daily.tokens` | 保持「按响应日期匹配」的语义，同时记录统计日期与范围；旧实现用 UTC 日期匹配、与本地日界线不一致，属于需要统一的差异（见下） |
+| Codex 每日 Tokens | `dailyUsageBuckets` 中 `startDate` **等于 UTC 当日** 的桶才生成 `activity.daily.tokens` | 保持「按响应日期匹配」的语义，同时记录统计日期与范围；早先实现用 UTC 日期匹配、与本地日界线不一致，属于需要统一的差异（见下） |
 | GLM 活动区间 | `startTime` = 昨天同一小时，`endTime` = 今天同一分钟（滚动约 24 小时） | **修正**：区间改为配置时区「统计日 00:00:00」到当前时刻；只有接口时区与响应范围确认一致后才标为今日 |
 | 消费估算日期 | 观测记录带 `local_day`，跨日先结算前一天 | 同前，且按连接、币种隔离；半日启动标记覆盖不完整 |
 | 倒计时 | 由绝对 `resetAt` 与当前时间计算，归零显示等待刷新 | 同前；前端定时器不直接触发无界请求 |
 
 **需要解决的差异（属任务 3.4/4.2 范围）**：Codex 的每日桶用 UTC 日期匹配，而余额估算用配置时区
-的本地日期。新实现必须让「今天」的口径唯一：要么按响应确认的统计范围标注并单独呈现，要么统一
+的本地日期。当前实现必须让「今天」的口径唯一：要么按响应确认的统计范围标注并单独呈现，要么统一
 到配置时区。无论选择哪种，`daily-statistics.json` 已固定「同一瞬间 → 同一天」的验收要求。
 
 ## 6. GLM 连接标识
 
-| 项 | 旧实现 | 新实现要求 |
+| 项 | 早先实现 | 当前要求 |
 | --- | --- | --- |
 | 连接身份 | provider 级快照；套餐是 stable 通道，钱包是 experimental 通道，结果由编排器合并 | 连接级：`glm-quota` 与 `glm-wallet` 各自持有凭据、有效性、超时、缓存与最后成功时间 |
 | 连接身份的判定 | 面板按 `state.connection ?? snapshot.connection` 派生，两者都缺时当作主连接 | 服务按连接逐条发布，身份在 `connections`；面板必须按 state 级标识 → 快照标识 → `connections` 中唯一一条解析（`stateConnection()`），只有无法判定时才退回主连接。首次成功之前同样要判对，否则已关闭的实验连接会以「余额／Coding Plan」的名义混进底部连接状态 |
@@ -104,7 +106,7 @@
 | 网页登录态被拒 | 无 | 后台业务码 `40002 Missing Token` 与 `40003 Authorization Failed (invalid token)` 都算认证失败（引导重新粘贴）；写入前去掉粘贴值自带的 `Bearer ` 前缀，整段 `Authorization` 头不应因此被判成无效 |
 | 网页用量的查询窗口 | 无 | 后台用量页只提交整日窗口（`start` = 本地日零点，`end` = 下一个本地日零点，另带 `tz` 偏移秒），因此实验采集也提交完整本地日，SHALL NOT 用「当前时刻」当窗口终点 |
 | 网页用量载荷位置 | 无 | 后台前端读 `data.biz_data`；载荷直接放在 `data` 下（少一层包装）时按同一份载荷读取；两种都读不到时按接口不兼容报错，错误文案必须点明缺失位置并列出信封字段名（字段名不是值） |
-| 凭据校验失败的回显 | 旧网页把服务应答里的 `error` 原样显示在表单里 | 桌面路径必须显示同样的原因：宿主错误串 `service returned HTTP <status>: <body>` 在面板侧解码后复用同一套状态映射，命令名只用于服务没给出原因的情况 |
+| 凭据校验失败的回显 | 早先的实现把服务应答里的 `error` 原样显示在表单里 | 面板必须显示同样的原因：宿主错误串 `service returned HTTP <status>: <body>` 在面板侧解码后复用同一套状态映射，命令名只用于服务没给出原因的情况 |
 | 凭据状态形状 | Node 旧服务回按目标键控的对象（钱包键名 `glmWallet`） | 桌面服务回带 `target` 字段的状态数组；面板两种形状都读，任一形状下「已配置 + 末尾掩码」都必须显示出来 |
 
 ## 7. 缺失值与序列化约定

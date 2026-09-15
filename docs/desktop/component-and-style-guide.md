@@ -340,7 +340,8 @@ CSS 动效由文件末尾的 `prefers-reduced-motion` 全局兜底关闭。窗�
 - [ ] `prefers-reduced-motion` 下 CSS 与 JS 动效都能停止。
 - [ ] 鼠标、键盘和屏幕阅读器都能完成操作，焦点往返清晰。
 - [ ] 新卡片不会破坏最多三个完整卡片的高度预算；设置页不会自行改变宿主高度。
-- [ ] 运行 `npm run typecheck`、`npm run lint`、`npm test`；涉及共享代码时再运行旧网页回归。
+- [ ] 运行 `npm run typecheck`、`npm run lint`、`npm test`；涉及 Rust 侧再运行
+      `npm run rust:test` 与 `npm run rust:clippy`。
 
 ## 10. 规范与守卫索引
 

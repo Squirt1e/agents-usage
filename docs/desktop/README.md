@@ -13,8 +13,7 @@ Cargo.toml                      Rust workspace 根（成员见下）
 crates/usage-core/              采集核心：契约、适配器、存储、凭据、估算、调度
 crates/usage-service/           独立可执行服务：占用数据目录、回环 HTTP/SSE
 src-tauri/                      Tauri 宿主：菜单栏、窗口生命周期、受限命令/事件桥
-src/shared/                     与前端共享的契约与脱敏（TypeScript）
-src/client/                     现有网页仪表盘（保持不变）
+src/shared/                     面板与服务共享的契约与脱敏（TypeScript）
 src/desktop/                    桌面紧凑面板入口（约 350 逻辑像素）
 tools/cargo.sh                  cargo 包装脚本（见「环境注意事项」）
 tools/tauri.sh                  Tauri CLI 包装脚本
@@ -28,18 +27,8 @@ docs/desktop/                   环境基线、依赖锁定、语义对照、验
 
 ## 命令
 
-旧网页路径（未改动，仍然可用）：
-
 ```bash
-npm run dev        # Node 服务 + Vite 网页开发
-npm test           # vitest 全量
-npm run build      # 构建服务端 + 网页 + 桌面面板前端
-npm start          # 运行已构建的 Node 服务
-```
-
-桌面路径：
-
-```bash
+npm test                    # vitest 全量（面板、契约、动效与宽度守卫）
 npm run build:desktop-web   # 构建面板前端到 dist/desktop-client
 npm run build:desktop       # Tauri 打包（app + dmg）
 npm run rust:check          # cargo check --workspace --all-targets
@@ -61,9 +50,8 @@ npm run dev:desktop         # 热更新模式：构建 service 后交给宿主�
   症状是新增的设置项写不进去、`/api/settings` 里缺字段，看起来像前端有 bug。
   打包版对应的是 `src-tauri/binaries/usage-service-<triple>`，由
   `node scripts/desktop/build-service.mjs`（`build:desktop` 的一环）暂存。
-- service 进程由宿主托管：已有实例则复用，否则自动拉起并在退出时回收。因此单独的
-  `npm run dev:service` 不再进入并发列表——它遇到已运行实例会按 CLI 语义直接退出，
-  之前会把整个 dev 会话一起带崩。
+- service 进程由宿主托管：已有实例则复用，否则自动拉起并在退出时回收。因此不需要另外手动起
+  `npm run dev:service`——它遇到已运行实例会按 CLI 语义直接退出。
 - Vite 开发服务器由 `tauri.conf.json` 的 `beforeDevCommand` 唯一持有（端口 5174），
   退出时随之回收；不要再手动另起 `npm run dev:desktop-web`，否则会端口竞争。
 - 打包版不受影响：面板仍是隐藏、点击托盘展开的弹层行为（自动显示只存在于
@@ -77,19 +65,13 @@ npm run dev:desktop         # 热更新模式：构建 service 后交给宿主�
 bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥匙串/数据目录
 ```
 
-## 两个版本的关系
+## 数据与凭据位置
 
-- 旧 Node 网页继续使用 `~/Library/Application Support/agents-usage/usage.sqlite3`，端口
-  仍是 4715。桌面路径不打开、不迁移、不改写该数据库。
-- Rust 服务使用独立数据目录（设计为
-  `~/Library/Application Support/agents-usage/desktop/`），默认端口与 4715 不同，并在被
-  占用时公布实际端口。
-- 两个版本共用 macOS 钥匙串中既有的服务名与账号标识，不复制密钥。桌面端在
-  `agents-usage.deepseek` 下额外维护 `web-experimental` 账号项（实验性网页用量连接的
-  登录 Token），由设置中的 `deepseekWebEnabled` 控制，默认关闭；旧 Node 网页不感知该
-  连接，行为不变。
-- 修改 `src/shared/` 或 `src/client/` 的共享代码后必须跑旧网页回归（`npm test`、
-  `npm run typecheck`、`npm run lint`、`npm run build:client`）。
+- 服务使用独立数据目录 `~/Library/Application Support/agents-usage/desktop/`，占用该
+  目录的独占锁，并在端口被占用时公布实际端口（见 `service.json`）。
+- 凭据存放在 macOS 钥匙串既有的服务名与账号标识下（`agents-usage.<provider>`），不复制
+  密钥。实验性网页用量连接的登录 Token 是 `agents-usage.deepseek` 下的 `web-experimental`
+  账号项，由设置中的 `deepseekWebEnabled` 控制，默认关闭。
 
 ## 环境注意事项
 
@@ -118,7 +100,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   一整句，因此状态行允许换行：掩码/未配置与删除入口不收缩，反馈独占一行并在行内断行
   （`tests/panel-width.test.ts` 守住）。粘贴值自带的 `Bearer ` 前缀在服务端写入前被去掉，
   因此整段 `Authorization` 头也能直接用；凭据状态按服务实际返回的形状解析（本机服务是带
-  `target` 字段的数组，旧网页是按目标键控的对象）。
+  `target` 字段的数组，早先的服务版本是按目标键控的对象）。
 - 采集核心（`crates/usage-core`）：契约、脱敏、Keychain、SQLite 存储、日消费估算、Codex/
   GLM/DeepSeek 采集器、连接级调度器，全部实现并有测试。
 - 本地服务（`crates/usage-service`）：数据目录独占锁、私有服务发现、认证的回环

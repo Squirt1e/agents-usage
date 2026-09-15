@@ -16,14 +16,11 @@
 
 | 命令 | 作用 |
 | --- | --- |
-| `npm run test:contracts` | TypeScript 侧契约测试（`tests/contracts.test.ts`、`tests/contracts-conformance.test.ts`） |
 | `npm run rust:test` | Rust 侧全部测试，含 `crates/usage-core/tests/contract_conformance.rs` |
-| `npm run contract:test` | 上面两者一起跑 |
-| `npm run verify:baseline` | 样例格式检查 + 两侧契约测试（加 `--no-rust` 只跑 TypeScript，加 `--with-legacy` 再跑旧网页基线） |
+| `npm test` | TypeScript 侧契约与面板测试（`tests/contracts.test.ts` 等） |
 
-两侧测试读取**同一份**文件：Rust 通过 `usage-core::fixtures::load_fixture`，TypeScript 通过
-`tests/contracts-conformance.test.ts` 的 `fixture()`。任何语义变化必须同时更新样例与两侧实现，
-否则至少一侧会失败。
+Rust 测试通过 `usage-core::fixtures::load_fixture` 读取这里的样例，`crates/usage-core/src/fixtures.rs`
+会校验样例的格式；任何语义变化都必须同时更新样例与实现，否则测试会失败。
 
 ## 文件清单
 

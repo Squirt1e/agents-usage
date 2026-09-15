@@ -6,18 +6,16 @@
 
 | 命令 | 覆盖 | 何时运行 |
 | --- | --- | --- |
-| `npm run verify:legacy` | 旧网页：`tsc --noEmit`、`eslint .`、全部 vitest、生产构建（服务端 + 旧网页 + 面板前端），并校验三处产物存在 | 改动 `src/shared/`、`src/client/`、`src/server/`、`vite.config.ts` 或构建脚本后 |
-| `npm run verify:legacy -- --no-build` | 同上但不做生产构建 | 只想快速回归时 |
-| `npm run test:contracts` | TypeScript 侧契约测试（`tests/contracts.test.ts`、`tests/contracts-conformance.test.ts`） | 改动契约、适配器解析或样例后 |
+| `npm test` | vitest 全量（面板组件、契约、动效与宽度守卫） | 改动 `src/`、`tests/` 后 |
+| `npm run typecheck` / `npm run lint` | `tsc --noEmit` / eslint | 每次改动 |
+| `npm run build:desktop-web` | 构建面板前端到 `dist/desktop-client` | 改动面板构建或资源后 |
 | `npm run rust:test` | Rust workspace 全部测试（含 `contract_conformance`） | 改动 `crates/`、`src-tauri/` 后 |
-| `npm run contract:test` | 上面两者 | 契约或样例变化时（默认组合） |
-| `npm run verify:baseline` | 样例格式检查 + 两侧契约测试；`--with-legacy` 追加旧网页基线，`--no-rust` 只跑 TypeScript | 提交前的组合检查 |
 | `npm run rust:check` | `cargo check --workspace --all-targets` | 只想快速确认能编译时 |
 | `npm run rust:clippy` | clippy，警告即错误 | Rust 代码评审前 |
 | `npm run build:desktop` | Tauri 打包（app + dmg） | 交付或验收打包结果时（任务 8.6） |
 
-`npm test`（vitest 全量）与 `npm run verify:legacy` 的关系：前者是测试子集入口，后者额外包含
-类型检查、lint、生产构建与产物校验。
+测试与样例：`fixtures/contracts/` 里的样例由 Rust 侧 `contract_conformance` 与共享契约测试共同
+读取，语义变化必须同时更新样例与实现。
 
 ## 契约两侧校验的约定
 

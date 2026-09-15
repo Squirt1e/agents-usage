@@ -108,8 +108,8 @@
 - **注释解释「为什么」**：面板代码里的注释用于记录取舍与踩过的坑（动效部分尤其如此），不要
   写复述代码的注释。
 - **改动后的验证**：`npm run typecheck`、`npm run lint`、`npm test`。涉及桌面面板样式或行为的
-  改动必须跑 `npm test`；涉及 `src/shared/` 或 `src/client/` 的共享代码还要跑旧网页回归
-  （见 `docs/desktop/README.md`）。
+  改动必须跑 `npm test`；涉及 `crates/` 或 `src-tauri/` 还要跑 `npm run rust:test` 与
+  `npm run rust:clippy`（见 `docs/desktop/README.md`）。
 - **规格先行**：行为变化先进 `openspec/changes/`，实现与规格必须对得上；工程说明同步更新
   `docs/desktop/`。
 
