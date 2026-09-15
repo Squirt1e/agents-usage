@@ -300,6 +300,118 @@ async fn service_mutation_once(
 // Restricted bridge commands (task 5.1)
 // ---------------------------------------------------------------------------
 
+/// How long a re-collection is allowed to take before its snapshot is read back.
+///
+/// The service acknowledges a manual refresh before it has an answer (the panel
+/// reads the snapshot afterwards for the same reason), so the emit waits a beat
+/// rather than sending a snapshot taken before the request landed. Short enough that
+/// the card answers while the user is still looking at the setting they changed.
+const RECOLLECT_SETTLE_MS: u64 = 1_200;
+
+/// The platforms a settings write makes stale, so they are collected again.
+///
+/// Everything else a settings write can change is presentation — theme, quota value
+/// mode, reset formats, platform visibility and order, peak schedules — and needs no
+/// collection. These are the writes that change *what* would be collected: which
+/// region's endpoint answers, which CLI collects Codex, and which experimental
+/// connections are on at all. Credentials are handled by their own commands, which
+/// always re-collect the platform they belong to.
+///
+/// This judgement lives in the host rather than in the window that made the write,
+/// because the collected cards are in the *other* window: the settings window writes
+/// `glmRegion`, and the platform card that has to answer for it is in the panel.
+/// Keeping it here also means every entry point — the panel's own toggles today, the
+/// settings window, and whatever comes next — is correct without repeating the rule.
+///
+/// Mirrored from the wording of the panel's own rule ("a setting that changes what
+/// would be collected is collected again right away, so the card shows the answer to
+/// the setting the user just made instead of the previous one"): without it, a
+/// region switch kept showing the previous region's quota until the next scheduled
+/// pass, which reads as "the setting did nothing".
+fn providers_to_recollect(patch: &Value) -> Vec<&'static str> {
+    let Some(fields) = patch.as_object() else {
+        return Vec::new();
+    };
+    let mut providers: Vec<&'static str> = Vec::new();
+    let mut push = |provider: &'static str| {
+        if !providers.contains(&provider) {
+            providers.push(provider);
+        }
+    };
+    // Presence, not truth: switching the wallet off is *also* a change to what would
+    // be collected, exactly as the TS rule reads (`!== undefined`).
+    if fields.contains_key("glmRegion") {
+        push("glm");
+    }
+    // The experimental connections only collect when they are switched *on*, which is
+    // what `=== true` says on the panel side: switching one off needs no collection,
+    // and re-collecting there would spend a request to learn nothing.
+    if fields.get("glmWalletEnabled") == Some(&Value::Bool(true)) {
+        push("glm");
+    }
+    if fields.get("deepseekWebEnabled") == Some(&Value::Bool(true)) {
+        push("deepseek");
+    }
+    if fields.contains_key("codexCliPath") {
+        push("codex");
+    }
+    providers
+}
+
+/// Which platform a credential belongs to.
+///
+/// Both experimental connections sit on the platform whose card shows them, so
+/// saving either one collects that platform: the wallet credential is GLM's and the
+/// web credential is DeepSeek's.
+fn provider_of_credential(target: &str) -> Option<&'static str> {
+    match target {
+        "glm" | "glm-wallet" => Some("glm"),
+        "deepseek" | "deepseek-web" => Some("deepseek"),
+        "codex" => Some("codex"),
+        _ => None,
+    }
+}
+
+/// Collect the named platforms once, right away.
+///
+/// The service answers a manual refresh with "received and running", so the verdict
+/// is not in the answer: the snapshot is read again after the requests land, and only
+/// then emitted. That keeps the two windows' cards consistent and avoids a second
+/// emit from the periodic forwarder in the same second.
+fn recollect_now(app: AppHandle, providers: Vec<&'static str>) {
+    if providers.is_empty() {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        for provider in providers {
+            let result = {
+                let state = app.state::<PanelState>();
+                service_mutation(&state, "POST", &format!("/api/refresh/{provider}"), None).await
+            };
+            if let Err(error) = result {
+                // A refused refresh (a cooldown, a service that went away) is not
+                // worth a message: the card already shows the reading that made the
+                // request, and the periodic pass will try again.
+                diag_log(&format!("recollect {provider} refused: {error}"));
+            }
+        }
+        // Let the collection land before reading it back: the service acknowledges
+        // the request before it has an answer, which is why the panel reads the
+        // snapshot instead of trusting the reply.
+        tokio::time::sleep(Duration::from_millis(RECOLLECT_SETTLE_MS)).await;
+        let snapshot = {
+            let state = app.state::<PanelState>();
+            service_get(&state, "/api/snapshots").await
+        };
+        match snapshot {
+            Ok(value) => {
+                let _ = app.emit("panel://snapshot", value);
+            }
+            Err(error) => diag_log(&format!("recollect snapshot failed: {error}")),
+        }
+    });
+}
+
 #[tauri::command]
 async fn panel_snapshot(state: tauri::State<'_, PanelState>) -> Result<Value, String> {
     service_get(&state, "/api/snapshots").await
@@ -310,12 +422,27 @@ async fn panel_settings(state: tauri::State<'_, PanelState>) -> Result<Value, St
     service_get(&state, "/api/settings").await
 }
 
+/// Write settings, then tell **every** window what they became.
+///
+/// The broadcast is what makes a change made in one window visible in the other
+/// without a re-open, and it is deliberately the host's job: the two windows are
+/// separate webviews with separate JavaScript, so a write in the settings window
+/// reaches the panel only if the process that owns both says so. `app.emit` goes to
+/// all webviews, so this one call serves both.
+///
+/// The window that made the write adopts the returned value immediately (see
+/// `settings-store.ts`), so the echo that follows is recognised as the same value
+/// rather than a second change.
 #[tauri::command]
 async fn panel_update_settings(
+    app: AppHandle,
     state: tauri::State<'_, PanelState>,
     patch: Value,
 ) -> Result<Value, String> {
-    service_mutation(&state, "PUT", "/api/settings", Some(patch)).await
+    let next = service_mutation(&state, "PUT", "/api/settings", Some(patch.clone())).await?;
+    let _ = app.emit("panel://settings", next.clone());
+    recollect_now(app, providers_to_recollect(&patch));
+    Ok(next)
 }
 
 #[tauri::command]
@@ -328,31 +455,47 @@ async fn panel_refresh(
 
 #[tauri::command]
 async fn panel_validate_credential(
+    app: AppHandle,
     state: tauri::State<'_, PanelState>,
     target: String,
     secret: String,
 ) -> Result<Value, String> {
-    service_mutation(
+    let status = service_mutation(
         &state,
         "PUT",
         &format!("/api/credentials/{target}"),
         Some(json!({ "secret": secret })),
     )
-    .await
+    .await?;
+    // A credential that just validated is a connection that just became usable, so
+    // collect it right away — the same reasoning as a collection-affecting setting.
+    // Without it the card went on showing nothing (or the previous reading) until the
+    // next scheduled pass, and coming back from a fresh, working key to an empty card
+    // reads as "the key was wrong".
+    recollect_now(app, provider_of_credential(&target).into_iter().collect());
+    Ok(status)
 }
 
 #[tauri::command]
 async fn panel_delete_credential(
+    app: AppHandle,
     state: tauri::State<'_, PanelState>,
     target: String,
 ) -> Result<Value, String> {
-    service_mutation(
+    let result = service_mutation(
         &state,
         "DELETE",
         &format!("/api/credentials/{target}"),
         None,
     )
-    .await
+    .await?;
+    // Deleting is the other half of the same rule: the connection is now unusable, so
+    // collect again and let the service say so. The card itself is already back to
+    // its template (a credential is part of its display gate), but the connection's
+    // own status line would otherwise go on claiming 数据正常 from a reading whose key
+    // no longer exists.
+    recollect_now(app, provider_of_credential(&target).into_iter().collect());
+    Ok(result)
 }
 
 #[tauri::command]
@@ -556,7 +699,7 @@ fn start_boundary_tracking(app: &AppHandle) {
 #[tauri::command]
 fn panel_set_height(app: AppHandle, height: f64) -> f64 {
     let Some(window) = app.get_webview_window("panel") else {
-        return PANEL_MIN_HEIGHT;
+        return PANEL_MIN_WINDOW_HEIGHT;
     };
     // A height report belongs to the window's present display. The last tray
     // anchor can be on another display after a manual drag; reusing it here
@@ -591,6 +734,28 @@ fn panel_open_web_version(state: tauri::State<'_, PanelState>) -> Result<(), Str
     open_url(&state.service_endpoint().origin)
 }
 
+// The settings-window commands are declared *after* `panel_open_web_version` on
+// purpose: `a_native_resize_keeps_the_current_top_edge` reads the source between
+// `panel_set_height` and this command to prove the height path never enqueues a
+// stale drag position, so anything inserted before it would be read as part of that
+// check.
+
+/// Open the settings window, or move the existing one to the requested section.
+///
+/// `section` is optional because only two of the four entry points name one (a
+/// card's gear names its platform; the empty state's button names 平台管理), and an
+/// unknown or absent name has to land somewhere sensible rather than failing.
+#[tauri::command]
+fn panel_open_settings(app: AppHandle, section: Option<String>) -> Result<(), String> {
+    open_settings(&app, section.as_deref())
+}
+
+/// Settings window -> host: the first render is on screen; show the window.
+#[tauri::command]
+fn panel_settings_ready(app: AppHandle) {
+    reveal_settings_window(&app);
+}
+
 // ---------------------------------------------------------------------------
 // Window behaviour (tasks 5.2–5.6)
 // ---------------------------------------------------------------------------
@@ -600,29 +765,43 @@ const PANEL_MARGIN: f64 = 10.0;
 
 /// Panel width in logical pixels: the content is designed for it and never resizes.
 const PANEL_WIDTH: f64 = 350.0;
-/// Floor for the self-sized panel. Matches `min-height` on `.panel` in panel.css.
-const PANEL_MIN_HEIGHT: f64 = 320.0;
-/// Ceiling for the self-sized panel, whatever the content asks for: the panel
-/// follows its content but is never taller than one screen of cards.
+/// Ceiling for the self-sized panel, whatever the content asks for.
+///
+/// A display usually binds first (`work_area_height - 2 * PANEL_MARGIN`); this is the
+/// number for the case where it does not — a monitor lookup that failed, or a display
+/// taller than the panel should ever be.
 const PANEL_MAX_HEIGHT: f64 = 900.0;
+
+/// The smallest height the host will apply, whatever it is asked for.
+///
+/// This is not a design decision about the panel's content — that is the panel's to
+/// make, and the old 320-point floor belonged to a rule (three whole cards, else a
+/// minimum) that no longer exists. It is the host's own sanity bound, low enough that
+/// no real request can reach it: a shorter window has no title bar to grab, and a
+/// display whose work area is tiny would otherwise be able to invert the clamp.
+const PANEL_MIN_WINDOW_HEIGHT: f64 = 40.0;
 
 /// Clamp a requested panel height to something a display can actually show.
 ///
-/// Split out from the command so the bounds are testable without a window: the
-/// panel asks for the height its content needs, and this decides how much of that
-/// request the screen allows.
+/// Split out from the command so the bounds are testable without a window: the panel
+/// asks for the height its content needs, and this decides how much of that request
+/// the screen allows. It only ever cuts a request *down*; a short request is honoured
+/// as it stands, because a short overview is a short panel.
 fn clamp_panel_height(requested: f64, work_area_height: Option<f64>) -> f64 {
-    // A display can be shorter than the floor; the floor wins there, which is why
-    // the limit is itself clamped rather than used directly.
     let upper = match work_area_height.map(|height| height - 2.0 * PANEL_MARGIN) {
-        Some(limit) if limit.is_finite() => limit.clamp(PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT),
+        Some(limit) if limit.is_finite() => limit.clamp(PANEL_MIN_WINDOW_HEIGHT, PANEL_MAX_HEIGHT),
         _ => PANEL_MAX_HEIGHT,
     };
-    if requested.is_finite() {
-        requested.clamp(PANEL_MIN_HEIGHT, upper)
-    } else {
-        PANEL_MIN_HEIGHT
+    if requested.is_nan() {
+        // Nothing comparable in the request at all. The `upper` bound is the honest
+        // answer: it is the largest height the window may take, and the panel will
+        // correct it on its next measurement.
+        return upper;
     }
+    // `clamp` with the bound below the ceiling: `upper` is raised to the sanity bound
+    // above, so the two never cross — and `clamp` panics when they do, which is exactly
+    // what a display shorter than the bound would do to a hand-written comparison.
+    requested.clamp(PANEL_MIN_WINDOW_HEIGHT.min(upper), upper)
 }
 /// How long the panel's exit animation is allowed to run before the window is
 /// hidden.
@@ -772,6 +951,13 @@ fn header_tracking_transition(
     Some(now_inside)
 }
 
+/// Poll the pointer against the panel's bounds and drive its header.
+///
+/// Scoped to the `panel` window on purpose, and the settings window is the reason
+/// to say so out loud: the header belongs to the panel, so the pointer leaving the
+/// *settings* window says nothing about it, and a poll that considered both windows
+/// would keep the panel's header up while the user reads a form in the other one.
+/// The settings window has no header to collapse: it wears system chrome.
 fn start_cursor_tracking(app: &AppHandle) {
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -1296,6 +1482,246 @@ fn toggle_panel(app: &AppHandle, anchor: Option<tauri::Rect>) {
     show_panel(app, anchor);
 }
 
+/// Host -> settings window event naming the section to show.
+///
+/// The window is built once and then only shown, so this is how an entry point
+/// that names a section is served after the first time: the panel's gear, a card's
+/// gear, the empty state's "管理平台" and the tray item's "设置…" all end up in the
+/// same window, and it moves to the section they asked for.
+pub const SETTINGS_SECTION_EVENT: &str = "panel://settings-section";
+
+/// The label of the settings window, and the section every entry point falls back
+/// to when it does not name one.
+const SETTINGS_WINDOW_LABEL: &str = "settings";
+const SETTINGS_DEFAULT_SECTION: &str = "platforms";
+
+/// The sections a request may name. Anything else is treated as "no section named"
+/// so a typo cannot leave the window on a section that does not exist.
+const SETTINGS_SECTIONS: [&str; 5] = ["platforms", "appearance", "codex", "glm", "deepseek"];
+
+/// The settings window's fixed size, in logical pixels.
+///
+/// Fixed on purpose: the window is a settings *sheet* for a 350px-wide panel, and a
+/// size the user could change would make every layout inside it a responsive
+/// problem for no benefit. The content area scrolls instead.
+const SETTINGS_WINDOW_WIDTH: f64 = 560.0;
+const SETTINGS_WINDOW_HEIGHT: f64 = 380.0;
+
+/// Normalise a requested section. `None` (or an unknown name) means "the default".
+fn settings_section(requested: Option<&str>) -> &'static str {
+    match requested {
+        Some(name) => SETTINGS_SECTIONS
+            .iter()
+            .find(|known| **known == name)
+            .copied()
+            .unwrap_or(SETTINGS_DEFAULT_SECTION),
+        None => SETTINGS_DEFAULT_SECTION,
+    }
+}
+
+/// Where the settings window goes, given the panel's frame and the display's work
+/// area, all in points.
+///
+/// Beside the panel rather than centred: the two windows are meant to be read
+/// together — a change in the settings window shows up in the panel immediately —
+/// and a settings sheet that covers the panel would hide the very thing that makes
+/// the change worth watching. On the left when the panel is on the right half of the
+/// display, on the right otherwise, clamped to the work area so it is never partly
+/// off-screen.
+///
+/// Split out from the move itself so the placement is testable without a window
+/// server, which is the same reason `boundary_clamp_target` is.
+fn settings_window_origin(
+    panel: (f64, f64, f64, f64),
+    work: (f64, f64, f64, f64),
+) -> (f64, f64) {
+    let (panel_x, panel_y, panel_width, _panel_height) = panel;
+    let (work_x, work_y, work_width, work_height) = work;
+    let work_right = work_x + work_width;
+    let work_bottom = work_y + work_height;
+
+    let gap = PANEL_MARGIN;
+    let room_on_right = work_right - (panel_x + panel_width) >= SETTINGS_WINDOW_WIDTH + gap * 2.0;
+    let x = if room_on_right {
+        panel_x + panel_width + gap
+    } else {
+        let left = panel_x - gap - SETTINGS_WINDOW_WIDTH;
+        // Fall back to the panel's own left edge when there is no room on either
+        // side (a narrow display): overlapping the panel is better than a window
+        // the user has to hunt for.
+        if left < work_x + gap {
+            panel_x
+        } else {
+            left
+        }
+    };
+    // Top-aligned with the panel, which is where the reader's eye already is.
+    let y = panel_y;
+    let max_x = (work_right - SETTINGS_WINDOW_WIDTH - gap).max(work_x);
+    let max_y = (work_bottom - SETTINGS_WINDOW_HEIGHT - gap).max(work_y);
+    // Keep the window's whole frame inside the work area, from whichever edge binds
+    // first. It is not resizable, so this is the only chance to place it.
+    let x = if SETTINGS_WINDOW_WIDTH + gap * 2.0 >= work_width {
+        work_x
+    } else {
+        x.clamp(work_x + gap, max_x)
+    };
+    let y = if SETTINGS_WINDOW_HEIGHT + gap * 2.0 >= work_height {
+        work_y
+    } else {
+        y.clamp(work_y + gap, max_y)
+    };
+    (x, y)
+}
+
+/// Move the settings window beside the panel on the panel's own display.
+fn position_settings_window(app: &AppHandle) {
+    let Some(settings) = app.get_webview_window(SETTINGS_WINDOW_LABEL) else {
+        return;
+    };
+    // The panel's live frame, when it exists: the two windows belong to one display,
+    // and the panel is the one the user just interacted with.
+    let panel = app.get_webview_window("panel");
+    let monitor = panel
+        .as_ref()
+        .and_then(|window| window.current_monitor().ok().flatten())
+        .or_else(|| settings.current_monitor().ok().flatten());
+    let Some(monitor) = monitor else {
+        // No display to reason about is not permission to move the window: leaving
+        // it where the window server put it beats moving it somewhere arbitrary.
+        return;
+    };
+    let work = work_area_points(&monitor);
+    let work_tuple = (work.x, work.y, work.width, work.height);
+    let panel_frame = panel.and_then(|window| {
+        let origin = window.outer_position().ok()?;
+        let size = window.outer_size().ok()?;
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+        Some((
+            origin.x as f64 / scale,
+            origin.y as f64 / scale,
+            size.width as f64 / scale,
+            size.height as f64 / scale,
+        ))
+    });
+    // Without a panel frame (the tray item can open settings on its own) the sheet
+    // goes to the work area's right edge, where the panel would have been.
+    let panel_frame = panel_frame.unwrap_or((
+        work.right() - PANEL_WIDTH,
+        work.y + PANEL_MARGIN,
+        PANEL_WIDTH,
+        SETTINGS_WINDOW_HEIGHT,
+    ));
+    let (x, y) = settings_window_origin(panel_frame, work_tuple);
+    diag_log(&format!("position_settings_window target=({x},{y})"));
+    let _ = settings.set_position(LogicalPosition::new(x, y));
+}
+
+/// Build the settings window. Hidden until its first render says it is ready.
+fn build_settings_window(app: &AppHandle, section: Option<&str>) -> tauri::Result<WebviewWindow> {
+    let section = settings_section(section);
+    // The section the window was opened on is part of its identity, not a later
+    // request: a window opened from a card's gear has to render that platform on its
+    // first frame, because the host does not show it until then. It rides the same
+    // injected-config mechanism the service origin does, so the webview needs no
+    // extra bridge call to learn it.
+    let injected = json!({
+        "origin": app.state::<PanelState>().service_endpoint().origin,
+        "sessionToken": app.state::<PanelState>().service_endpoint().session_token,
+        "webUrl": app.state::<PanelState>().service_endpoint().origin,
+        "capabilities": { "pin": false, "hide": false, "openWebVersion": false },
+        "settingsSection": section,
+    });
+
+    let window = WebviewWindowBuilder::new(
+        app,
+        SETTINGS_WINDOW_LABEL,
+        settings_window_url(),
+    )
+    .title("设置")
+    .inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+    // Not resizable: the content is laid out for exactly this size, and the content
+    // area scrolls. Min and max are set to the same pair so macOS cannot pick a
+    // size of its own when restoring the window.
+    .min_inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+    .max_inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+    .resizable(false)
+    // Standard chrome, unlike the panel's: a fixed-size form wants a title bar with
+    // a close button, and the panel's borderless look is what it is because it hangs
+    // off the menu bar.
+    .decorations(true)
+    .skip_taskbar(false)
+    .always_on_top(false)
+    .visible(false)
+    .build()?;
+
+    let _ = window.eval(format!("window.__AGENTS_USAGE__ = {injected};"));
+
+    // Deliberately no focus handler: the settings window keeps its place when the
+    // user clicks back into the panel, which is what makes "change it here, watch it
+    // there" possible. The panel's own focus-hide rule lives on the panel window
+    // (see `build_panel_window`) and does not reach this one.
+    Ok(window)
+}
+
+/// Which document the settings window loads.
+///
+/// Packaged, it is the second entry point Vite emits next to `index.html`. In dev
+/// the panel is served from the Vite dev server, whose root is the `src/desktop`
+/// directory, so the settings document is its sibling there.
+fn settings_window_url() -> WebviewUrl {
+    if tauri::is_dev() {
+        WebviewUrl::External(
+            "http://127.0.0.1:5174/src/desktop/settings.html"
+                .parse()
+                .expect("the dev settings URL is a literal"),
+        )
+    } else {
+        WebviewUrl::App("settings.html".into())
+    }
+}
+
+/// Open the settings window, or bring the existing one forward on `section`.
+///
+/// One window serves every entry point: opening it again would give the user two
+/// copies of the same form writing to the same settings, and no way to tell which
+/// one is current.
+fn open_settings(app: &AppHandle, section: Option<&str>) -> Result<(), String> {
+    let section = settings_section(section);
+    diag_log(&format!("open_settings section={section}"));
+    if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
+        position_settings_window(app);
+        let _ = window.show();
+        let _ = window.set_focus();
+        // The window is already mounted, so the section it should move to is a
+        // request rather than part of its identity.
+        let _ = app.emit_to(
+            SETTINGS_WINDOW_LABEL,
+            SETTINGS_SECTION_EVENT,
+            json!({ "section": section }),
+        );
+        return Ok(());
+    }
+    build_settings_window(app, Some(section))
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+/// Show the settings window once its first render is on screen.
+///
+/// The host builds it hidden, so a blank window is never what the user sees while
+/// the webview boots: this is the moment the document says it has painted.
+fn reveal_settings_window(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) else {
+        return;
+    };
+    diag_log("reveal_settings_window");
+    position_settings_window(app);
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
 // ---------------------------------------------------------------------------
 // Application assembly
 // ---------------------------------------------------------------------------
@@ -1403,6 +1829,7 @@ pub fn build(context: tauri::Context) -> tauri::App {
                 app,
                 &[
                     &MenuItem::with_id(app, "toggle", "显示/隐藏面板", true, None::<&str>)?,
+                    &MenuItem::with_id(app, "settings", "设置…", true, None::<&str>)?,
                     &MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?,
                 ],
             )?;
@@ -1417,6 +1844,12 @@ pub fn build(context: tauri::Context) -> tauri::App {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "toggle" => toggle_panel(app, None),
+                    // The tray is the one entry point that does not come from the
+                    // panel, so it names no section: 平台管理 is the first thing the
+                    // window shows and the setting users reach for most.
+                    "settings" => {
+                        let _ = open_settings(app, None);
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -1448,7 +1881,9 @@ pub fn build(context: tauri::Context) -> tauri::App {
             panel_set_pinned,
             panel_hide,
             panel_set_height,
-            panel_open_web_version
+            panel_open_web_version,
+            panel_open_settings,
+            panel_settings_ready
         ])
         .build(context)
         .expect("failed to build the agents-usage desktop host")
@@ -1482,6 +1917,201 @@ pub fn runtime_kind() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A 1440x900 display, work area inset by the menu bar, in points.
+    const WORK: (f64, f64, f64, f64) = (0.0, 25.0, 1440.0, 850.0);
+
+    #[test]
+    fn the_settings_window_sits_beside_the_panel_not_on_it() {
+        // Panel on the left half of the display: the settings sheet goes to its
+        // right, top-aligned, with the panel's margin as the gap.
+        let panel = (20.0, 35.0, PANEL_WIDTH, 560.0);
+        let (x, y) = settings_window_origin(panel, WORK);
+        assert_eq!(x, 20.0 + PANEL_WIDTH + PANEL_MARGIN);
+        assert_eq!(y, 35.0);
+
+        // Panel against the right edge: no room to the right, so it goes to the
+        // left rather than off-screen.
+        let panel = (1440.0 - PANEL_MARGIN - PANEL_WIDTH, 35.0, PANEL_WIDTH, 560.0);
+        let (x, _) = settings_window_origin(panel, WORK);
+        assert!(
+            x + SETTINGS_WINDOW_WIDTH <= WORK.0 + WORK.2,
+            "the sheet must stay inside the work area"
+        );
+        assert!(x < panel.0, "it should prefer the panel's other side");
+    }
+
+    #[test]
+    fn the_settings_window_stays_inside_a_work_area_it_does_not_fit() {
+        // A display narrower and shorter than the sheet: the window cannot fit, and
+        // the honest answer is the work area's own origin rather than a negative
+        // coordinate the window server would clamp in some other way.
+        let tiny = (0.0, 0.0, 400.0, 300.0);
+        assert_eq!(settings_window_origin((0.0, 0.0, PANEL_WIDTH, 200.0), tiny), (0.0, 0.0));
+
+        // A display that fits the sheet, with the panel low and right: the target is
+        // clamped back inside rather than hanging past the bottom edge.
+        let panel = (1000.0, 800.0, PANEL_WIDTH, 120.0);
+        let (x, y) = settings_window_origin(panel, WORK);
+        assert!(x + SETTINGS_WINDOW_WIDTH <= 1440.0);
+        assert!(y + SETTINGS_WINDOW_HEIGHT <= WORK.1 + WORK.3);
+    }
+
+    #[test]
+    fn only_writes_that_change_what_is_collected_re_collect() {
+        // Presentation writes: the card does not need to ask the provider anything
+        // again, and re-collecting would spend a request to learn nothing.
+        for patch in [
+            json!({ "theme": "light" }),
+            json!({ "quotaValueMode": "used" }),
+            json!({ "platformVisibility": { "glm": false } }),
+            json!({ "platformOrder": ["glm", "codex"] }),
+            json!({ "codexResetFormat": "absolute" }),
+            json!({ "glmQuotaDisplay": "bar" }),
+            // Switching an experimental connection *off* collects nothing: the card
+            // stops showing that module from the settings alone.
+            json!({ "glmWalletEnabled": false }),
+            json!({ "deepseekWebEnabled": false }),
+        ] {
+            assert!(
+                providers_to_recollect(&patch).is_empty(),
+                "presentation write re-collected: {patch}"
+            );
+        }
+
+        // Collection-affecting writes: the answer on the card is now the answer to
+        // the setting the user just made, or the setting reads as doing nothing.
+        assert_eq!(providers_to_recollect(&json!({ "glmRegion": "global" })), vec!["glm"]);
+        assert_eq!(providers_to_recollect(&json!({ "codexCliPath": "/opt/homebrew/bin/codex" })), vec!["codex"]);
+        assert_eq!(providers_to_recollect(&json!({ "glmWalletEnabled": true })), vec!["glm"]);
+        assert_eq!(providers_to_recollect(&json!({ "deepseekWebEnabled": true })), vec!["deepseek"]);
+
+        // One platform is collected once, however many of its fields changed: two
+        // overlapping requests for the same provider are two requests for one answer.
+        let both = json!({ "glmRegion": "global", "glmWalletEnabled": true });
+        assert_eq!(providers_to_recollect(&both), vec!["glm"]);
+
+        // A patch that is not an object at all is not a reason to collect anything.
+        assert!(providers_to_recollect(&json!("nope")).is_empty());
+        assert!(providers_to_recollect(&Value::Null).is_empty());
+    }
+
+    #[test]
+    fn a_credential_collects_the_platform_whose_card_shows_it() {
+        // Both experimental connections sit on the platform whose card shows them.
+        assert_eq!(provider_of_credential("glm-wallet"), Some("glm"));
+        assert_eq!(provider_of_credential("glm"), Some("glm"));
+        assert_eq!(provider_of_credential("deepseek-web"), Some("deepseek"));
+        assert_eq!(provider_of_credential("codex"), Some("codex"));
+        assert_eq!(provider_of_credential("unknown"), None);
+    }
+
+    #[test]
+    fn the_settings_write_is_broadcast_to_every_window() {
+        let source = include_str!("lib.rs");
+        let command = source
+            .split("async fn panel_update_settings")
+            .nth(1)
+            .expect("settings write command")
+            .split("#[tauri::command]")
+            .next()
+            .expect("end of settings write command");
+        // The write is announced to all webviews, not answered only to its caller:
+        // that is the whole mechanism by which the panel learns what the settings
+        // window just changed.
+        assert!(
+            command.contains(r#"app.emit("panel://settings""#),
+            "the written settings must be broadcast, or the other window goes stale"
+        );
+        assert!(
+            command.contains("recollect_now"),
+            "a collection-affecting write must be collected again right away"
+        );
+        // Credentials follow the same rule.
+        let credentials = source
+            .split("async fn panel_validate_credential")
+            .nth(1)
+            .expect("credential command")
+            .split("fn panel_delete_credential")
+            .next()
+            .expect("end of credential command");
+        assert!(credentials.contains("recollect_now"));
+    }
+
+    #[test]
+    fn settings_dev_url_matches_the_vite_server() {
+        // In dev the panel is served from the Vite dev server whose root is the
+        // `src/desktop` directory, so the settings document is its sibling there — close
+        // enough to `devUrl` in tauri.conf.json that the two are easy to let drift. The
+        // front-end test `serves the settings window document at the URL its builder
+        // produces` fetches the path this builds, so a mismatch here would surface as a
+        // blank window at runtime rather than as a failing test.
+        let dev_url = include_str!("../tauri.conf.json");
+        let dev_url = dev_url
+            .split("\"devUrl\"")
+            .nth(1)
+            .and_then(|rest| rest.split('"').nth(1))
+            .expect("devUrl in tauri.conf.json");
+        // The literal in `settings_window_url()` has to be `devUrl` + `settings.html`.
+        let source = include_str!("lib.rs");
+        let expected = format!("{dev_url}settings.html");
+        assert!(
+            source.contains(&expected),
+            "settings_window_url() must point at {expected} in dev"
+        );
+        // The packaged branch loads the document Vite emits next to `index.html`, which
+        // is what `rollupOptions.input.settings` and the flattening plugin produce.
+        assert!(
+            source.contains("WebviewUrl::App(\"settings.html\".into())"),
+            "the packaged settings window must load settings.html"
+        );
+    }
+
+    #[test]
+    fn a_section_request_lands_on_a_real_section() {        for known in SETTINGS_SECTIONS {
+            assert_eq!(settings_section(Some(known)), known);
+        }
+        // Every entry point that names nothing, and every typo, lands on 平台管理:
+        // a window left on a section that does not exist would render an empty pane.
+        assert_eq!(settings_section(None), SETTINGS_DEFAULT_SECTION);
+        assert_eq!(settings_section(Some("")), SETTINGS_DEFAULT_SECTION);
+        assert_eq!(settings_section(Some("Platforms")), SETTINGS_DEFAULT_SECTION);
+        assert_eq!(settings_section(Some("nope")), SETTINGS_DEFAULT_SECTION);
+    }
+
+    #[test]
+    fn the_settings_window_is_fixed_and_decorated() {
+        let source = include_str!("lib.rs");
+        let builder = source
+            .split("fn build_settings_window")
+            .nth(1)
+            .expect("settings window builder")
+            .split("fn settings_window_url")
+            .next()
+            .expect("end of settings window builder");
+        for required in [
+            ".inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)",
+            ".min_inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)",
+            ".max_inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)",
+            ".resizable(false)",
+            ".decorations(true)",
+            ".visible(false)",
+        ] {
+            assert!(builder.contains(required), "the settings window must set {required}");
+        }
+        // The panel's look is the panel's: a transparent, borderless settings window
+        // would make "standard title bar" a lie.
+        assert!(!builder.contains(".transparent(true)"), "the settings window is opaque");
+        assert!(!builder.contains(".shadow(false)"), "it keeps the system window shadow");
+        // Standard chrome does not float, and it does belong in the window list.
+        assert!(!builder.contains(".always_on_top(true)"), "the settings window does not float");
+        assert!(!builder.contains(".skip_taskbar(true)"), "it is a normal window");
+        // No focus handler: the window keeps its place when the panel takes focus.
+        assert!(
+            !builder.contains("WindowEvent::Focused"),
+            "the settings window must not hide on focus loss"
+        );
+    }
 
     #[test]
     fn a_native_resize_keeps_the_current_top_edge() {
@@ -1680,7 +2310,7 @@ mod tests {
     }
 
     #[test]
-    fn panel_height_is_clamped_to_the_display_and_the_floor() {
+    fn panel_height_is_clamped_to_the_display() {
         // A tall ask stops at the display less the panel's own margins, which on a
         // 900pt work area is tighter than the hard ceiling.
         assert_eq!(
@@ -1689,15 +2319,34 @@ mod tests {
         );
         // On a display with room to spare, the hard ceiling is what binds.
         assert_eq!(clamp_panel_height(1400.0, Some(1400.0)), PANEL_MAX_HEIGHT);
-        // A short ask is honoured as-is: the panel follows small content.
+        // A short ask is honoured as-is. There is no floor belonging to the content:
+        // a short overview is a short panel, and lifting the request would report a
+        // height the content does not occupy.
         assert_eq!(clamp_panel_height(420.0, Some(900.0)), 420.0);
-        // The floor holds even when the content is one line tall.
-        assert_eq!(clamp_panel_height(40.0, Some(900.0)), PANEL_MIN_HEIGHT);
-        // A work area shorter than the floor cannot invert the clamp.
-        assert_eq!(clamp_panel_height(500.0, Some(200.0)), PANEL_MIN_HEIGHT);
+        assert_eq!(clamp_panel_height(40.0, Some(900.0)), 40.0);
+        // Below the host's own sanity bound the window is still drawable, which is what
+        // that bound is for — not for the panel's layout.
+        assert_eq!(clamp_panel_height(-5.0, Some(900.0)), PANEL_MIN_WINDOW_HEIGHT);
+        // A work area with room for the window is used as it stands, margins and all.
+        assert_eq!(clamp_panel_height(500.0, Some(200.0)), 200.0 - 2.0 * PANEL_MARGIN);
+        // A work area too small for even the sanity bound cannot invert the clamp: the
+        // ceiling is raised to the bound rather than pushed below the ask.
+        assert_eq!(
+            clamp_panel_height(500.0, Some(1.0)),
+            PANEL_MIN_WINDOW_HEIGHT
+        );
         // No monitor (or a nonsense value) still yields something drawable.
         assert_eq!(clamp_panel_height(500.0, None), 500.0);
-        assert_eq!(clamp_panel_height(f64::NAN, Some(900.0)), PANEL_MIN_HEIGHT);
+        // An infinite ask is a real request and is cut down like any other; only `NaN`
+        // has nothing in it to honour.
+        assert_eq!(
+            clamp_panel_height(f64::INFINITY, Some(900.0)),
+            900.0 - 2.0 * PANEL_MARGIN
+        );
+        assert_eq!(
+            clamp_panel_height(f64::NAN, Some(900.0)),
+            900.0 - 2.0 * PANEL_MARGIN
+        );
     }
 
     /// A display as the anchor lookup sees it: point bounds plus its scale.
