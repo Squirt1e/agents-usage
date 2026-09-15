@@ -1,0 +1,30 @@
+[package]
+name = "usage-core"
+description = "Read-only usage collection core: contracts, adapters, scheduling, credentials, persistence and estimation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+rusqlite.workspace = true
+fs2.workspace = true
+libc.workspace = true
+base64.workspace = true
+tracing.workspace = true
+url.workspace = true
+regex.workspace = true
+sha2.workspace = true
+rand.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread", "time", "process", "io-util", "io-std"] }
+reqwest.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread", "time"] }
