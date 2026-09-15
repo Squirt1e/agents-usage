@@ -1,0 +1,55 @@
+{
+  "id": "codex-windows",
+  "provider": "codex",
+  "source": "codex-app-server",
+  "description": "Codex rate-limit buckets: a five-hour window, a weekly window, a weekly-only bucket without a secondary window, and a bucket with no reset time. The epoch values confirm that Codex sends seconds while the contract carries ISO-8601 milliseconds: 1789000000 unix seconds is 2026-09-10T00:26:40Z.",
+  "input": {
+    "accountId": "account-redacted",
+    "rateLimits": {
+      "planType": "pro",
+      "primary": { "usedPercent": 10, "windowDurationMins": 300, "resetsAt": 1789000000 }
+    },
+    "rateLimitsByLimitId": {
+      "codex": {
+        "limitId": "codex",
+        "limitName": "Codex",
+        "planType": "pro",
+        "primary": { "usedPercent": 15, "windowDurationMins": 300, "resetsAt": 1789000000 },
+        "secondary": { "usedPercent": 45, "windowDurationMins": 10080, "resetsAt": 1789600000 },
+        "credits": { "hasCredits": true, "unlimited": false, "balance": "12.50" }
+      },
+      "review": {
+        "limitId": "review",
+        "limitName": "Code review",
+        "primary": { "usedPercent": 20, "windowDurationMins": 10080, "resetsAt": null }
+      },
+      "unknown-window": {
+        "limitId": "unknown-window",
+        "limitName": "Future bucket",
+        "primary": { "usedPercent": 5, "windowDurationMins": null, "resetsAt": null }
+      }
+    }
+  },
+  "incompatibleInput": {
+    "description": "One bucket omits usedPercent entirely. Zod rejects the payload, so the collector reports `compatibility` and keeps the previous snapshot instead of filling the value with zero.",
+    "value": {
+      "rateLimitsByLimitId": {
+        "codex": { "limitId": "codex", "primary": { "windowDurationMins": 300 } }
+      }
+    }
+  },
+  "expect": {
+    "status": "connected",
+    "bucketIds": ["codex", "review", "unknown-window"],
+    "primaryWindowSeconds": 18000,
+    "secondaryWindowSeconds": 604800,
+    "primaryUsedPercent": 15,
+    "primaryRemainingPercent": 85,
+    "primaryResetAt": "2026-09-10T00:26:40.000Z",
+    "secondaryResetAt": "2026-09-16T23:06:40.000Z",
+    "creditedBucketBalance": "12.50",
+    "bucketWithoutResetTimeHasNoResetAt": true,
+    "bucketWithoutWindowLengthHasNoWindowSeconds": true,
+    "incompatiblePayloadMustNotBecomeZero": true
+  }
+}

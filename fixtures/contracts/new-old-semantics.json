@@ -1,0 +1,26 @@
+{
+  "id": "new-old-semantics",
+  "description": "How the Rust runtime must read the same sanitized payloads as the TypeScript runtime: absent values stay absent, error kinds keep their spelling, and external timestamp units are converted once.",
+  "cases": [
+    {
+      "name": "absent_metric_value",
+      "input": { "key": "quota.5h.used", "value": null, "unit": "percent", "direction": "used", "confidence": ["authoritative", "unavailable"], "source": "glm-monitor" },
+      "expect": { "valueIsAbsent": true, "valueIsNotZero": true }
+    },
+    {
+      "name": "reliable_zero_metric_value",
+      "input": { "key": "wallet.CNY.granted", "value": 0, "unit": "CNY", "direction": "balance", "confidence": ["authoritative"], "source": "deepseek-balance" },
+      "expect": { "valueIsAbsent": false, "valueIsNotZero": false }
+    },
+    {
+      "name": "text_metric_value",
+      "input": { "key": "codex.credits.balance", "value": "12.50", "unit": "credits", "direction": "balance", "confidence": ["authoritative"], "source": "codex-app-server" },
+      "expect": { "valueIsAbsent": false, "valueIsText": true }
+    }
+  ],
+  "errorKinds": ["missing_config", "authentication", "compatibility", "network", "rate_limit", "process", "storage", "unknown"],
+  "timestampConversions": [
+    { "name": "codex_seconds", "input": 1789000000, "unit": "seconds", "expect": "2026-09-10T00:26:40.000Z" },
+    { "name": "glm_milliseconds", "input": 1789000000000, "unit": "milliseconds", "expect": "2026-09-10T00:26:40.000Z" }
+  ]
+}

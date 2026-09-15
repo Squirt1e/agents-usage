@@ -1,0 +1,22 @@
+{
+  "accountId": "account-1",
+  "rateLimits": {
+    "planType": "pro",
+    "primary": { "usedPercent": 10, "windowDurationMins": 300, "resetsAt": 1789000000 }
+  },
+  "rateLimitsByLimitId": {
+    "codex": {
+      "limitId": "codex",
+      "limitName": "Codex",
+      "planType": "pro",
+      "primary": { "usedPercent": 15, "windowDurationMins": 300, "resetsAt": 1789000000 },
+      "secondary": { "usedPercent": 45, "windowDurationMins": 10080, "resetsAt": 1789600000 },
+      "credits": { "hasCredits": true, "unlimited": false, "balance": "12.50" }
+    },
+    "review": {
+      "limitId": "review",
+      "limitName": "Code review",
+      "primary": { "usedPercent": 20, "windowDurationMins": 10080, "resetsAt": null }
+    }
+  }
+}

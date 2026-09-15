@@ -1,0 +1,46 @@
+{
+  "id": "redaction",
+  "description": "One redaction pass covers request headers, process output, log lines, error messages and persisted records. A raw key must never appear in a front-end response, so these cases are checked against both runtimes.",
+  "cases": [
+    {
+      "name": "headers",
+      "input": {
+        "Authorization": "Bearer sk-live-not-a-real-key",
+        "Accept": "application/json",
+        "Cookie": "session=not-a-real-session"
+      },
+      "expect": {
+        "Authorization": "[REDACTED]",
+        "Accept": "application/json",
+        "Cookie": "[REDACTED]"
+      }
+    },
+    {
+      "name": "nested_message",
+      "input": {
+        "diagnostic": {
+          "glmApiKey": "not-a-real-key",
+          "message": "request failed: token=not-a-real-token",
+          "safe": "keep me"
+        }
+      },
+      "expect": {
+        "diagnostic": {
+          "glmApiKey": "[REDACTED]",
+          "message": "request failed: token=[REDACTED]",
+          "safe": "keep me"
+        }
+      }
+    },
+    {
+      "name": "process_output",
+      "input": "codex app-server stderr: auth failed for api_key=not-a-real-key (retrying)",
+      "expect": "codex app-server stderr: auth failed for api_key=[REDACTED] (retrying)"
+    },
+    {
+      "name": "account_masking_preserved",
+      "input": { "suffix": "1234", "accountId": "account-redacted", "total": 86.42 },
+      "expect": { "suffix": "1234", "accountId": "account-redacted", "total": 86.42 }
+    }
+  ]
+}

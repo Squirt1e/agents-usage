@@ -1,0 +1,71 @@
+{
+  "id": "daily-statistics",
+  "description": "Date and range rules for daily metrics. Codex reports daily buckets as UTC dates, GLM activity queries use a local-time string range, and balance-based spend estimates use the configured timezone. The same instant must not land on a different day between the two runtimes.",
+  "timezone": "Asia/Shanghai",
+  "cases": [
+    {
+      "name": "before_local_midnight",
+      "instant": "2026-09-10T15:59:00.000Z",
+      "expect": { "localDay": "2026-09-10" }
+    },
+    {
+      "name": "after_local_midnight",
+      "instant": "2026-09-10T16:01:00.000Z",
+      "expect": { "localDay": "2026-09-11" }
+    }
+  ],
+  "localMidnightUtc": {
+    "localDay": "2026-09-10",
+    "expect": "2026-09-09T16:00:00.000Z"
+  },
+  "codexDailyUsage": {
+    "buckets": [
+      { "startDate": "2026-09-10", "tokens": 0 },
+      { "startDate": "2026-09-11", "tokens": 12345 }
+    ],
+    "expect": {
+      "bucketField": "startDate",
+      "bucketIsUtcDateNotLocalDay": true,
+      "reliableZeroIsDisplayed": { "localDay": "2026-09-10", "value": 0 },
+      "yesterdayBucketIsNotTodaysValue": { "localDay": "2026-09-11", "value": 12345 },
+      "absentBucketHidesMetric": { "localDay": "2026-09-12" }
+    }
+  },
+  "glmActivityRange": {
+    "oldBehavior": "the previous implementation queried from yesterday at the current hour to today at the current minute",
+    "newBehavior": "the query runs from the configured timezone's local midnight of the statistics date to now",
+    "startTimeFormat": "YYYY-MM-DD HH:mm:ss in the configured timezone",
+    "expect": {
+      "rangeMustStartAtLocalMidnight": true,
+      "rangeMustNotBeRolling24Hours": true,
+      "dateLabelRequiresConfirmedRange": true
+    }
+  },
+  "balanceEstimator": {
+    "fullDay": {
+      "observations": [
+        { "observedAt": "2026-09-09T16:00:00.000Z", "total": 100 },
+        { "observedAt": "2026-09-09T17:00:00.000Z", "total": 96 },
+        { "observedAt": "2026-09-09T18:00:00.000Z", "total": 120 },
+        { "observedAt": "2026-09-09T19:00:00.000Z", "total": 115 }
+      ],
+      "expect": {
+        "estimatedSpend": 9,
+        "adjustmentCount": 1,
+        "partial": false,
+        "topUpDoesNotProduceNegativeSpend": true
+      }
+    },
+    "middayStart": {
+      "observations": [
+        { "observedAt": "2026-09-10T04:00:00.000Z", "total": 80 },
+        { "observedAt": "2026-09-10T05:00:00.000Z", "total": 78.5 }
+      ],
+      "expect": {
+        "estimatedSpend": 1.5,
+        "partial": true,
+        "unobservedHoursAreNotExtrapolated": true
+      }
+    }
+  }
+}

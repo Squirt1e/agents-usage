@@ -1,0 +1,29 @@
+{
+  "id": "deepseek-currencies",
+  "provider": "deepseek",
+  "source": "deepseek-balance",
+  "description": "DeepSeek balance with two currencies plus an entry whose granted balance is absent. Absent values stay absent in the contract instead of becoming zero, and each currency keeps its own total/granted/topped-up metrics.",
+  "input": {
+    "is_available": true,
+    "balance_infos": [
+      { "currency": "CNY", "total_balance": "86.42", "granted_balance": "0.00", "topped_up_balance": "86.42" },
+      { "currency": "USD", "total_balance": "12.05", "granted_balance": "2.05", "topped_up_balance": "10.00" }
+    ]
+  },
+  "expect": {
+    "status": "connected",
+    "currencies": ["CNY", "USD"],
+    "totalMetricKeys": ["wallet.CNY.total", "wallet.USD.total"],
+    "unitIsCurrency": true,
+    "balanceDirection": "balance",
+    "authoritativeConfidence": true,
+    "zeroIsReliable": { "metricKey": "wallet.CNY.granted", "value": 0 },
+    "spendMetric": {
+      "key": "spend.CNY.daily",
+      "direction": "spend",
+      "confidence": ["estimated"],
+      "partialConfidence": ["estimated", "partial"]
+    },
+    "noQuotaOrTokenMetrics": true
+  }
+}

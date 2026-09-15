@@ -1,0 +1,27 @@
+{
+  "id": "codex-cli-discovery",
+  "provider": "codex",
+  "source": "codex-app-server",
+  "description": "How the app finds the local Codex CLI when it was launched from Finder and inherited no shell PATH. Discovery only looks at absolute locations in a fixed order and then at the inherited PATH variable itself: it never starts an interactive shell, so a shell profile, an alias or the working directory can never decide which binary runs. The absolute path from settings is tried first, a missing CLI is a missing_config error and a binary that exists but fails to run is a process error; both only concern Codex, so GLM and DeepSeek keep collecting.",
+  "searchOrder": ["configured_path", "codex_home", "common_location", "path_lookup"],
+  "commonLocations": [
+    "/opt/homebrew/bin/codex",
+    "/usr/local/bin/codex",
+    "~/.local/bin/codex",
+    "~/.cargo/bin/codex",
+    "~/.bun/bin/codex"
+  ],
+  "expect": {
+    "configuredPathMustBeAbsolute": true,
+    "configuredPathWins": true,
+    "brokenConfiguredPathIsReportedNotSkipped": true,
+    "missingCliErrorKind": "missing_config",
+    "brokenCliErrorKind": "process",
+    "versionCommand": ["--version"],
+    "appServerCommand": ["app-server", "--stdio"],
+    "relativePathEntriesAreSkipped": true,
+    "missingFileIsNeverExecuted": true,
+    "noInteractiveShell": true,
+    "missingCliAffectsOnlyCodex": true
+  }
+}

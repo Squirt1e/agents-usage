@@ -1,0 +1,37 @@
+{
+  "id": "glm-connections",
+  "provider": "glm",
+  "source": "glm-monitor",
+  "description": "GLM Coding Plan quota, the separate experimental wallet connection, and the empty-day activity responses that must produce no activity metrics at all.",
+  "input": {
+    "quota": {
+      "success": true,
+      "data": {
+        "limits": [
+          { "type": "TOKENS_LIMIT", "percentage": 28, "currentValue": 28000, "usage": 100000, "nextResetTime": 1789000000000, "windowDuration": "5h" },
+          { "type": "WEEKLY_LIMIT", "percentage": 16, "nextResetTime": 1789600000000, "windowDuration": "7d" },
+          { "type": "TIME_LIMIT", "percentage": 20, "nextResetTime": 1789600000000, "windowDuration": "30d" },
+          { "type": "FUTURE_LIMIT", "percentage": 3, "windowDuration": "30d" }
+        ]
+      }
+    },
+    "modelUsage": { "data": [] },
+    "toolUsage": { "data": [] },
+    "wallet": {
+      "success": true,
+      "data": { "balance": 42.6, "currency": "CNY" }
+    }
+  },
+  "expect": {
+    "connections": ["glm-quota", "glm-wallet"],
+    "quotaMetricKeys": ["quota.5h.used", "quota.5h.remaining", "quota.weekly.used", "quota.weekly.remaining", "quota.tools.monthly.used", "quota.tools.monthly.remaining"],
+    "quotaHealthIndependentOfWallet": true,
+    "walletMetricKeys": ["wallet.CNY.balance"],
+    "walletDirection": "balance",
+    "walletConfidence": "experimental",
+    "walletCurrency": "CNY",
+    "unknownLimitIsDiagnosticOnly": "FUTURE_LIMIT",
+    "emptyActivityProducesNoMetric": true,
+    "timeLimitIsNotWeekly": true
+  }
+}

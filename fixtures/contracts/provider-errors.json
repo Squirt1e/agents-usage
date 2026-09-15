@@ -1,0 +1,55 @@
+{
+  "id": "provider-errors",
+  "description": "The error vocabulary shared by both runtimes, the snapshot status each kind produces, and how a cached snapshot behaves after a failure. `unknown` covers error kinds that a future Codex or GLM build may report, which must not break parsing.",
+  "cases": [
+    {
+      "name": "missing_config",
+      "error": { "kind": "missing_config", "message": "GLM Coding Plan API key is not configured", "at": "2026-09-10T08:00:00.000Z" },
+      "expect": { "status": "disconnected", "metrics": 0 }
+    },
+    {
+      "name": "authentication",
+      "error": { "kind": "authentication", "message": "DeepSeek rejected the API key", "at": "2026-09-10T08:00:00.000Z" },
+      "expect": { "status": "disconnected", "metrics": 0 }
+    },
+    {
+      "name": "rate_limit",
+      "error": { "kind": "rate_limit", "message": "GLM usage endpoint is rate limited", "at": "2026-09-10T08:00:00.000Z", "retryAt": "2026-09-10T08:01:00.000Z" },
+      "expect": { "status": "unavailable", "metrics": 0 }
+    },
+    {
+      "name": "compatibility",
+      "error": { "kind": "compatibility", "message": "GLM monitor response is incompatible", "at": "2026-09-10T08:00:00.000Z", "diagnostic": { "issue": "limits array missing" } },
+      "expect": { "status": "unavailable", "metrics": 0 }
+    },
+    {
+      "name": "network",
+      "error": { "kind": "network", "message": "Codex app-server request timed out", "at": "2026-09-10T08:00:00.000Z" },
+      "expect": { "status": "unavailable", "metrics": 0 }
+    },
+    {
+      "name": "unknown",
+      "error": { "kind": "unknown", "message": "Unexpected collector failure", "at": "2026-09-10T08:00:00.000Z" },
+      "expect": { "status": "unavailable", "metrics": 0 }
+    }
+  ],
+  "cachedSnapshot": {
+    "provider": "glm",
+    "status": "connected",
+    "capturedAt": "2026-09-10T07:30:00.000Z",
+    "lastSuccessAt": "2026-09-10T07:30:00.000Z",
+    "source": "glm-monitor",
+    "metrics": [
+      { "key": "quota.5h.used", "value": 28, "unit": "percent", "direction": "used", "confidence": ["authoritative"], "source": "glm-monitor" }
+    ]
+  },
+  "expect": {
+    "kinds": ["missing_config", "authentication", "compatibility", "network", "rate_limit", "process", "storage", "unknown"],
+    "authenticationIsNotMissingConfig": true,
+    "cachedFailureKeepsLastSuccessAt": "2026-09-10T07:30:00.000Z",
+    "cachedFailureKeepsCapturedAt": "2026-09-10T07:30:00.000Z",
+    "cachedFailureMarksStale": true,
+    "cachedFailureKeepsMetricValue": 28,
+    "failureDoesNotZeroMetrics": true
+  }
+}
