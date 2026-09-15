@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// Build the desktop panel web assets for the Tauri host.
+// Build the desktop front ends for the Tauri host.
 //
-// The panel is the project's only front end (`src/desktop/index.html`), emitted to
+// Two documents, one output directory: `src/desktop/index.html` (the menubar
+// panel) and `src/desktop/settings.html` (the settings window), both emitted to
 // `dist/desktop-client`, which is the `frontendDist` used by
-// `src-tauri/tauri.conf.json`.
+// `src-tauri/tauri.conf.json`. Vite flattens both to the output root; the host
+// loads them as `index.html` and `settings.html`.
 import { spawnSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

@@ -1,37 +1,43 @@
 /**
  * How tall the panel asks to be.
  *
- * The main page owns the height; every other page inherits it:
+ * ## The rule
  *
- * - **The main page with cards.** The window is exactly as tall as the cards need
- *   — measured from their real bottoms, capped at three complete cards so a fourth
- *   is reached by scrolling — so there is never half a card at the fold and never
- *   blank space under the last one.
- * - **The main page with no cards** (every platform hidden, or the first loading
- *   frame). The window takes the minimum height.
- * - **Every other page** — the settings page, each per-platform configuration
- *   page. They never decide a height of their own: they follow whatever the main
- *   page currently asks for and scroll inside it, so opening a form neither
- *   stretches the panel nor makes it jump.
+ * The window is as tall as the overview's content needs, and no taller than the
+ * display allows. There is no card count in it any more: the panel used to cap
+ * itself at three whole cards and fall back to a fixed minimum when it had none,
+ * which was arithmetic over card bottoms — and the settings pages, which used to
+ * share this window, inherited whatever the overview had asked for. The settings
+ * surfaces are their own fixed-size window now, so the panel has exactly one page
+ * and one question to answer: how much room does it need?
  *
- * Only cards count: the `data-panel-block="section"` markers on settings blocks are
- * inert for sizing. The split here is deliberate — `desiredPanelHeight` is plain
- * arithmetic over measurements, so the rule is unit-testable without a layout
- * engine, and `usePanelHeight` is the thin part that reads the DOM and reports the
- * number to the host.
+ * `desiredPanelHeight` is that answer as plain arithmetic, so the rule is
+ * unit-testable without a layout engine; `usePanelHeight` is the thin part that
+ * reads the DOM and reports the number to the host.
+ *
+ * ## The invariant that must not be lost
+ *
+ * **The height must be re-measured, not merely notified.**
+ *
+ * The panel window spends most of its life hidden, a hidden WebKit view produces no
+ * frames, and a `ResizeObserver` notification lost while hidden is never re-sent.
+ * The failure is silent and permanent: the window stands at the height its content
+ * had minutes ago, too short for the cards on screen, and no event will correct it.
+ * (See the archived change `fix-panel-height-follows-cards`, which is where this
+ * was learned.) So the measurement is driven by three things, and the third is not
+ * an optimisation:
+ *
+ *  1. a `ResizeObserver` on the content, re-pointed whenever the content element is
+ *     replaced — the fast path,
+ *  2. a safety tick that re-takes the measurement whether or not anything was
+ *     announced, which bounds how long a wrong height can survive,
+ *  3. `visibilitychange`, because coming back from hidden is both the moment a
+ *     missed change is most likely and the moment it is least tolerable.
+ *
+ * Anything that removes 2 or 3 has removed the guarantee, not a cost.
  */
 
 import { useEffect, useRef } from 'react';
-
-/** Floor for the panel; matches `min-height` on `.panel` and the host's own floor. */
-export const PANEL_MIN_HEIGHT = 320;
-
-/** The most whole cards the panel ever shows at once. */
-export const MAX_VISIBLE_CARDS = 3;
-
-/** Attribute marking a card-like block, and the value that makes it a card. */
-export const PANEL_BLOCK_ATTRIBUTE = 'data-panel-block';
-export const PANEL_CARD_VALUE = 'card';
 
 /**
  * Attribute the content sets on `.panel` while it is animating its own layout.
@@ -44,6 +50,10 @@ export const PANEL_CARD_VALUE = 'card';
  * *after* the movement that caused it, which reads as the panel being a beat
  * behind. While this attribute is set, the measured height is reported on the
  * frame it was measured, so the window and the content move as one.
+ *
+ * Two things set it today: the header's collapse travel, and the quota shape's
+ * morph (`QuotaDisplay`). Both are movements of content the window is measured
+ * from, so both would otherwise leave the window behind.
  *
  * It is an attribute rather than a module flag so that the announcement belongs to
  * the panel that carries it: it can be seen, and it cannot outlive the animation
@@ -129,60 +139,70 @@ export interface PanelHeightInput {
   /** Window border, header, footer and body padding: everything that is not content. */
   chrome: number;
   /**
-   * Bottom edges of the cards, relative to the content's top, in document order.
-   * Empty on a main page that has no cards to show.
+   * The content element's own height, in the same units as `chrome` (border box,
+   * sub-pixel included — the rounding happens once, at the end).
    */
-  cardBottoms: number[];
-  /** Whether this view is the main page — the one that owns the height. */
-  isMain: boolean;
-  /** What the main page last asked for, for the views that follow it. */
-  mainHeight: number;
+  contentHeight: number;
+  /**
+   * The tallest the host will make the window, when it knows (the display's work
+   * area). The panel does not need to honour it — the host clamps — but knowing it
+   * keeps the reported number honest, which matters because the report is compared
+   * against the previous one to decide whether to report at all.
+   */
+  maxHeight?: number;
 }
 
 /**
  * The height the panel should ask the host for, in logical pixels.
  *
- * Main page: the frame plus the bottom edge of the last card it may show whole, or
- * the minimum when it has no cards at all. Any other page: whatever the main page
- * last asked for.
+ * The frame plus the content, capped at the display when the caller knows it. The
+ * floor is whatever the frame alone needs — a panel with no content is still a
+ * panel — and deliberately not a constant: the old `320` existed to keep the
+ * window from collapsing on an empty overview, and an empty overview is now simply
+ * a short panel.
  */
 export function desiredPanelHeight(input: PanelHeightInput): number {
-  const { chrome, cardBottoms, isMain, mainHeight } = input;
-  if (!isMain) return Math.max(PANEL_MIN_HEIGHT, Math.round(mainHeight));
-  if (cardBottoms.length === 0) return PANEL_MIN_HEIGHT;
-  const lastVisible = cardBottoms[Math.min(cardBottoms.length, MAX_VISIBLE_CARDS) - 1]!;
-  return Math.max(PANEL_MIN_HEIGHT, Math.round(chrome + lastVisible));
+  const { chrome, contentHeight, maxHeight } = input;
+  const wanted = Math.round(chrome + contentHeight);
+  const ceiling = maxHeight !== undefined && maxHeight > 0 ? Math.floor(maxHeight) : Number.POSITIVE_INFINITY;
+  return Math.max(Math.round(chrome), Math.min(wanted, ceiling));
 }
 
 export interface PanelHeightOptions {
-  /** Changes when the view does, so the measurement re-attaches to the new content. */
-  viewKey: string;
-  /** Whether this view is the main page, the only one that decides a height. */
-  isMain: boolean;
   /** Report a new desired height. Expected to be stable across renders. */
   onSetHeight(height: number): void;
+  /** The tallest the host will make the window, when the caller knows it. */
+  maxHeight?: number;
 }
 
 /**
  * Measure the panel and report the height it wants.
  *
- * Re-measures whenever the content resizes (data arriving, a card growing, a view
- * swapping cards for a form) and whenever the view changes. Reports only once the
- * layout has settled, and only a change of a whole pixel — the host resizes the
- * window in response, and a report that echoed the resize back would be a
- * feedback loop.
+ * Re-measures whenever the content resizes (data arriving, a card growing) and on
+ * the safety tick. Reports only once the layout has settled, and only a change of a
+ * whole pixel — the host resizes the window in response, and a report that echoed
+ * the resize back would be a feedback loop.
  *
- * The panel's message is not part of this: it floats over the content instead of
- * taking a row, so it never moves a card and never asks for a different height.
+ * The panel's message stack is not part of this: it floats over the content instead
+ * of taking a row, so it never moves a card and never asks for a different height.
  */
 export function usePanelHeight(options: PanelHeightOptions): void {
-  const { viewKey, isMain, onSetHeight } = options;
-  /** What the main page last asked for; the other pages follow it. */
-  const mainHeight = useRef(PANEL_MIN_HEIGHT);
-  /** The height the host last applied; 0 until the first report. */
-  const reported = useRef(0);
+  const { onSetHeight, maxHeight } = options;
+  /**
+   * The height the host last applied, or `null` before the first report.
+   *
+   * `null` rather than `0`: a computed height of zero is a real answer (a panel with
+   * no measurable content, and every measurement in jsdom), and using `0` as the
+   * "nothing yet" sentinel made the first report of such a panel indistinguishable
+   * from a repeat of one — so it was never sent at all.
+   */
+  const reported = useRef<number | null>(null);
   /** In-flight height animation, so a new target can take it over. */
   const animation = useRef(0);
+  // Read through a ref so a caller that passes a fresh closure each render does not
+  // restart the measurement (and with it the whole observer) on every render.
+  const ceiling = useRef(maxHeight);
+  ceiling.current = maxHeight;
 
   useEffect(() => {
     const panel = document.querySelector<HTMLElement>('.panel');
@@ -192,11 +212,11 @@ export function usePanelHeight(options: PanelHeightOptions): void {
     /**
      * The block the cards live in, resolved on every measurement rather than once.
      *
-     * The body's child is swapped whenever the view changes *branch*, and the error
-     * state and the overview share one view key — so the element this effect first
-     * saw can be replaced without the effect re-running. A remembered reference
-     * then measures a detached node, whose rectangles are all zero, and the panel
-     * drops to the minimum height with its cards right there on screen.
+     * The body's child is swapped whenever the content changes branch — the loading
+     * state, the error state and the overview are different elements — so the
+     * element this effect first saw can be replaced without the effect re-running. A
+     * remembered reference then measures a detached node, whose rectangles are all
+     * zero, and the panel shrinks to the frame with its cards right there on screen.
      */
     const currentContent = (): HTMLElement | null => {
       const next = body.firstElementChild;
@@ -205,7 +225,7 @@ export function usePanelHeight(options: PanelHeightOptions): void {
 
     /** Send a height, skipping values the host already has. */
     const report = (height: number) => {
-      if (Math.abs(height - reported.current) < 1) return;
+      if (reported.current !== null && Math.abs(height - reported.current) < 1) return;
       reported.current = height;
       onSetHeight(height);
     };
@@ -219,7 +239,7 @@ export function usePanelHeight(options: PanelHeightOptions): void {
      */
     const moveTo = (height: number) => {
       const from = reported.current;
-      if (from === 0 || prefersReducedMotion()) {
+      if (from === null || prefersReducedMotion()) {
         if (animation.current !== 0) window.cancelAnimationFrame(animation.current);
         animation.current = 0;
         report(height);
@@ -254,28 +274,20 @@ export function usePanelHeight(options: PanelHeightOptions): void {
         observer?.observe(content);
         observed = content;
       }
-      const styles = window.getComputedStyle(body);
-      const padding =
-        (Number.parseFloat(styles.paddingTop) || 0) + (Number.parseFloat(styles.paddingBottom) || 0);
-      const contentBox = content.getBoundingClientRect();
-      const cardBottoms = [
-        ...content.querySelectorAll<HTMLElement>(`[${PANEL_BLOCK_ATTRIBUTE}="${PANEL_CARD_VALUE}"]`)
-      ].map((card) => card.getBoundingClientRect().bottom - contentBox.top);
+      // The content's own border box, read off the element rather than off the
+      // scrolling body: `scrollHeight` is measured against the body's padding box,
+      // which would make the body's padding part of the content *and* part of the
+      // frame below, and the resulting half-padding error is invisible until the
+      // window is a few pixels wrong. See `desiredPanelHeight`.
+      const contentHeight = content.getBoundingClientRect().height;
       const next = desiredPanelHeight({
         // `panel.offsetHeight - body.clientHeight` is the border, header and
-        // footer; the body's padding belongs to the content's frame, not to the
-        // content itself.
-        chrome: panel.offsetHeight - body.clientHeight + padding,
-        cardBottoms,
-        isMain,
-        mainHeight: mainHeight.current
+        // footer; the body's padding belongs to the frame around the content, so it
+        // is counted here and the content is measured without it.
+        chrome: panel.offsetHeight - body.clientHeight,
+        contentHeight,
+        ...(ceiling.current !== undefined ? { maxHeight: ceiling.current } : {})
       });
-      // Remembered while the main page is on screen, so a settings page opened
-      // afterwards inherits exactly the height the user was just looking at —
-      // including the minimum a card-less main page asks for, otherwise opening
-      // a form from an emptied overview would snap the window back up to the
-      // height of cards that are no longer there.
-      if (isMain) mainHeight.current = next;
       // Following the content means reporting what it measures now: travelling to
       // it would put the window's own 240ms slide on top of a movement that is
       // already animated.
@@ -325,5 +337,5 @@ export function usePanelHeight(options: PanelHeightOptions): void {
       animation.current = 0;
       if (requestMeasure === schedule) requestMeasure = null;
     };
-  }, [viewKey, isMain, onSetHeight]);
+  }, [onSetHeight]);
 }

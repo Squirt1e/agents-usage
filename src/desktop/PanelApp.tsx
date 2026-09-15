@@ -1,15 +1,19 @@
 /**
- * The panel container: data loading, live events, view state and the window-level
- * keyboard behaviour.
+ * The panel: data loading, live events and the window-level keyboard behaviour.
+ *
+ * The panel is the *overview* and nothing else. Every settings surface lives in the
+ * settings window, so this component has no page state: it renders the cards, the
+ * frame's status module and the messages, and every entry point that used to swap
+ * the body out for a form now asks the host to open that window on a named section
+ * (`onOpenSettings`).
  *
  * Responsibilities pinned by the specs:
  * - reads the snapshot and the settings once, then keeps them fresh through
  *   `subscribe` (a dropped stream is reported, and the transport reconnects and
- *   re-reads on its own),
- * - one platform's configuration at a time; "返回用量总览" restores the overview
- *   *and* the focus to the gear that opened it,
- * - Escape closes the inner overlay first (platform management, then the
- *   per-platform settings) and only then asks the host to collapse the window,
+ *   re-reads on its own); the settings themselves live in a store, because the
+ *   settings window writes them too,
+ * - Escape closes the connection detail first and only then asks the host to
+ *   collapse the window,
  * - the pin state is host-driven: this component renders what the host reports
  *   and never keeps a private copy,
  * - hiding a platform only writes `platformVisibility`: no credential is deleted
@@ -22,19 +26,17 @@ import {
   parsePanelSettings,
   providerDisplayName,
   visibleProviders,
-  type CredentialStatus,
-  type CredentialTarget,
   type PanelSettings,
   type PanelSettingsPatch,
   type PanelSnapshot
 } from '../shared/desktop-contract';
 import { UsageClientError, type UsageClient } from '../shared/usage-client';
+import { createSettingsStore, type SettingsStore } from './settings-store';
+import type { SettingsSection } from './SettingsPanel';
 import { OverviewView } from './OverviewView';
-import { Panel, PanelIconButton, type PanelDirection } from './Panel';
-import { requestPanelHeightMeasure, usePanelHeight } from './panel-height';
-import { AppSettings } from './AppSettings';
+import { Panel, PanelIconButton } from './Panel';
+import { usePanelHeight } from './panel-height';
 import { usePanelTheme } from './theme';
-import { ProviderSettings } from './ProviderSettings';
 import { ServiceUnavailableState } from './MetricStates';
 import { PanelToasts } from './PanelToasts';
 import { ConnectionDetails } from './ConnectionDetails';
@@ -56,40 +58,6 @@ const CONNECTION_TAG = 'connection';
 
 /** The empty answer to "which cards are on screen", shared so a panel with none reuses one set. */
 const NO_PROVIDERS: ReadonlySet<ProviderId> = new Set<ProviderId>();
-
-/**
- * The platform a credential belongs to.
- *
- * Both experimental connections sit on the platform whose card shows them, so
- * saving either one collects that platform: the wallet credential is GLM's and the
- * web token is DeepSeek's.
- */
-function providerOfCredential(target: CredentialTarget): ProviderId {
-  return target === 'glm' || target === 'glm-wallet' ? 'glm' : 'deepseek';
-}
-
-/**
- * The platforms a settings write makes stale, so they are collected again.
- *
- * Everything else the panel can write is presentation — theme, quota value mode,
- * reset formats, platform visibility and order, peak schedules — and needs no
- * collection. A credential is handled separately (saving or deleting one always
- * keeps the two in step), while these are the writes that change *what* would be
- * collected: which region's endpoint answers, which CLI collects Codex, and which
- * experimental connections are on at all.
- *
- * Without this, a region switch kept showing the previous region's quota and a
- * corrected CLI path kept showing the failure it was meant to fix, until the next
- * scheduled pass — which reads as "the setting did nothing".
- */
-function providersToRecollect(patch: PanelSettingsPatch): ProviderId[] {
-  const providers: ProviderId[] = [];
-  if (patch.glmRegion !== undefined) providers.push('glm');
-  if (patch.glmWalletEnabled === true) providers.push('glm');
-  if (patch.deepseekWebEnabled === true) providers.push('deepseek');
-  if (patch.codexCliPath !== undefined) providers.push('codex');
-  return [...new Set(providers)];
-}
 
 /** Window controls the panel asks the host for; the host owns the real state. */
 export interface PanelHostProps {
@@ -114,42 +82,55 @@ export interface PanelAppProps {
   /** Fixed clock for tests and static previews; otherwise the panel ticks. */
   now?: Date;
   tickMs?: number;
+  /** Starting settings, when the caller already has a cache of them. */
+  initialSettings?: PanelSettings;
+  /**
+   * Show the settings window on a section. Every settings entry point in the panel
+   * ends here: the host opens (or focuses) that window, and in a browser the caller
+   * renders the same component as a sheet over this document.
+   */
+  onOpenSettings(section: SettingsSection): void;
 }
-
-type PanelView =
-  | { kind: 'overview' }
-  | { kind: 'settings'; provider: ProviderId }
-  /** The panel's own settings page (platform management first). */
-  | { kind: 'app-settings' };
-
-type PendingFocus = { kind: 'gear'; provider: ProviderId } | { kind: 'settings' } | undefined;
 
 export function PanelApp(props: PanelAppProps) {
   const { client, host } = props;
+  /**
+   * The settings live in a store rather than in this component's state: the host
+   * writes them in *another* window too (the settings window), and the store is what
+   * makes the broadcast that follows a write announce exactly one change here — the
+   * same value arriving twice is not a change.
+   */
+  const storeRef = useRef<SettingsStore | undefined>(undefined);
+  storeRef.current ??= createSettingsStore({
+    client,
+    initial: props.initialSettings ?? parsePanelSettings({})
+  });
+  const store = storeRef.current;
+  useEffect(() => () => store.dispose(), [store]);
   const [snapshot, setSnapshot] = useState<PanelSnapshot | undefined>();
-  const [settings, setSettings] = useState<PanelSettings>(() => parsePanelSettings({}));
+  const [settings, setSettings] = useState<PanelSettings>(() => store.read());
   usePanelTheme(settings.theme);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>();
-  const [view, setView] = useState<PanelView>({ kind: 'overview' });
-  // Which way the last page swap travelled; the transition animates along it.
-  const [direction, setDirection] = useState<PanelDirection>('forward');
   const [refreshing, setRefreshing] = useState<Set<ProviderId>>(new Set());
   const [replayKeys, setReplayKeys] = useState<Partial<Record<ProviderId, number>>>({});
   const [toasts, setToasts] = useState<PanelToast[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [settingsBusy, setSettingsBusy] = useState(false);
   const [clock, setClock] = useState<Date>(() => props.now ?? new Date());
 
-  const gearRefs = useRef<Partial<Record<ProviderId, HTMLButtonElement | null>>>({});
-  const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
-  const pendingFocus = useRef<PendingFocus>(undefined);
   /** Ids for the message stack; a ref because an id is not part of the view. */
   const toastId = useRef(1);
   // Latest settings for event handlers that must not close over a stale copy
-  // (two visibility toggles in quick succession, for instance).
+  // (two visibility toggles in quick succession, for instance). Kept in step with
+  // the store rather than assigned during render: the store is the truth, and a
+  // render-time assignment would make the ref lag by exactly one write.
   const settingsRef = useRef(settings);
-  settingsRef.current = settings;
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  /** Adopt whatever the store reports, wherever the change came from. */
+  useEffect(() => store.subscribe(setSettings), [store]);
 
   /** Report something that just happened, as a message on the bottom of the panel. */
   const announce = useCallback((notice: PanelNotice) => {
@@ -166,14 +147,14 @@ export function PanelApp(props: PanelAppProps) {
     try {
       const [nextSnapshot, nextSettings] = await Promise.all([client.readSnapshot(), client.readSettings()]);
       setSnapshot(nextSnapshot);
-      setSettings(nextSettings);
+      store.adopt(nextSettings);
       setLoadError(undefined);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : '本地服务不可用');
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [client, store]);
 
   useEffect(() => {
     let active = true;
@@ -199,7 +180,8 @@ export function PanelApp(props: PanelAppProps) {
         return;
       }
       if (event.type === 'settings') {
-        setSettings(event.settings);
+        // The store subscribes to the same stream and announces the change; this
+        // component adopts it from there, so there is exactly one path in.
         return;
       }
       if (event.type === 'connection') {
@@ -252,44 +234,10 @@ export function PanelApp(props: PanelAppProps) {
     return () => window.clearInterval(interval);
   }, [props.now, props.tickMs]);
 
-  /**
-   * The identity of the page on screen. It keys the view inside `Panel` — which is
-   * what replays the page transition — and re-attaches the height measurement to
-   * the new content.
-   */
-  const viewKey = view.kind === 'settings' ? `settings:${view.provider}` : view.kind;
-
-  /**
-   * Every view change goes through here, so the direction is set in the same update
-   * as the view it describes: a swap must never animate along the direction of the
-   * one before it.
-   */
-  const navigate = useCallback((next: PanelView, motion: PanelDirection) => {
-    setDetailsOpen(false);
-    setDirection(motion);
-    setView(next);
-  }, []);
-
-  /** Return to the overview, restoring focus to the button that opened a view. */
-  const backToOverview = useCallback(
-    (provider?: ProviderId) => {
-      pendingFocus.current = provider === undefined ? { kind: 'settings' } : { kind: 'gear', provider };
-      navigate({ kind: 'overview' }, 'back');
-    },
-    [navigate]
-  );
-
-  // Restores focus after the view swaps back, using the gear ref the card
-  // registered. Runs after every render and clears itself once it succeeded.
-  useEffect(() => {
-    const target = pendingFocus.current;
-    if (!target) return;
-    if (view.kind !== 'overview') return;
-    if (target.kind === 'settings') settingsButtonRef.current?.focus();
-    else gearRefs.current[target.provider]?.focus();
-    pendingFocus.current = undefined;
-  });
-
+  // Escape: close the connection detail if it is open, otherwise ask the host to
+  // collapse the panel. There is no sub-page to close first any more — the settings
+  // surfaces are in their own window, and Escape there closes that window, which is
+  // the host's rule for it, not this component's.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -297,25 +245,11 @@ export function PanelApp(props: PanelAppProps) {
         setDetailsOpen(false);
         return;
       }
-      // A sub-page wins: Escape returns to the overview before it collapses the
-      // window.
-      if (view.kind === 'settings') {
-        backToOverview(view.provider);
-        return;
-      }
-      if (view.kind === 'app-settings') {
-        backToOverview();
-        return;
-      }
       host.onRequestHide();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [view, host, backToOverview, detailsOpen]);
-
-  const registerGear = useCallback((provider: ProviderId, node: HTMLButtonElement | null) => {
-    gearRefs.current[provider] = node;
-  }, []);
+  }, [host, detailsOpen]);
 
   const describeError = useCallback((error: unknown, fallback: string) => {
     if (error instanceof UsageClientError && error.kind === 'session') return error.message;
@@ -353,18 +287,21 @@ export function PanelApp(props: PanelAppProps) {
    * A refresh verdict arrives seconds after the click that asked for it — a failed
    * collection can take that long — so it is gated on the screen as it is when the
    * result lands, not as it was at the click: the platform may have been hidden in
-   * the meantime, the user may have walked into a sub-page, or the panel may still
-   * be showing the loading state (where `settings` are still the defaults, so being
-   * "visible" there does not mean a card exists). A message about a card that is
-   * not on screen is noise.
+   * the meantime, or the panel may still be showing the loading state (where
+   * `settings` are still the defaults, so being "visible" there does not mean a card
+   * exists). A message about a card that is not on screen is noise.
+   *
+   * The settings window is not part of this judgement any more: a card that is on
+   * screen stays on screen when the settings window opens beside it, so a verdict
+   * about it is still worth saying.
    *
    * Written to a ref as well because `refresh` reads it from the closure it was
    * created in, which is the same reason `settingsRef` exists.
    */
   const cardsOnScreen = useMemo(() => {
-    if (view.kind !== 'overview' || (loading && !snapshot) || (loadError && !snapshot)) return NO_PROVIDERS;
+    if ((loading && !snapshot) || (loadError && !snapshot)) return NO_PROVIDERS;
     return new Set(displayed);
-  }, [view.kind, loading, loadError, snapshot, displayed]);
+  }, [loading, loadError, snapshot, displayed]);
   const cardsOnScreenRef = useRef(cardsOnScreen);
   cardsOnScreenRef.current = cardsOnScreen;
 
@@ -425,138 +362,48 @@ export function PanelApp(props: PanelAppProps) {
 
   const updateSettings = useCallback(
     async (patch: PanelSettingsPatch) => {
-      setSettingsBusy(true);
       try {
-        const next = await client.updateSettings(patch);
-        setSettings(next);
-        // A write that changes what would be collected is collected again right
-        // away, so the card shows the answer to the setting the user just made
-        // instead of the previous one until the next scheduled pass.
-        for (const provider of providersToRecollect(patch)) void refresh(provider);
-        // No clearing here: a message reports the moment it describes and leaves on
-        // its own clock, so a successful save does not sweep away a refresh verdict.
+        await store.write(patch);
+        // No re-collection here, and no message to clear. The "which writes change
+        // what is collected" judgement moved to the host (`providers_to_recollect`
+        // in lib.rs), because the cards that have to answer for such a write are in
+        // *this* window while the write itself may be made in the settings one — a
+        // rule kept per window would be right in one and quietly missing in the
+        // other. The host collects and pushes the snapshot; the store has already
+        // announced the new settings, so the cards re-render the moment it lands.
+        //
+        // A message is not swept away either: it reports the moment it describes and
+        // leaves on its own clock, so a successful save does not swallow a refresh
+        // verdict.
       } catch (error) {
         announce({ tone: 'danger', text: describeError(error, '设置保存失败') });
-      } finally {
-        setSettingsBusy(false);
       }
     },
-    [client, describeError, announce, refresh]
+    [store, describeError, announce]
   );
 
-  const validateCredential = useCallback(
-    async (target: CredentialTarget, secret: string): Promise<CredentialStatus> => {
-      const status = await client.validateCredential(target, secret);
-      // The service returns the mask; re-read the settings so every view sees it.
-      setSettings(await client.readSettings());
-      // A credential that just validated is a connection that just became usable,
-      // so collect it right away: without this the card went on showing nothing (or
-      // the previous reading) until the next scheduled pass, and coming back from a
-      // fresh, working key to an empty card reads as "the key was wrong".
-      void refresh(providerOfCredential(target));
-      return status;
-    },
-    [client, refresh]
-  );
-
-  const deleteCredential = useCallback(
-    async (target: CredentialTarget) => {
-      await client.deleteCredential(target);
-      setSettings(await client.readSettings());
-      // Deleting is the other half of the same rule: the connection is now
-      // unusable, so collect again and let the service say so. The card itself is
-      // already back to its template (a credential is part of its display gate),
-      // but the connection's own status line would otherwise go on claiming 数据正常
-      // from a reading whose key no longer exists.
-      void refresh(providerOfCredential(target));
-    },
-    [client, refresh]
-  );
-
-  // A switch is disabled only by its own write: tracking the platforms with a
-  // visibility write in flight lets an unrelated save (theme, quota value,
-  // reorder) leave every switch exactly as it was instead of grey-listing all.
-  const [togglingVisibility, setTogglingVisibility] = useState<ReadonlySet<ProviderId>>(new Set());
-
-  const setVisibility = useCallback(
-    (provider: ProviderId, visible: boolean) => {
-      // Visibility is display only: no connection is stopped and no credential is
-      // deleted. The service keeps collecting hidden platforms.
-      //
-      // The checkbox is controlled, so update it optimistically; the settings the
-      // service returns afterwards win if the write fails.
-      const next = { ...settingsRef.current.platformVisibility, [provider]: visible };
-      setSettings((current) => ({ ...current, platformVisibility: next }));
-      setTogglingVisibility((current) => new Set(current).add(provider));
-      void updateSettings({ platformVisibility: next })
-        .then(() => {
-          if (!visible && visibleProviders({ ...settingsRef.current, platformVisibility: next }).length === 0) {
-            announce({ tone: 'info', text: '已隐藏全部平台，可在“设置”中重新启用。' });
-          }
-        })
-        .finally(() => {
-          setTogglingVisibility((current) => {
-            const rest = new Set(current);
-            rest.delete(provider);
-            return rest;
-          });
-        });
-    },
-    [updateSettings, announce]
-  );
-
-  // The overview owns the window height: it follows its cards, or the minimum when
-  // it has none. Every other page inherits that height and scrolls inside it (see
-  // panel-height.ts), so opening a form neither stretches nor shrinks the panel.
+  // The panel owns the window height, and it has one page: the overview. The
+  // settings surfaces used to be pages that *inherited* this height and scrolled
+  // inside it; they are their own window now, with a fixed height of their own, so
+  // the panel's height is only ever the overview's business (see panel-height.ts).
   usePanelHeight({
-    viewKey,
-    isMain: view.kind === 'overview',
     onSetHeight: props.host.onSetHeight
   });
 
-  // The height hook's ResizeObserver watches the body's content element, but a
-  // load or a retry swaps that element without a view-key change (the loading and
-  // error states share `viewKey="overview"` with the overview), which the observer
-  // never sees. Re-measuring when the snapshot changes shape keeps the window on
-  // the cards the moment they appear, instead of waiting for the safety tick.
-  useEffect(() => {
-    requestPanelHeightMeasure();
-  }, [snapshot]);
-
-  const currentView = view.kind === 'settings' ? view : undefined;
-  const onSettingsPage = view.kind === 'app-settings';
-  const onSubPage = currentView !== undefined || onSettingsPage;
-  const title = currentView
-    ? `${providerDisplayName(currentView.provider)} 配置`
-    : onSettingsPage
-      ? '设置'
-      : '用量总览';
   const lastSyncAt = latestSync(displayed.map((provider) => providerView(snapshot, provider)));
   const issues = useMemo(() => connectionIssues(snapshot, settings), [snapshot, settings]);
-  // The bottom status module carries the sync line on every page: it is frame
-  // furniture, so it neither scrolls with the body nor disappears in a sub-page.
-  // A missing sync time is reported as missing, never as a zero or a time.
+  // The bottom status module is frame furniture: it neither scrolls with the body
+  // nor changes with the page (there is only one). A missing sync time is reported
+  // as missing, never as a zero or a time.
   const syncText = lastSyncAt
     ? `最近同步于 ${formatClockTime(lastSyncAt, settings.timezone)}`
     : loading
       ? '正在读取本地缓存'
       : '尚未同步';
-  const leaveSubPage = currentView ? () => backToOverview(currentView.provider) : onSettingsPage ? () => backToOverview() : undefined;
-
-  const states = useMemo(() => {
-    const entries: Partial<Record<ProviderId, PanelSnapshot['providers'][number] | undefined>> = {};
-    for (const provider of ['codex', 'glm', 'deepseek'] as const) {
-      entries[provider] = providerView(snapshot, provider).primary;
-    }
-    return entries;
-  }, [snapshot]);
 
   return (
     <Panel
-      title={title}
-      viewKey={viewKey}
-      direction={direction}
-      onBack={leaveSubPage}
+      title="用量总览"
       headerVisible={props.host.headerVisible}
       footer={
         <>
@@ -587,13 +434,7 @@ export function PanelApp(props: PanelAppProps) {
           >
             <RefreshIcon />
           </PanelIconButton>
-          <PanelIconButton
-            label="设置"
-            onClick={() => navigate({ kind: 'app-settings' }, 'forward')}
-            buttonRef={(node) => {
-              settingsButtonRef.current = node;
-            }}
-          >
+          <PanelIconButton label="设置" onClick={() => props.onOpenSettings('appearance')}>
             <GearIcon />
           </PanelIconButton>
           <PanelIconButton label={host.pinned ? '取消置顶' : '置顶面板'} pressed={host.pinned} active={host.pinned} onClick={host.onTogglePin}>
@@ -601,33 +442,10 @@ export function PanelApp(props: PanelAppProps) {
           </PanelIconButton>
         </>
       }
-      /* Always handed over, hidden on the pages that do not own the row: it fades
-         out instead of blinking away, and `aria-hidden` keeps it out of queries. */
-      toolsVisible={!onSubPage}
       toasts={<PanelToasts toasts={toasts} onDone={removeToast} />}
     >
       {loadError && !snapshot ? (
         <ServiceUnavailableState message={loadError} onRetry={() => void load()} />
-      ) : onSettingsPage ? (
-        <AppSettings
-          settings={settings}
-          states={states}
-          busy={settingsBusy}
-          togglingVisibility={togglingVisibility}
-          onToggleVisibility={setVisibility}
-          onReorder={(order) => void updateSettings({ platformOrder: order })}
-          onThemeChange={(theme) => updateSettings({ theme })}
-          onQuotaValueModeChange={(quotaValueMode) => updateSettings({ quotaValueMode })}
-        />
-      ) : currentView ? (
-        <ProviderSettings
-          provider={currentView.provider}
-          view={providerView(snapshot, currentView.provider)}
-          settings={settings}
-          onUpdateSettings={updateSettings}
-          onValidateCredential={validateCredential}
-          onDeleteCredential={deleteCredential}
-        />
       ) : (
         <OverviewView
           snapshot={snapshot}
@@ -635,9 +453,8 @@ export function PanelApp(props: PanelAppProps) {
           replayKeys={replayKeys}
           now={clock}
           loading={loading}
-          onOpenSettings={(provider) => navigate({ kind: 'settings', provider }, 'forward')}
-          onOpenAppSettings={() => navigate({ kind: 'app-settings' }, 'forward')}
-          registerGear={registerGear}
+          onOpenSettings={(provider) => props.onOpenSettings(provider)}
+          onOpenAppSettings={() => props.onOpenSettings('platforms')}
           onToggleResetTimeFormat={(provider) =>
             void updateSettings(
               provider === 'codex'

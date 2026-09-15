@@ -38,9 +38,6 @@ export function PlatformCard(props: PlatformCardProps) {
       data-testid={`card-${props.provider}`}
       data-provider={props.provider}
       {...(isPeak ? { 'data-period': 'peak' } : {})}
-      // Marks a card-like block for the panel's height budget: the window follows
-      // its content but never grows past three whole cards (see panel-height.ts).
-      data-panel-block="card"
       aria-labelledby={`card-title-${props.provider}`}
     >
       <header className="provider-head">

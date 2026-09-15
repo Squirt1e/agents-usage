@@ -39,9 +39,18 @@ export interface OverviewViewProps {
   now: Date;
   loading: boolean;
   onOpenSettings(provider: ProviderId): void;
-  /** Open the panel settings page (platform management lives there). */
+  /** Open the settings window on 平台管理, where visibility and order live. */
   onOpenAppSettings(): void;
-  registerGear(provider: ProviderId, node: HTMLButtonElement | null): void;
+  /**
+   * Hand over a card's configuration button.
+   *
+   * The card no longer opens an in-panel page, so there is no "return" step to
+   * restore focus from — but the cards still register their node, because a card
+   * replaced while the settings window is open (its platform hidden from there)
+   * must not drop focus to the document body. Optional: a static preview or a test
+   * that does not care about focus can leave it out.
+   */
+  registerGear?(provider: ProviderId, node: HTMLButtonElement | null): void;
   /** Flip one card's reset-time format; the whole card flips, other cards never do. */
   onToggleResetTimeFormat(provider: ProviderId): void;
   /** Clicking a card's ring or bar flips that card's quota display mode. */

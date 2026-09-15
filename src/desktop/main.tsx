@@ -7,16 +7,66 @@
  * - `createDesktopHostControls()` asks the host to hide the window (Escape with no
  *   overlay open), to pin/unpin it, and to open the companion web page,
  * - the pinned state comes from the host: the panel renders what the host reports
- *   and never keeps a private copy, so a menu-bar click and the pin button agree.
+ *   and never keeps a private copy, so a menu-bar click and the pin button agree,
  * - the header's collapse follows the pointer: the host tracks the window's cursor
  *   enter/leave (a non-key window's webview sees no pointer events) and reports the
  *   intended header visibility here.
+ *
+ * ## Settings
+ *
+ * Every settings entry point asks the host to open the settings window
+ * (`panel_open_settings`). Outside Tauri there is no second window to open, so this
+ * file mounts the very same surface as a 560x380 sheet over this document: the
+ * component, its sections and its behaviour are identical, only the shell differs
+ * (see `SettingsPanel` and `settings-window.ts`).
  */
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import './panel.css';
+import './settings.css';
 import { PanelApp, type PanelHostProps } from './PanelApp';
+import { SettingsPanel, type SettingsSection } from './SettingsPanel';
+import { useSettingsWindow } from './settings-window';
+import { usePanelTheme } from './theme';
 import { createBrowserFallbackHost, createDesktopHostControls, createDesktopUsageClient } from './desktop-client';
+import type { UsageClient } from '../shared/usage-client';
+
+/**
+ * The browser fallback's settings surface: the same panel, the same wiring, hosted
+ * in a sheet instead of a window.
+ *
+ * It is a separate component rather than a branch inside `PanelApp` because the
+ * panel is not the settings window's parent anywhere else — putting "maybe render
+ * settings" inside it would make the panel the one component that knows about the
+ * fallback, which is exactly the coupling the split removed.
+ */
+function SettingsSheet(props: {
+  client: UsageClient;
+  section: SettingsSection;
+  onSelectSection(section: SettingsSection): void;
+  onClose(): void;
+}) {
+  const panelProps = useSettingsWindow({
+    client: props.client,
+    initialSection: props.section,
+    onSelectSectionRequest: (listener) => {
+      // A sheet never receives a host request, but the entry points can re-target it
+      // (clicking another card's gear while it is open), so the prop is honoured.
+      listener(props.section);
+      return () => undefined;
+    }
+  });
+  usePanelTheme(panelProps.settings.theme);
+  return (
+    <div className="settings-sheet-backdrop" onClick={props.onClose}>
+      {/* The sheet is the settings window's own frame, so a click inside it must not
+          close it — the same rule the panel has for internal clicks. */}
+      <div className="settings-sheet" role="dialog" aria-label="设置" onClick={(event) => event.stopPropagation()}>
+        <SettingsPanel {...panelProps} onSelectSection={props.onSelectSection} />
+      </div>
+    </div>
+  );
+}
 
 function mount(): void {
   const container = document.getElementById('panel-root');
@@ -41,6 +91,21 @@ function mount(): void {
     void host.setHeight(height);
   };
 
+  /** Which settings section the sheet is showing, or `undefined` when it is closed. */
+  let sheetSection: SettingsSection | undefined;
+
+  const openSettings = (section: SettingsSection) => {
+    if (controls) {
+      void controls.openSettings(section);
+      return;
+    }
+    // Already open on this section: nothing to re-render, and re-rendering would
+    // remount the sheet and lose whatever the reader had typed.
+    if (sheetSection === section) return;
+    sheetSection = section;
+    render();
+  };
+
   const render = () => {
     const hostProps: PanelHostProps = {
       pinned,
@@ -56,7 +121,25 @@ function mount(): void {
       },
       onSetHeight: setHeight
     };
-    root.render(createElement(PanelApp, { client, host: hostProps }));
+    const onSheet = !controls && sheetSection !== undefined;
+    root.render(
+      createElement(
+        'div',
+        null,
+        createElement(PanelApp, { client, host: hostProps, onOpenSettings: openSettings }),
+        onSheet
+          ? createElement(SettingsSheet, {
+              client,
+              section: sheetSection!,
+              onSelectSection: openSettings,
+              onClose: () => {
+                sheetSection = undefined;
+                render();
+              }
+            })
+          : null
+      )
+    );
   };
 
   render();

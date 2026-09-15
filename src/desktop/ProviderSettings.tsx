@@ -21,7 +21,7 @@
  *   falls back to the estimate, but the pasted login token is kept.
  */
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { ProviderId } from '../shared/contracts';
 import {
   isValidHHmm,
@@ -478,6 +478,25 @@ function PeakSection(props: {
   }));
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; text: string } | undefined>();
+  /**
+   * Adopt the settings' timezone until the reader chooses one.
+   *
+   * The settings arrive *after* this section mounts — the settings window renders
+   * while its first read is still in flight — and a draft seeded from `props` on that
+   * first render keeps the parser's default (`UTC`) for the rest of the session,
+   * silently saving it as the schedule's timezone. So the field follows the settings
+   * until the reader types in it, and "the reader typed" is tracked explicitly: a
+   * comparison against the settings value cannot tell the two apart once the settings
+   * land, because by then the stale draft just looks like a deliberate choice.
+   */
+  const settingsTimezone = props.settings.timezone;
+  const timezoneEdited = useRef(false);
+  useEffect(() => {
+    if (timezoneEdited.current) return;
+    setDraft((current) =>
+      current.timezone === settingsTimezone ? current : { ...current, timezone: settingsTimezone }
+    );
+  }, [settingsTimezone]);
 
   /** Builtin/off keep the stored windows so switching back restores them. */
   const persistMode = async (mode: PeakReminderMode) => {
@@ -684,7 +703,10 @@ function PeakSection(props: {
               disabled={busy}
               placeholder="Asia/Shanghai"
               aria-label="判定时区"
-              onChange={(event) => setDraft((current) => ({ ...current, timezone: event.target.value }))}
+              onChange={(event) => {
+                timezoneEdited.current = true;
+                setDraft((current) => ({ ...current, timezone: event.target.value }));
+              }}
             />
           </div>
         </div>

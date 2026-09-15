@@ -54,7 +54,7 @@ describe('headerTravelHeight', () => {
 const panel = () => document.querySelector('.panel') as HTMLElement;
 const header = () => document.querySelector('.panel-header') as HTMLElement;
 
-/** Render the app the way main.ts does, with only the header flag varying. */
+/** Render the app the way main.tsx does, with only the header flag varying. */
   function renderPanel(headerVisible: boolean | undefined, onSetHeight: (height: number) => void = () => undefined) {
     const client = createFakeUsageClient();
     const host: PanelHostProps = {
@@ -65,7 +65,7 @@ const header = () => document.querySelector('.panel-header') as HTMLElement;
     onSetHeight
   };
   const element = (): ReactElement =>
-    createElement(PanelApp, { client, host, now: new Date('2026-09-12T08:00:00.000Z') });
+    createElement(PanelApp, { client, host, now: new Date("2026-09-12T08:00:00.000Z"), onOpenSettings: () => undefined });
   const view = render(element());
   return {
     rerenderWith(next: boolean | undefined) {

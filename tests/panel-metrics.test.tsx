@@ -971,7 +971,7 @@ describe('local failures stay local', () => {
     ]);
     const client = createFakeUsageClient({ snapshot });
     const host: PanelHostProps = { pinned: false, onTogglePin: noop, onRequestHide: noop, onSetHeight: noop };
-    render(<PanelApp client={client} host={host} now={NOW} />);
+    render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
 
     expect(await screen.findByRole('button', { name: '连接异常 1' })).toBeInTheDocument();
     expect(within(screen.getByTestId('card-codex')).queryByText('Codex is not signed in')).not.toBeInTheDocument();
@@ -1087,7 +1087,7 @@ describe('local failures stay local', () => {
     };
     const client = createFakeUsageClient({ snapshot: snapshotOf([state]) });
     const host: PanelHostProps = { pinned: false, onTogglePin: noop, onRequestHide: noop, onSetHeight: noop };
-    render(<PanelApp client={client} host={host} now={NOW} />);
+    render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
 
     expect(await screen.findByText('¥ 86.42')).toBeInTheDocument();
     // The cached balance is shown, and the state that made it stale is named by the

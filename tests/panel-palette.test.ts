@@ -124,3 +124,25 @@ describe('panel palette', () => {
     expect(contrast(variable(light, '--action')!, card)).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+/**
+ * The settings window's own sheet. It has no palettes of its own — it inherits both
+ * from `panel.css`, which `settings.html` loads first — so the rule it has to keep
+ * is the one that makes that sharing work: every colour it writes is a variable
+ * reference, never a value.
+ */
+describe('settings window palette', () => {
+  const settingsClean = readFileSync(new URL('../src/desktop/settings.css', import.meta.url), 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    ''
+  );
+
+  it('takes every colour from a theme variable', () => {
+    // A literal colour belongs to neither palette: it keeps the dark theme's value
+    // when the light theme is selected. Named colours are not a problem in this
+    // sheet (there are none, and the panel's convention is hex/rgba), so the check
+    // is the same pair the panel's own sheet is held to.
+    expect(settingsClean).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(settingsClean).not.toMatch(/\brgba?\(/);
+  });
+});

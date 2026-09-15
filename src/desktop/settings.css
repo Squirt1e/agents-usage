@@ -1,0 +1,299 @@
+/*
+ * The settings window: a 560x380 fixed window with a system title bar, a left
+ * column of sections and one scrolling content area.
+ *
+ * ## Why it loads `panel.css` first, and what this file neutralises
+ *
+ * `settings.html` imports `panel.css` and then this file. That is deliberate: the
+ * two palettes (`:root` and `:root[data-theme='light']`), every shared control
+ * (`.config-block`, `.setting-row`, `.segmented`, `.switch`, `.credential-*`,
+ * `.manage-row` …) and the reduced-motion rules all live in one sheet, so the
+ * settings window cannot drift into a second design language. The cost is that
+ * three declarations in `panel.css` describe *the panel's* window rather than the
+ * document, and each one is neutralised below:
+ *
+ *   1. `html, body { width: 350px }`  — the panel's own width,
+ *   2. `.panel { width: 350px }`      — ditto, and this document has no `.panel`,
+ *   3. `.panel { min-height: 320px }` — the panel's height floor, ditto.
+ *
+ * The neutralisation is asserted in `tests/panel-width.test.ts` (the width and the
+ * floor must not apply here), so a later edit to `panel.css` cannot quietly bring
+ * the panel's geometry back into this window. Matching only `#settings-root` and
+ * `.settings-window` rather than tightening the shared selectors is what keeps the
+ * panel's own sheet untouched.
+ *
+ * ## Colours
+ *
+ * Only `var(--*)` tokens, as everywhere in the panel: `tests/panel-palette.test.ts`
+ * reads this file too, and a literal colour would keep the dark palette's value
+ * under the light theme.
+ *
+ * ## Why every rule here is scoped, and how
+ *
+ * Vite emits **one** CSS bundle for both documents: `index.html` and `settings.html`
+ * each load `assets/desktop-client-*.css`, which is `panel.css` and this file
+ * concatenated. A rule written bare — `html, body { ... }`, `* { ... }` — therefore
+ * applies in *both* windows, and this file loads second, so it wins. That is not
+ * theoretical: an earlier version of this file set `html, body { width: 100%;
+ * overflow: hidden }` and silently replaced the panel's own `width: 350px;
+ * overflow-x: clip`, which is the rule that stops a trackpad pan from shifting the
+ * whole frame sideways.
+ *
+ * So nothing in this file is written at the top level. The document-level rules are
+ * keyed on the settings document's own root (`:root:has(#settings-root)`, which no
+ * other document matches) and everything else is keyed on `.settings-*` classes that
+ * only exist inside this window. `tests/panel-width.test.ts` holds the line: it
+ * asserts this sheet declares nothing unscoped.
+ *
+ * ## Motion
+ *
+ * Every switch in here is registered in `tests/panel-motion.test.ts`: the section
+ * nav's selection travels, and a section's content arrives with an `animation`
+ * because it mounts already in its new state. The reduced-motion blanket at the
+ * bottom of this file is what switches both off — `panel.css` has its own for the
+ * panel's rules, and the guard reads the two together.
+ */
+
+/*
+ * The settings document's own box. `:has(#settings-root)` is what makes this
+ * document-specific: the panel document has no `#settings-root`, so none of this
+ * reaches it, whatever order the bundle concatenates the two sheets in.
+ */
+:root:has(#settings-root) body {
+  margin: 0;
+  /* The window's own box: the host fixes the window at 560x380, so the document
+     fills it and the content area does the scrolling. */
+  width: 100%;
+  height: 100%;
+  background: var(--page);
+  color: var(--text);
+  /* Inherited from `panel.css`'s document rule in practice, but spelled out so this
+     document does not depend on the order the two sheets happen to be read in — the
+     window is a different surface from the panel and sizes its own text. */
+  font: 400 13px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#settings-root {
+  height: 100%;
+}
+
+/* ------------------------------------------------------------------- shell */
+
+.settings-window {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  /* No min-height: the window is fixed, and a floor here would be a second place
+     to keep in step with it. */
+  min-height: 0;
+  background: var(--page);
+}
+
+/* -------------------------------------------------------------------- nav */
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 auto;
+  width: 168px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--line-soft);
+  overflow-y: auto;
+}
+
+.settings-nav-group {
+  padding: 10px 8px 4px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
+}
+
+.settings-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--control-text);
+  text-align: left;
+  /* The selection travels: the tint, the text colour and the accent rail all move
+     on the feedback budget (AGENTS.md §1.2) rather than cutting to the new
+     section. The rail's own width is part of the same switch — a section that
+     becomes current grows it from nothing. */
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
+}
+
+.settings-nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2px;
+  height: 0;
+  transform: translateY(-50%);
+  border-radius: 1px;
+  background: var(--action);
+  /* Dimensions are on the size budget, not the feedback one. */
+  transition:
+    height 220ms ease,
+    opacity 150ms ease;
+  opacity: 0;
+}
+
+.settings-nav-item.is-active::before {
+  height: 16px;
+  opacity: 1;
+}
+
+.settings-nav-item:hover:not(.is-active) {
+  background: var(--control-bg);
+  border-color: var(--control-hover-border);
+  color: var(--control-hover-text);
+}
+
+.settings-nav-item.is-active {
+  background: var(--active-bg);
+  border-color: var(--active-border);
+  color: var(--text);
+}
+
+.settings-nav-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The provider's monogram, matching the overview cards' badges so the same
+   platform reads the same in both windows. */
+.settings-nav-badge {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--badge-bg);
+  color: var(--text-dim);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.settings-nav-item.is-active .settings-nav-badge {
+  background: var(--active-border);
+  color: var(--action);
+}
+
+/* ------------------------------------------------------------------ panes */
+
+.settings-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* The one scrolling area of the window: the title bar belongs to the host and
+     the nav is a fixed column, so a long form scrolls here and nothing else
+     moves. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 14px 16px 16px;
+}
+
+/*
+ * A section's content mounts already in its new state, so its travel is an
+ * `animation` rather than a transition: there is no previous value to move from.
+ * The key carries the identity of the section, which is what re-runs it.
+ */
+.settings-pane {
+  animation: settings-pane-in 180ms cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+
+@keyframes settings-pane-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.settings-pane-title {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-pane-note {
+  margin: 0 0 12px;
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+/* ------------------------------------------------------------ panel view */
+
+/*
+ * The browser fallback (no host window to open) renders this same component as a
+ * sheet over the panel document. It is the one place the settings surface is not
+ * the whole document, so it is scoped here rather than in the component.
+ */
+.settings-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: var(--cover-bg);
+}
+
+.settings-sheet {
+  width: 560px;
+  height: 380px;
+  max-width: 100vw;
+  max-height: 100vh;
+  overflow: hidden;
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--card-hover-shadow);
+}
+
+/* ---------------------------------------------------------------- motion off */
+
+/*
+ * This window's own blanket, scoped like everything else in this file.
+ *
+ * `panel.css` has its own blanket for the panel's rules, and the two are not
+ * interchangeable: `!important` on `*` wins inside *one* declaration set, and the
+ * bundle concatenates both sheets into a single set for both documents — so a bare
+ * `*` here would also silence the panel's transitions, which is the one thing the
+ * reduced-motion rules must not do by accident.
+ *
+ * The wrapper is `:root:has(#settings-root)` rather than `@media` inside `.settings-*`
+ * for the same reason the document rule above is scoped: the blanket needs to reach
+ * every element of the settings document, including the ones outside `.settings-window`.
+ * `!important` is load-bearing here for the same reason as in `panel.css`: a bare `*`
+ * rule loses to every class rule above it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root:has(#settings-root) *,
+  :root:has(#settings-root) *::before,
+  :root:has(#settings-root) *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

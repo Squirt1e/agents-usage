@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-// The motion guard for the panel. AGENTS.md makes "every switch travels" a rule;
-// this file is what keeps that rule enforceable instead of aspirational. jsdom
-// computes no animations, so the stylesheet is read as text and held to four
-// things:
+// The motion guard for the desktop windows. AGENTS.md makes "every switch travels"
+// a rule; this file is what keeps that rule enforceable instead of aspirational.
+// jsdom computes no animations, so the stylesheets are read as text and held to
+// four things:
 //
 //   1. every registered switch point declares the motion it needs;
 //   2. every duration stays inside the panel's budget, apart from loops;
@@ -10,6 +10,12 @@
 //      reaches for `transition: all`;
 //   4. the reduced-motion blanket covers all of it, and the sheet stays inside the
 //      host's own timing for hiding the window.
+//
+// Both documents count. The panel (`panel.css`) and the settings window
+// (`settings.css`) are separate sheets for separate host windows, but a switch is a
+// switch wherever it lives, so the checks run over the pair: a switch registered
+// below may be declared in either file, and the duration, silence and blanket
+// sweeps walk both.
 //
 // Add a switch -> add it to the registry below (AGENTS.md §1.5). A switch that is
 // deliberately instant needs an entry in EXCEPTIONS with a reason: no reason, no
@@ -20,9 +26,14 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PANEL_HEIGHT_ANIMATION_MS } from '../src/desktop/panel-height';
 
+/** The sheets the guard reads, in the order the documents load them. */
+const SHEET_FILES = ['src/desktop/panel.css', 'src/desktop/settings.css'];
+
 const CSS = readFileSync('src/desktop/panel.css', 'utf8');
+/** Everything the two sheets declare, for the "who owns this switch" lookups. */
+const ALL_CSS = SHEET_FILES.map((file) => readFileSync(file, 'utf8')).join('\n');
 /** Comments go first: a rule that is commented out must not satisfy the guard. */
-const CLEAN = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+const CLEAN = ALL_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
 const HOST = readFileSync('src-tauri/src/lib.rs', 'utf8');
 
 /** The panel's own timing budget, in milliseconds (AGENTS.md §1.2). */
@@ -266,11 +277,6 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
   { what: 'connection details open above the footer', selector: '.connection-details', properties: ['opacity', 'transform', 'visibility'] },
   { what: 'card gear turns to the accent on hover', selector: '.gear-button', properties: ['color'] },
   {
-    what: 'the tool row fades out on a sub-page instead of blinking away',
-    selector: '.panel-tools',
-    properties: ['opacity', 'visibility']
-  },
-  {
     // The pinned panel's header settles away while it is out of focus: the
     // height travel is scripted (panel-header.ts), CSS owns the divider fade
     // and the delayed visibility step that lands when the height reaches zero.
@@ -348,7 +354,25 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
     properties: ['background-color', 'border-color', 'opacity']
   },
   { what: 'platform switch thumb slides and takes the accent', selector: '.switch::after', properties: ['transform', 'background-color'] },
-  { what: 'back button turns to the accent on hover', selector: '.back-button', properties: ['color'] },
+  {
+    // The settings window's nav: moving between sections moves the tint, the text
+    // colour and the rim together, on the feedback budget.
+    what: 'settings section selection travels',
+    selector: '.settings-nav-item',
+    properties: ['background-color', 'color', 'border-color']
+  },
+  {
+    // The accent rail is part of the same switch: a section that becomes current
+    // grows it out of nothing, which is a dimension and travels on that budget.
+    what: 'settings section accent rail grows for the current section',
+    selector: '.settings-nav-item::before',
+    properties: ['height', 'opacity']
+  },
+  {
+    what: 'settings nav badge takes the accent with its section',
+    selector: '.settings-nav-badge',
+    properties: ['background-color', 'color']
+  },
 ];
 
 /**
@@ -364,23 +388,15 @@ interface AnimationSwitch {
 const ANIMATION_SWITCHES: AnimationSwitch[] = [
   { what: 'successful refresh restarts quota fill from zero', selectors: ['.quota-item.is-replaying .quota-shape-fill'], animation: 'quota-refresh-fill' },
   { what: 'successful refresh rolls visible digit columns from zero', selectors: ['.rolling-number-strip'], animation: 'replay-digit-roll' },
-  {
-    what: 'a page swap lands from the right',
-    selectors: [
-      ".panel[data-view-direction='forward'] .panel-heading",
-      ".panel[data-view-direction='forward'] .panel-body > *"
-    ],
-    animation: 'panel-page-in-forward'
-  },
-  {
-    what: 'a page swap lands from the left',
-    selectors: [
-      ".panel[data-view-direction='back'] .panel-heading",
-      ".panel[data-view-direction='back'] .panel-body > *"
-    ],
-    animation: 'panel-page-in-back'
-  },
   { what: 'a message arrives in the stack', selectors: ['.panel-toast'], animation: 'panel-toast-in' },
+  {
+    // A settings section mounts already in its new state, so there is no previous
+    // value to move from: its travel is an animation. The pane's React key is the
+    // section, which is what re-runs it.
+    what: 'a settings section arrives in the content area',
+    selectors: ['.settings-pane'],
+    animation: 'settings-pane-in'
+  },
   {
     what: 'credential feedback takes its own row under the stored state',
     selectors: ['.credential-feedback'],

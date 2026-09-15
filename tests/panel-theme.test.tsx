@@ -1,14 +1,22 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+// The theme preference. It is a *setting*, so the controls live in the settings
+// window's 外观 section — but the theme itself is worn by both windows, so this file
+// drives the setting through the settings window and watches `document.documentElement`
+// (which each document resolves for itself, from the same store).
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PanelApp } from '../src/desktop/PanelApp';
 import { createFakeUsageClient } from '../src/desktop/fake-client';
 import { parsePanelSettings } from '../src/shared/desktop-contract';
+import { renderSettings } from './helpers/windows';
 
-const host = { pinned: false, onTogglePin() {}, onRequestHide() {}, onSetHeight() {} };
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
-describe('panel theme', () => {
+const themeGroup = async () => screen.findByRole('group', { name: '主题' });
+
+describe('theme preference', () => {
   it('keeps older settings dark and accepts all three preferences', () => {
     expect(parsePanelSettings({}).theme).toBe('dark');
     expect(parsePanelSettings({ theme: 'invalid' }).theme).toBe('dark');
@@ -17,30 +25,32 @@ describe('panel theme', () => {
     }
   });
 
-  it('saves a selection and restores it when the panel is reopened', async () => {
+  it('saves a selection and restores it when the window is reopened', async () => {
     const client = createFakeUsageClient();
-    const panel = render(<PanelApp client={client} host={host} />);
-    fireEvent.click(await screen.findByRole('button', { name: '设置' }));
+    const first = renderSettings({ client, section: 'appearance' });
+    const group = await themeGroup();
     // The three theme choices are laid out flat; the active one is pressed.
-    const group = await screen.findByRole('group', { name: '主题' });
     expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
       '浅色',
       '深色',
       '跟随系统'
     ]);
     expect(within(group).getByRole('button', { name: '深色' })).toHaveAttribute('aria-pressed', 'true');
+
     fireEvent.click(within(group).getByRole('button', { name: '浅色' }));
     await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
-    panel.unmount();
-    render(<PanelApp client={client} host={host} />);
-    fireEvent.click(await screen.findByRole('button', { name: '设置' }));
-    const reopened = await screen.findByRole('group', { name: '主题' });
+
+    // Reopening reads the stored preference: the save went to the service, not just
+    // to this window's memory.
+    first.unmount();
+    renderSettings({ client, section: 'appearance' });
+    const reopened = await themeGroup();
     expect(within(reopened).getByRole('button', { name: '浅色' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('moves one selected pill between theme choices instead of replacing it', async () => {
-    const left: Record<string, number> = { '浅色': 3, '深色': 44, '跟随系统': 85 };
-    const width: Record<string, number> = { '浅色': 39, '深色': 39, '跟随系统': 72 };
+    const left: Record<string, number> = { 浅色: 3, 深色: 44, 跟随系统: 85 };
+    const width: Record<string, number> = { 浅色: 39, 深色: 39, 跟随系统: 72 };
     vi.spyOn(HTMLElement.prototype, 'offsetLeft', 'get').mockImplementation(function (this: HTMLElement) {
       return left[this.textContent ?? ''] ?? 0;
     });
@@ -48,9 +58,8 @@ describe('panel theme', () => {
       return width[this.textContent ?? ''] ?? 0;
     });
 
-    render(<PanelApp client={createFakeUsageClient()} host={host} />);
-    fireEvent.click(await screen.findByRole('button', { name: '设置' }));
-    const group = await screen.findByRole('group', { name: '主题' });
+    renderSettings({ section: 'appearance' });
+    const group = await themeGroup();
     const pill = group.querySelector('.segmented-slider') as HTMLElement | null;
     expect(pill).not.toBeNull();
     expect(pill).toHaveAttribute('aria-hidden', 'true');
@@ -60,6 +69,7 @@ describe('panel theme', () => {
     fireEvent.click(within(group).getByRole('button', { name: '跟随系统' }));
     await waitFor(() => expect(pill?.style.transform).toBe('translateX(85px)'));
     expect(pill?.style.width).toBe('72px');
+    // The same element travelled: a replaced pill would restart the transition.
     expect(group.querySelector('.segmented-slider')).toBe(pill);
   });
 
@@ -68,29 +78,38 @@ describe('panel theme', () => {
     Object.assign(media, { matches: false });
     vi.stubGlobal('matchMedia', () => media);
     const client = createFakeUsageClient({ settings: { theme: 'system' } });
-    const panel = render(<PanelApp client={client} host={host} />);
+    const window = renderSettings({ client, section: 'appearance' });
     await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
-    act(() => { Object.assign(media, { matches: true }); media.dispatchEvent(new Event('change')); });
+    act(() => {
+      Object.assign(media, { matches: true });
+      media.dispatchEvent(new Event('change'));
+    });
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
-    fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    const group = await screen.findByRole('group', { name: '主题' });
+
+    const group = await themeGroup();
     fireEvent.click(within(group).getByRole('button', { name: '浅色' }));
     await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
     act(() => media.dispatchEvent(new Event('change')));
     expect(document.documentElement).toHaveAttribute('data-theme', 'light');
-    panel.unmount();
+
+    // A closed window stops listening: the preference is the theme now, and the
+    // system's opinion is not even being asked for.
+    window.unmount();
     act(() => media.dispatchEvent(new Event('change')));
     expect(document.documentElement).not.toHaveAttribute('data-theme');
   });
 
-  it('retains the active theme and reports a failed save', async () => {
+  it('retains the active theme when the save fails', async () => {
     const client = createFakeUsageClient();
-    vi.spyOn(client, 'updateSettings').mockRejectedValue(new Error('设置保存失败'));
-    render(<PanelApp client={client} host={host} />);
-    fireEvent.click(await screen.findByRole('button', { name: '设置' }));
-    const group = await screen.findByRole('group', { name: '主题' });
+    const updateSettings = vi.spyOn(client, 'updateSettings').mockRejectedValue(new Error('设置保存失败'));
+    renderSettings({ client, section: 'appearance' });
+    const group = await themeGroup();
     fireEvent.click(within(group).getByRole('button', { name: '浅色' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('设置保存失败');
+
+    // The selection did not take: the store still holds the stored theme, so the
+    // control and the document both stay on it. (Where the failure is *said* is the
+    // panel's business — it owns the message stack; see panel-settings.test.tsx.)
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ theme: 'light' }));
     expect(within(group).getByRole('button', { name: '深色' })).toHaveAttribute('aria-pressed', 'true');
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
   });

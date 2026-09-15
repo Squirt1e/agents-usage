@@ -1,44 +1,21 @@
 /**
- * The panel shell: 350 logical pixels wide, header with title and sync time, the
- * top icon row (refresh / platform management / pin), and a body that scrolls
- * inside a bounded height.
+ * The panel shell: 350 logical pixels wide, header with the title, the top icon row
+ * (refresh / settings / pin), a body that scrolls inside the window's height, and
+ * the frame's bottom status module.
  *
- * It is purely presentational — `PanelApp` owns the data and the view state. The
- * one thing this file decides is how a page swap is animated: `viewKey` and
- * `direction` are handed to CSS (see the page-transition section of `panel.css`)
- * instead of being animated in JavaScript.
+ * It is purely presentational — `PanelApp` owns the data. There is no page state
+ * left here: the settings surfaces are their own window, so the body always shows
+ * the overview. What used to drive a page swap (`viewKey` + `direction`, which
+ * reached CSS as `data-view-direction`) went with them, and with it the exit
+ * animation a swap needed: a panel that never swaps a page has nothing to animate
+ * away from.
  */
 
 import type { ReactNode } from 'react';
 import { useHeaderCollapse } from './panel-header';
-import { BackIcon } from './icons';
-
-/** Which way a page swap travels: deeper into the panel, or back out of it. */
-export type PanelDirection = 'forward' | 'back';
 
 export interface PanelProps {
   title: string;
-  /**
-   * Identity of the page in the body: `overview`, `app-settings`, or
-   * `settings:<provider>`. It reaches the DOM as a React `key`, so a new value
-   * remounts the page — which is what replays the transition, and why the body
-   * also comes back scrolled to its top rather than keeping the offset of the
-   * page that left.
-   */
-  viewKey: string;
-  /** Which way the user last travelled, for the transition to animate along. */
-  direction: PanelDirection;
-  onBack?(): void;
-  /**
-   * Header icon buttons. They stay mounted on the pages that do not own them and
-   * are hidden rather than unmounted, so hiding them can be a fade instead of a
-   * blink; `toolsVisible` drives that.
-   */
-  tools?: ReactNode;
-  /** Whether this page owns the tool row; `false` fades it out (see `.panel-tools`). */
-  toolsVisible?: boolean;
-  /** Inner overlay (platform management) rendered above the body. */
-  overlay?: ReactNode;
   /**
    * Whether the header is meant to be on screen. `false` marks the panel with
    * `data-header-hidden` (the CSS visibility/border steps key on it) and starts
@@ -48,6 +25,11 @@ export interface PanelProps {
    */
   headerVisible?: boolean;
   /**
+   * Header icon buttons. The row belongs to the overview, which is the only page,
+   * so it is always on screen.
+   */
+  tools?: ReactNode;
+  /**
    * The message stack (refresh result, dropped stream, failed settings write). It
    * hangs just above the frame's bottom row and floats over the content, so a
    * message never moves the cards and never changes the height the window is
@@ -56,7 +38,7 @@ export interface PanelProps {
   toasts?: ReactNode;
   /**
    * The frame's bottom status module, below the scrolling body so it keeps its
-   * place on every page instead of scrolling away with the content.
+   * place instead of scrolling away with the content.
    */
   footer?: ReactNode;
   /** Persistent connection details, anchored above the footer without layout space. */
@@ -70,7 +52,6 @@ export function Panel(props: PanelProps) {
     <div
       className="panel"
       data-panel-surface="true"
-      data-view-direction={props.direction}
       data-header-hidden={props.headerVisible === false ? '' : undefined}
     >
       <header
@@ -79,27 +60,12 @@ export function Panel(props: PanelProps) {
         aria-hidden={props.headerVisible === false ? true : undefined}
         data-tauri-drag-region="deep"
       >
-        {/* Keyed like the body: the heading names the page, so it travels with it
-            rather than cutting to the new title in place. */}
-        <div className="panel-heading" key={props.viewKey}>
-          <h1 className="panel-title">
-            {props.onBack ? (
-              <button type="button" className="back-button" onClick={props.onBack} aria-label="返回用量总览">
-                <BackIcon />{props.title}
-              </button>
-            ) : props.title}
-          </h1>
+        <div className="panel-heading">
+          <h1 className="panel-title">{props.title}</h1>
         </div>
-        {/* The row is kept mounted on sub-pages so its exit is a fade rather than a
-            blink; `aria-hidden` is what keeps its buttons out of every query and off
-            the accessibility tree while it is hidden. */}
-        {props.tools ? (
-          <div className="panel-tools" aria-hidden={props.toolsVisible === false ? true : undefined}>
-            {props.tools}
-          </div>
-        ) : null}
+        {props.tools ? <div className="panel-tools">{props.tools}</div> : null}
       </header>
-      <div className="panel-body" key={props.viewKey}>{props.children}</div>
+      <div className="panel-body">{props.children}</div>
       {/* The bottom row is the stack's anchor: `bottom: 100%` on `.panel-toasts`
           lands the messages just above it whatever that row's height is. The
           wrapper exists so the anchor survives a panel without a footer. */}
@@ -112,7 +78,6 @@ export function Panel(props: PanelProps) {
         {props.details}
         {props.toasts}
       </div>
-      {props.overlay}
     </div>
   );
 }

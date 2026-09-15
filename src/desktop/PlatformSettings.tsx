@@ -418,7 +418,7 @@ export function PlatformSettings(props: PlatformSettingsProps) {
   };
 
   return (
-    <section className="config-block" data-testid="platform-settings" data-panel-block="section">
+    <section className="config-block" data-testid="platform-settings">
       <header className="block-head">
         <h3>平台管理</h3>
       </header>

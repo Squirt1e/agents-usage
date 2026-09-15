@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
-// The panel's sizing rule, exercised against a stubbed layout: jsdom reports every
-// height as 0, so the measurements are defined per element here. What this pins is
-// the contract the host depends on — cards set the height exactly, a view with no
-// cards falls back to the minimum, and height changes travel in steps.
+// The panel's height measurement, exercised against a stubbed layout: jsdom reports
+// every height as 0, so the measurements are defined per element here. What this pins
+// is the contract the host depends on — the window takes the content's height, the
+// change travels in steps, and **the measurement is re-taken rather than awaited**.
+//
+// That last one is the load-bearing half. The panel window spends most of its life
+// hidden, a hidden WebKit view produces no frames, and a lost `ResizeObserver`
+// notification is never re-sent: the window then stands at the height its content had
+// minutes ago, with a card cut off and no event to blame. See the archived change
+// `fix-panel-height-follows-cards`. The three scenarios that guard it are kept here
+// verbatim — the swapped content block, the change nobody announced, and the return
+// from hidden.
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -10,20 +18,19 @@ import {
   PANEL_HEIGHT_ANIMATION_MS,
   PANEL_HEIGHT_SAFETY_MS,
   PANEL_HEIGHT_SETTLE_MS,
-  PANEL_MIN_HEIGHT,
   requestPanelHeightMeasure,
   usePanelHeight
 } from '../src/desktop/panel-height';
 
-/** The frame the hook reads: chrome = panel height minus the body's. */
+/** The frame the hook reads: chrome = panel height minus the body's client height. */
 const frame = { panel: 400, body: 100 };
-/** Bottom edges of the cards on screen, in content coordinates. */
-let cards: number[] = [];
+/** The content element's own border-box height, in logical pixels. */
+let contentHeight = 0;
 
 beforeEach(() => {
   frame.panel = 400;
   frame.body = 100;
-  cards = [];
+  contentHeight = 0;
   observers = [];
 });
 
@@ -31,7 +38,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Chrome, as the hook computes it: border + header + footer + body padding. */
+/** Chrome, as the hook computes it: the panel's box minus the body's viewport. */
 const CHROME = 400 - 100;
 
 /** jsdom has no ResizeObserver; the hook is given one it can be driven through. */
@@ -54,150 +61,104 @@ function stubBox(element: HTMLElement, key: 'panel' | 'body') {
   });
 }
 
-function Harness(props: {
-  cardCount: number;
-  onSetHeight: (height: number) => void;
-  viewKey?: string;
-  isMain?: boolean;
-}) {
+function Harness(props: { maxHeight?: number; onSetHeight: (height: number) => void }) {
   usePanelHeight({
-    viewKey: props.viewKey ?? String(props.cardCount),
-    isMain: props.isMain ?? true,
-    onSetHeight: props.onSetHeight
+    onSetHeight: props.onSetHeight,
+    ...(props.maxHeight !== undefined ? { maxHeight: props.maxHeight } : {})
   });
   return (
     <div className="panel">
       <div className="panel-body">
-        <div data-testid="content">
-          {Array.from({ length: props.cardCount }, (_, index) => (
-            <div key={index} data-testid={`card-${index}`} data-panel-block="card" />
-          ))}
-        </div>
+        <div data-testid="content" />
       </div>
     </div>
   );
 }
 
+/** Point the stubbed measurements at whatever the current `contentHeight` is. */
 function prepare() {
   const panel = document.querySelector('.panel') as HTMLElement;
   const body = document.querySelector('.panel-body') as HTMLElement;
   const content = screen.getByTestId('content');
   stubBox(panel, 'panel');
   stubBox(body, 'body');
-  // The cards are measured relative to the content's top, which sits at 0 here.
-  content.getBoundingClientRect = () => ({ top: 0, bottom: 0, height: 0 }) as DOMRect;
-  for (const [index, card] of screen.queryAllByTestId(/^card-/).entries()) {
-    const bottom = cards[index] ?? 0;
-    card.getBoundingClientRect = () => ({ top: 0, bottom, height: bottom }) as DOMRect;
-  }
+  content.getBoundingClientRect = () => ({ top: 0, bottom: contentHeight, height: contentHeight }) as DOMRect;
   return content;
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, PANEL_HEIGHT_SETTLE_MS + 40));
 
 describe('usePanelHeight', () => {
-  it('fits the cards exactly', async () => {
-    cards = [200, 410, 620];
+  it('asks for the frame plus the content', async () => {
+    contentHeight = 620;
     const onSetHeight = vi.fn();
-    render(<Harness cardCount={3} onSetHeight={onSetHeight} />);
+    render(<Harness onSetHeight={onSetHeight} />);
     prepare();
 
     await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME + 620));
   });
 
-  it('falls back to the minimum height on a main page with no cards', async () => {
+  it('has no card-count cap to stop at', async () => {
+    // The old rule stopped the window at the third whole card. A tall overview is now
+    // a tall panel; what limits it is the display, not a count.
+    contentHeight = 1400;
     const onSetHeight = vi.fn();
-    render(<Harness cardCount={0} onSetHeight={onSetHeight} />);
+    render(<Harness onSetHeight={onSetHeight} />);
     prepare();
 
-    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(PANEL_MIN_HEIGHT));
+    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME + 1400));
   });
 
-  it('makes a page without cards follow the main page height', async () => {
-    // The overview settles on three cards first.
-    cards = [200, 410, 620];
+  it('asks for no more than the display when it is told how tall that is', async () => {
+    contentHeight = 1400;
     const onSetHeight = vi.fn();
-    const { rerender } = render(
-      <Harness cardCount={3} onSetHeight={onSetHeight} viewKey="overview" />
-    );
+    render(<Harness maxHeight={900} onSetHeight={onSetHeight} />);
     prepare();
-    const mainHeight = CHROME + 620;
-    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(mainHeight));
 
-    // Opening a settings page: no cards, and it must not size itself.
-    rerender(
-      <Harness cardCount={0} onSetHeight={onSetHeight} viewKey="app-settings" isMain={false} />
-    );
-    prepare();
-    await settle();
-    expect(onSetHeight).toHaveBeenCalledTimes(1);
-    expect(onSetHeight).toHaveBeenLastCalledWith(mainHeight);
+    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(900));
   });
 
-  it('keeps the settings height while the main page changes behind it', async () => {
-    // A settings page opened after a two-card overview inherits that height, and
-    // re-measuring it does not invent a new one.
-    cards = [200, 410];
+  it('takes only the frame when the overview has nothing to show', async () => {
+    // Every platform hidden, or the first loading frame. There is no fixed minimum
+    // to fall back to any more: the empty state is content, and the frame is the
+    // floor beneath it.
+    contentHeight = 0;
     const onSetHeight = vi.fn();
-    const { rerender } = render(
-      <Harness cardCount={2} onSetHeight={onSetHeight} viewKey="overview" />
-    );
-    prepare();
-    const mainHeight = CHROME + 410;
-    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(mainHeight));
-
-    rerender(<Harness cardCount={0} onSetHeight={onSetHeight} viewKey="settings:glm" isMain={false} />);
-    prepare();
-    await settle();
-    expect(onSetHeight).toHaveBeenLastCalledWith(mainHeight);
-
-    // Back to the overview: only the cards there may move the window.
-    cards = [200, 410, 620];
-    rerender(<Harness cardCount={3} onSetHeight={onSetHeight} viewKey="overview" />);
-    prepare();
-    await waitFor(() => expect(onSetHeight).toHaveBeenLastCalledWith(CHROME + 620), { timeout: 2000 });
-  });
-
-  it('stops at the third card when the view has more', async () => {
-    cards = [200, 410, 620, 830];
-    const onSetHeight = vi.fn();
-    render(<Harness cardCount={4} onSetHeight={onSetHeight} />);
+    render(<Harness onSetHeight={onSetHeight} />);
     prepare();
 
-    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME + 620));
+    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME));
   });
 
   it('arrives at the new height in one report when motion is not wanted', async () => {
     // `prefers-reduced-motion: reduce`: the window still resizes, but it is not
-    // animated towards (AGENTS.md §1.4). This is the one switch CSS cannot make,
-    // so the preference has to be honoured here as well.
+    // animated towards (AGENTS.md §1.4). This is the one switch CSS cannot make, so
+    // the preference has to be honoured here as well.
     const onSetHeight = vi.fn();
-    const { rerender } = render(<Harness cardCount={0} onSetHeight={onSetHeight} />);
+    const { rerender } = render(<Harness onSetHeight={onSetHeight} />);
     prepare();
-    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(PANEL_MIN_HEIGHT));
+    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME));
 
     vi.stubGlobal('matchMedia', () => ({ matches: true }));
-    cards = [200, 410, 620];
-    rerender(<Harness cardCount={3} onSetHeight={onSetHeight} viewKey="overview" />);
+    contentHeight = 620;
+    rerender(<Harness onSetHeight={onSetHeight} />);
     prepare();
     const target = CHROME + 620;
     await waitFor(() => expect(onSetHeight).toHaveBeenLastCalledWith(target), { timeout: 2000 });
 
     // Two reports in total: the first height, then the target. No steps between.
-    expect(onSetHeight.mock.calls.map(([height]) => height)).toEqual([PANEL_MIN_HEIGHT, target]);
+    expect(onSetHeight.mock.calls.map(([height]) => height)).toEqual([CHROME, target]);
   });
 
-  it('travels from a card-less view up to a carded one in steps', async () => {
+  it('travels from an empty overview up to a full one in steps', async () => {
     const onSetHeight = vi.fn();
-    const { rerender } = render(<Harness cardCount={0} onSetHeight={onSetHeight} />);
+    const { rerender } = render(<Harness onSetHeight={onSetHeight} />);
     prepare();
     // Nothing to travel from on the first report, so it is sent as it is.
-    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(PANEL_MIN_HEIGHT));
+    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME));
 
-    // The overview's cards arrive: 620px of content against a 320px panel.
-    cards = [200, 410, 620];
-    rerender(<Harness cardCount={3} onSetHeight={onSetHeight} viewKey="overview" />);
-    // The reappearing cards are new elements, so their boxes need stubbing too.
+    contentHeight = 620;
+    rerender(<Harness onSetHeight={onSetHeight} />);
     prepare();
     const target = CHROME + 620;
     await waitFor(() => expect(onSetHeight).toHaveBeenLastCalledWith(target), { timeout: 2000 });
@@ -208,66 +169,32 @@ describe('usePanelHeight', () => {
     expect(steps.every((height, index) => index === 0 || height >= steps[index - 1]!)).toBe(true);
     expect(steps[steps.length - 1]).toBe(target);
     // ...and it passes through the middle rather than snapping to the end.
-    expect(steps.some((height) => height > PANEL_MIN_HEIGHT && height < target)).toBe(true);
+    expect(steps.some((height) => height > CHROME && height < target)).toBe(true);
   });
 
-  it('drops back to the minimum when the main page loses its cards', async () => {
-    cards = [200, 410, 620];
+  it('shrinks back to the frame when every platform is hidden', async () => {
+    contentHeight = 620;
     const onSetHeight = vi.fn();
-    const { rerender } = render(<Harness cardCount={3} onSetHeight={onSetHeight} />);
+    const { rerender } = render(<Harness onSetHeight={onSetHeight} />);
     prepare();
     await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME + 620));
 
-    // Every platform hidden: the main page has nothing to show.
-    cards = [];
-    rerender(<Harness cardCount={0} onSetHeight={onSetHeight} viewKey="overview-empty" />);
-    await waitFor(() => expect(onSetHeight).toHaveBeenLastCalledWith(PANEL_MIN_HEIGHT), {
-      timeout: 2000
-    });
-  });
-
-  it('lets a page opened from a card-less overview inherit the floor', async () => {
-    cards = [200, 410, 620];
-    const onSetHeight = vi.fn();
-    const { rerender } = render(<Harness cardCount={3} onSetHeight={onSetHeight} />);
+    contentHeight = 70;
+    rerender(<Harness onSetHeight={onSetHeight} />);
     prepare();
-    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME + 620));
-
-    // Every platform hidden: the main page asks for the floor.
-    cards = [];
-    rerender(<Harness cardCount={0} onSetHeight={onSetHeight} viewKey="overview-empty" />);
-    prepare();
-    await waitFor(() => expect(onSetHeight).toHaveBeenLastCalledWith(PANEL_MIN_HEIGHT), {
-      timeout: 2000
-    });
-
-    // Opening a settings page from that emptied overview must not snap back up
-    // to the height of cards that are no longer there.
-    rerender(<Harness cardCount={0} onSetHeight={onSetHeight} viewKey="app-settings" isMain={false} />);
-    prepare();
-    await settle();
-    expect(onSetHeight).toHaveBeenLastCalledWith(PANEL_MIN_HEIGHT);
-  });
-
-  it('holds the floor for a card shorter than the designed minimum', async () => {
-    cards = [10];
-    const onSetHeight = vi.fn();
-    render(<Harness cardCount={1} onSetHeight={onSetHeight} />);
-    prepare();
-
-    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(PANEL_MIN_HEIGHT));
+    await waitFor(() => expect(onSetHeight).toHaveBeenLastCalledWith(CHROME + 70), { timeout: 2000 });
   });
 
   it('follows the content while it animates, instead of waiting for it to settle', async () => {
     // The quota morph collapses a card over ~270ms. Waiting for the layout to hold
-    // still means asking the host for the new height ~80ms *after* the animation,
-    // and then travelling to it — the panel visibly resizing once the movement is
-    // over. While the content says it is animating, the measured height is
-    // reported as it is measured, so the window and the card move together.
+    // still means asking the host for the new height ~80ms *after* the animation, and
+    // then travelling to it — the panel visibly resizing once the movement is over.
+    // While the content says it is animating, the measured height is reported as it
+    // is measured, so the window and the card move together.
     vi.stubGlobal('ResizeObserver', FakeResizeObserver);
-    cards = [200, 410];
+    contentHeight = 410;
     const onSetHeight = vi.fn();
-    render(<Harness cardCount={2} onSetHeight={onSetHeight} />);
+    render(<Harness onSetHeight={onSetHeight} />);
     prepare();
     const panel = document.querySelector('.panel') as HTMLElement;
     await waitFor(() => expect(onSetHeight).toHaveBeenCalledTimes(1));
@@ -276,12 +203,12 @@ describe('usePanelHeight', () => {
 
     // The card collapses mid-animation, and the content says so.
     panel.setAttribute(PANEL_ANIMATING_ATTRIBUTE, '');
-    cards = [200, 250];
+    contentHeight = 250;
     prepare();
     observer.callback([], observer as unknown as ResizeObserver);
 
-    // Reported on the spot: no settle delay, and no travelling steps between the
-    // two heights.
+    // Reported on the spot: no settle delay, and no travelling steps between the two
+    // heights.
     expect(onSetHeight).toHaveBeenCalledTimes(2);
     expect(onSetHeight).toHaveBeenLastCalledWith(CHROME + 250);
   });
@@ -293,9 +220,9 @@ describe('usePanelHeight', () => {
     // outgrown — the failure that leaves a card cut off with no event to blame.
     vi.useFakeTimers();
     try {
-      cards = [200, 410, 620];
+      contentHeight = 620;
       const onSetHeight = vi.fn();
-      render(<Harness cardCount={3} onSetHeight={onSetHeight} />);
+      render(<Harness onSetHeight={onSetHeight} />);
       prepare();
       await act(async () => {
         vi.advanceTimersByTime(PANEL_HEIGHT_SETTLE_MS + 40);
@@ -303,8 +230,8 @@ describe('usePanelHeight', () => {
       expect(onSetHeight).toHaveBeenCalledWith(CHROME + 620);
 
       onSetHeight.mockClear();
-      // The cards change and nothing says so: no observer notification at all.
-      cards = [200, 410, 300];
+      // The content changes and nothing says so: no observer notification at all.
+      contentHeight = 300;
       prepare();
       await act(async () => {
         vi.advanceTimersByTime(PANEL_HEIGHT_SAFETY_MS + PANEL_HEIGHT_SETTLE_MS + PANEL_HEIGHT_ANIMATION_MS + 60);
@@ -315,16 +242,16 @@ describe('usePanelHeight', () => {
     }
   });
 
-  it('re-attaches to whatever the body shows now, so a swapped view cannot freeze it', async () => {
-    // The error state and the overview share a view key, so the body's child can be
-    // replaced without the hook's effect re-running. Measuring the remembered node
-    // would read a detached element — every rectangle zero — and leave the window at
-    // the minimum height with the cards on screen.
+  it('re-attaches to whatever the body shows now, so a swapped block cannot freeze it', async () => {
+    // The error state, the loading state and the overview are different elements, so
+    // the body's child can be replaced without the hook's effect re-running. Measuring
+    // the remembered node would read a detached element — every rectangle zero — and
+    // leave the window at the frame with the cards on screen.
     vi.useFakeTimers();
     try {
-      cards = [200, 410, 620];
+      contentHeight = 620;
       const onSetHeight = vi.fn();
-      render(<Harness cardCount={3} onSetHeight={onSetHeight} />);
+      render(<Harness onSetHeight={onSetHeight} />);
       prepare();
       await act(async () => {
         vi.advanceTimersByTime(PANEL_HEIGHT_SETTLE_MS + 40);
@@ -335,14 +262,7 @@ describe('usePanelHeight', () => {
       const body = document.querySelector('.panel-body') as HTMLElement;
       body.replaceChildren();
       const replacement = document.createElement('div');
-      replacement.dataset.testid = 'content';
-      replacement.getBoundingClientRect = () => ({ top: 0, bottom: 0, height: 0 }) as DOMRect;
-      for (const bottom of [180, 300]) {
-        const card = document.createElement('div');
-        card.dataset.panelBlock = 'card';
-        card.getBoundingClientRect = () => ({ top: 0, bottom, height: bottom }) as DOMRect;
-        replacement.append(card);
-      }
+      replacement.getBoundingClientRect = () => ({ top: 0, bottom: 300, height: 300 }) as DOMRect;
       body.append(replacement);
 
       await act(async () => {
@@ -354,38 +274,41 @@ describe('usePanelHeight', () => {
     }
   });
 
-  it('does not resize a view whose height has not changed', async () => {
-    cards = [200];
+  it('does not resize when the height has not changed', async () => {
+    contentHeight = 200;
     const onSetHeight = vi.fn();
-    const { rerender } = render(<Harness cardCount={1} onSetHeight={onSetHeight} />);
+    render(<Harness onSetHeight={onSetHeight} />);
     prepare();
     await waitFor(() => expect(onSetHeight).toHaveBeenCalledTimes(1));
 
     // A re-measure of the same layout must not ask the host to resize again.
-    rerender(<Harness cardCount={1} onSetHeight={onSetHeight} viewKey="same" />);
     await settle();
     expect(onSetHeight).toHaveBeenCalledTimes(1);
   });
 
   it('answers an explicit re-measure request, which is how the header collapse drives it', async () => {
-    // The header collapse animates a box the ResizeObserver does not watch (the
-    // body's content keeps its size while the header above it shrinks), so
-    // panel-header.ts asks for a measurement every frame. With the animating
-    // attribute set, the answer must come on the spot — no settle delay, no
-    // travelling steps.
+    // The header collapse animates a box the ResizeObserver does not watch (the body's
+    // content keeps its size while the header above it shrinks), so panel-header.ts asks
+    // for a measurement every frame. With the animating attribute set, the answer must
+    // come on the spot — no settle delay, no travelling steps.
+    //
+    // Why it matters, in one line: without it the window keeps the height it had while
+    // the header was up, and the space the header gave back becomes a blank strip under
+    // the last card.
     vi.stubGlobal('ResizeObserver', FakeResizeObserver);
-    cards = [200, 410];
+    contentHeight = 410;
     const onSetHeight = vi.fn();
-    render(<Harness cardCount={2} onSetHeight={onSetHeight} />);
+    render(<Harness onSetHeight={onSetHeight} />);
     prepare();
     const panel = document.querySelector('.panel') as HTMLElement;
     await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME + 410));
 
     panel.setAttribute(PANEL_ANIMATING_ATTRIBUTE, '');
-    cards = [200, 560];
+    // The header has collapsed: less chrome, same content.
+    frame.panel = 340;
     prepare();
     requestPanelHeightMeasure();
 
-    expect(onSetHeight).toHaveBeenLastCalledWith(CHROME + 560);
+    expect(onSetHeight).toHaveBeenLastCalledWith(340 - 100 + 410);
   });
 });

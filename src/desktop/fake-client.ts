@@ -4,7 +4,7 @@
  *
  * The panel tests and the Tauri host work both need a client that behaves like a
  * real one and records what the UI asked for. This module is deliberately *not*
- * imported by `main.ts`: the shipped panel always talks to the host or the local
+ * imported by `main.tsx`: the shipped panel always talks to the host or the local
  * service. It is a development/test double, and its call log is what lets a test
  * assert that hiding a platform did not delete a credential.
  */
@@ -85,6 +85,21 @@ export function createFakeUsageClient(options: FakeUsageClientOptions = {}): Fak
     calls.push({ method, args });
   };
 
+  /**
+   * Push an event to every subscriber.
+   *
+   * `updateSettings` and the credential calls go through this because the real host
+   * does: `panel_update_settings` writes, then emits the new settings to *all*
+   * windows, and a credential write is followed by a re-read and a snapshot push. A
+   * fake that only answered its caller would leave the application's most
+   * interesting behaviour — change it in one window, watch it land in the other —
+   * untestable.
+   */
+  const announce = (event: PanelEvent) => {
+    emitted.push(event);
+    for (const listener of [...listeners]) listener(event);
+  };
+
   const client: FakeUsageClient = {
     calls,
     emitted,
@@ -94,10 +109,7 @@ export function createFakeUsageClient(options: FakeUsageClientOptions = {}): Fak
     methodCalls(method) {
       return calls.filter((call) => call.method === method).map((call) => call.args);
     },
-    emit(event) {
-      emitted.push(event);
-      for (const listener of [...listeners]) listener(event);
-    },
+    emit: announce,
     currentSnapshot() {
       return snapshot;
     },
@@ -130,6 +142,12 @@ export function createFakeUsageClient(options: FakeUsageClientOptions = {}): Fak
         platformVisibility: { ...settings.platformVisibility, ...(patch.platformVisibility ?? {}) },
         credentials: settings.credentials
       };
+      // The real host broadcasts every written settings object to *all* windows
+      // (`panel_update_settings` in lib.rs), which is how the panel learns what the
+      // settings window just changed. A fake that only answered its caller would make
+      // the application's most interesting behaviour — "change it there, watch it
+      // here" — untestable.
+      announce({ type: 'settings', settings });
       return settings;
     },
     async refresh(provider: ProviderId) {
@@ -160,11 +178,13 @@ export function createFakeUsageClient(options: FakeUsageClientOptions = {}): Fak
         validatedAt: '2026-09-10T08:00:00.000Z'
       };
       settings = { ...settings, credentials: { ...settings.credentials, [target]: status } };
+      announce({ type: 'settings', settings });
       return status;
     },
     async deleteCredential(target: CredentialTarget) {
       record('deleteCredential', target);
       settings = { ...settings, credentials: { ...settings.credentials, [target]: { configured: false } } };
+      announce({ type: 'settings', settings });
     },
     subscribe(listener) {
       record('subscribe');

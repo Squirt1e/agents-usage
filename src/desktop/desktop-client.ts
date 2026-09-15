@@ -21,6 +21,8 @@
  * | `panel_set_pinned`        | `{ pinned }`     | `boolean`                     |
  * | `panel_hide`              | —                | —                             |
  * | `panel_set_height`        | `{ height }`     | applied (clamped) height      |
+ * | `panel_open_settings`     | `{ section? }`   | —                             |
+ * | `panel_settings_ready`    | —                | —                             |
  *
  * Events emitted towards the panel: `panel://snapshot` (`PanelSnapshot`),
  * `panel://provider` (`{ provider, state }`), `panel://settings`
@@ -28,6 +30,11 @@
  * `panel://pinned` (`boolean`) and `panel://visibility` (`{ visible }`).
  * The header's collapse is driven by the pointer in the webview, not by a host
  * event.
+ *
+ * Events emitted towards the settings window: `panel://settings`,
+ * `panel://snapshot` and `panel://settings-section` (`{ section }`). Both windows
+ * therefore see a setting written from either one — that is what makes a change
+ * visible in the panel the moment it is made in the settings window.
  *
  * ## Degradation
  *
@@ -73,7 +80,11 @@ export const DESKTOP_COMMANDS = {
   pinnedState: 'panel_pinned_state',
   setPinned: 'panel_set_pinned',
   hide: 'panel_hide',
-  setHeight: 'panel_set_height'
+  setHeight: 'panel_set_height',
+  /** Open the settings window, or bring it forward on the given section. */
+  openSettings: 'panel_open_settings',
+  /** Settings window -> host: the first render is on screen, show the window. */
+  settingsReady: 'panel_settings_ready'
 } as const;
 
 export const DESKTOP_EVENTS = {
@@ -89,7 +100,13 @@ export const DESKTOP_EVENTS = {
    * pointer leaves the window and comes back when it returns; the host drives it
    * because a non-key window's webview receives no pointer events.
    */
-  header: 'panel://header'
+  header: 'panel://header',
+  /**
+   * Host -> settings window: which section to show. Sent when a new window is
+   * created for a named entry point and again on every later request while the
+   * window already exists, so one window serves every entry point.
+   */
+  settingsSection: 'panel://settings-section'
 } as const;
 
 /** Minimal shape of `window.__TAURI_INTERNALS__` (no `@tauri-apps/api` needed). */
@@ -104,6 +121,13 @@ export interface InjectedDesktopConfig {
   sessionToken?: string;
   webUrl?: string;
   capabilities?: { pin?: boolean; hide?: boolean; openWebVersion?: boolean };
+  /**
+   * Settings window only: the section this window was created for. Injected at
+   * build time because it is part of the window's identity, not a later request —
+   * a window opened from a card's gear must render that platform's section on its
+   * very first frame rather than switching to it after mounting.
+   */
+  settingsSection?: string;
 }
 
 export interface DesktopCommandBridge {
@@ -374,6 +398,14 @@ export interface PanelHostControls {
    * header, `true` brings it back. The host tracks the pointer, not focus.
    */
   subscribeHeader(listener: (visible: boolean) => void): () => void;
+  /**
+   * Open the settings window, or bring the already-open one to `section`.
+   *
+   * The panel asks; the host decides. One window serves every entry point, so this is
+   * idempotent by design: calling it twice focuses the same window twice rather than
+   * opening a second copy of the same form.
+   */
+  openSettings(section: string): Promise<void>;
   /** Ask the host to open the companion web page in the browser. */
   openWebVersion(): Promise<void>;
 }
@@ -419,6 +451,9 @@ export function createDesktopHostControls(bridge: DesktopCommandBridge | null = 
         listener(record.visible !== false);
       });
     },
+    async openSettings(section) {
+      await invoke(DESKTOP_COMMANDS.openSettings, { section }).catch(() => undefined);
+    },
     async openWebVersion() {
       await invoke(DESKTOP_COMMANDS.openWebVersion).catch(() => undefined);
     }
@@ -426,12 +461,52 @@ export function createDesktopHostControls(bridge: DesktopCommandBridge | null = 
 }
 
 /**
+ * The settings window's own host controls.
+ *
+ * A separate surface from `PanelHostControls` on purpose: the settings window never
+ * hides itself, never pins and never sizes itself — the host fixes it at 560x380.
+ * What it needs instead is to name the section it was opened on and to say when its
+ * first render is on screen, and both of those exist only under Tauri; in a browser
+ * this returns `null` and the settings surface renders as a sheet instead.
+ */
+export interface SettingsWindowHostControls {
+  /** Ask the host to reveal the window (its first render is on screen). */
+  ready(): Promise<void>;
+  /** The section this window was created for, if the host named one. */
+  initialSection(): string | undefined;
+  /** Subscribe to later "show this section" requests. */
+  subscribeSection(listener: (section: string | undefined) => void): () => void;
+}
+
+export function createSettingsWindowHost(
+  bridge: DesktopCommandBridge | null = detectDesktopBridge()
+): SettingsWindowHostControls | null {
+  if (!bridge) return null;
+  const invoke = <T,>(command: string, args?: Record<string, unknown>) => bridge.invoke<T>(command, args);
+  return {
+    async ready() {
+      await invoke(DESKTOP_COMMANDS.settingsReady).catch(() => undefined);
+    },
+    initialSection() {
+      const initial = desktopScope().__AGENTS_USAGE__?.settingsSection;
+      return typeof initial === 'string' ? initial : undefined;
+    },
+    subscribeSection(listener) {
+      if (!bridge.listen) return () => undefined;
+      return bridge.listen(DESKTOP_EVENTS.settingsSection, (payload) => {
+        const record = (typeof payload === 'object' && payload !== null ? payload : {}) as Record<string, unknown>;
+        listener(typeof record.section === 'string' ? record.section : undefined);
+      });
+    }
+  };
+}
+
+/**
  * Browser fallback host: no menubar window to hide and nothing to pin, but the
- * companion web page still opens. Used by `main.ts` when the panel runs outside
+ * companion web page still opens. Used by `main.tsx` when the panel runs outside
  * Tauri (Vite dev server, tests).
  */
-export function createBrowserFallbackHost(openWebVersion: () => void | Promise<void>): PanelHostControls {
-  return {
+export function createBrowserFallbackHost(openWebVersion: () => void | Promise<void>): PanelHostControls {  return {
     async hide() {
       // Outside Tauri there is no menubar window to collapse.
     },
@@ -454,6 +529,11 @@ export function createBrowserFallbackHost(openWebVersion: () => void | Promise<v
     subscribeHeader() {
       // Outside Tauri there is no pointer tracking: the header never leaves.
       return () => undefined;
+    },
+    async openSettings() {
+      // Outside Tauri there is no second window. The caller that offers the browser
+      // fallback (see `main.tsx`) never routes here, but the contract has to be
+      // complete: a host control that is present but not implemented is a trap.
     },
     async openWebVersion() {
       await openWebVersion();

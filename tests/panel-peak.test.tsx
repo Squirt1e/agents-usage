@@ -4,7 +4,7 @@
 // cover), the countdown wording, the per-provider settings block (builtin readout,
 // custom editor validation, off persistence) and the crossing toast (first sight
 // stays quiet, an observed flip says exactly one line).
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PanelApp, type PanelHostProps } from '../src/desktop/PanelApp';
 import {
@@ -15,6 +15,7 @@ import {
   snapshotOf
 } from '../src/desktop/fake-client';
 import { providerView } from '../src/desktop/metrics';
+import { SettingsWindowHarness } from './helpers/windows';
 import { DeepSeekCard } from '../src/desktop/DeepSeekCard';
 import { GlmCard } from '../src/desktop/GlmCard';
 import { localDayIn, type PanelSettings, type PanelSnapshot } from '../src/shared/desktop-contract';
@@ -130,11 +131,18 @@ describe('the card period row', () => {
 });
 
 describe('the settings block', () => {
+  // The peak schedule is a platform setting, so its form lives in that platform's
+  // section of the settings window — the same wiring the window itself uses.
   async function renderSettings(provider: 'codex' | 'glm' | 'deepseek', settings: PanelSettings) {
     const client = createFakeUsageClient({ snapshot: deepseekSnapshot(), settings });
-    const host: PanelHostProps = { pinned: false, onTogglePin: vi.fn(), onRequestHide: vi.fn(), onSetHeight: vi.fn() };
-    render(<PanelApp client={client} host={host} now={NOW} />);
-    fireEvent.click(await screen.findByRole('button', { name: `配置 ${provider === 'codex' ? 'Codex' : provider === 'glm' ? 'GLM' : 'DeepSeek'}` }));
+    render(<SettingsWindowHarness client={client} section={provider} />);
+    // The window reads its settings from the client on mount, and the *stored* theme
+    // reaching the document is that read having landed. Waiting on it is not
+    // belt-and-braces: the peak editor seeds its draft (windows, timezone) from the
+    // settings on its first render, so a form mounted before the read finishes would
+    // hold the parser's defaults and save *those* — the timezone default is `UTC`, and
+    // a test that started editing early would be the one that noticed.
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme'));
     await screen.findByTestId(`peak-settings-${provider}`);
     return client;
   }
@@ -223,12 +231,12 @@ describe('the crossing toast', () => {
   it('shows nothing at all while the reminder has never been chosen', async () => {
     const client = createFakeUsageClient({ snapshot: deepseekSnapshot(), settings: settingsWith() });
     const host: PanelHostProps = { pinned: false, onTogglePin: vi.fn(), onRequestHide: vi.fn(), onSetHeight: vi.fn() };
-    const view = render(<PanelApp client={client} host={host} now={NOW} />);
+    const view = render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
     await screen.findByTestId('card-deepseek');
     // Default off: no period presentation on the card, no announcements, and
     // the clock crossing a boundary of the unchosen builtin table says nothing.
     expect(screen.getByTestId('card-deepseek').getAttribute('data-period')).toBeNull();
-    view.rerender(<PanelApp client={client} host={host} now={NOW_OFFPEAK} />);
+    view.rerender(<PanelApp client={client} host={host} now={NOW_OFFPEAK} onOpenSettings={() => undefined} />);
     expect(screen.queryByText(/已进入/)).toBeNull();
   });
 
@@ -238,14 +246,14 @@ describe('the crossing toast', () => {
       settings: settingsWith({ peakReminder: { deepseek: { mode: 'builtin' } } })
     });
     const host: PanelHostProps = { pinned: false, onTogglePin: vi.fn(), onRequestHide: vi.fn(), onSetHeight: vi.fn() };
-    const view = render(<PanelApp client={client} host={host} now={NOW} />);
+    const view = render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
     // First observation of the peak: nothing to announce, but the card carries it.
     await screen.findByTestId('card-deepseek');
     expect(screen.getByTestId('card-deepseek').getAttribute('data-period')).toBe('peak');
     expect(screen.queryByText(/已进入/)).toBeNull();
 
     // The clock moves into the lunch off-peak: one line, carrying the note.
-    view.rerender(<PanelApp client={client} host={host} now={NOW_OFFPEAK} />);
+    view.rerender(<PanelApp client={client} host={host} now={NOW_OFFPEAK} onOpenSettings={() => undefined} />);
     expect(await screen.findByText('DeepSeek 已进入错峰时段（错峰半价计费）')).toBeInTheDocument();
   });
 });

@@ -291,7 +291,18 @@ button {
   flex-direction: column;
   width: 350px;
   height: 100%;
-  min-height: 320px;
+  /*
+   * No floor. There used to be a `min-height: 320px` here, matching the host's own
+   * floor, because the window was sized from the cards and an emptied overview
+   * (every platform hidden, or the first loading frame) would otherwise have
+   * collapsed to nothing. The window is now as tall as its content needs and the
+   * host clamps it to the display, so a floor would only ever report a height the
+   * content does not occupy — a strip of empty panel under the empty state.
+   *
+   * `max-height` stays: the work area is the ceiling, and the host cannot know it
+   * here. It matters because the measurement compares its answer against the last
+   * reported height, so a number the window can never take would be re-sent for ever.
+   */
   max-height: 100vh;
   overflow: hidden;
   background: linear-gradient(158deg, var(--tile-top) 0%, var(--tile) 58%, var(--tile-bottom) 100%);
@@ -327,8 +338,7 @@ button {
    * with a second clock. CSS owns only the two steps height cannot express: the
    * divider fading like any colour change, and the contents leaving the tab
    * order exactly when the height lands on zero — a delayed `visibility` step
-   * keyed on the target state (`.panel[data-header-hidden]` below), the same
-   * idiom `.panel-tools` uses for its fade.
+   * keyed on the target state (`.panel[data-header-hidden]` below).
    */
   transition:
     border-bottom-color 150ms ease,
@@ -381,31 +391,16 @@ button {
 }
 
 /*
- * The tool row belongs to the overview. On a sub-page the header keeps its shape
- * but the buttons fade out instead of blinking away, which is why the row stays
- * mounted and is only marked `aria-hidden` (see Panel.tsx): one element with two
- * states can be a `transition`, and a row that unmounted would have no exit to
- * animate at all.
- *
- * `visibility` rides along on a delay so it lands after the fade. It is what takes
- * the hidden buttons out of the tab order, and switching it at once would cut the
- * fade short.
+ * The tool row belongs to the overview, which is the panel's only page, so it is
+ * always on screen. It used to fade out on a sub-page (opacity plus a delayed
+ * `visibility` step, with `aria-hidden` keeping the hidden buttons out of the tab
+ * order); the sub-pages are the settings window now, so there is no state left for
+ * that fade to describe and the row carries no transition of its own.
  */
 .panel-tools {
   display: flex;
   gap: 5px;
   flex: 0 0 auto;
-  transition:
-    opacity 150ms ease,
-    visibility 0s linear 0s;
-}
-
-.panel-tools[aria-hidden='true'] {
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 150ms ease,
-    visibility 0s linear 150ms;
 }
 
 .icon-button {
@@ -557,67 +552,6 @@ button {
 }
 
 /* --------------------------------------------------------- page transition */
-
-/*
- * A page swap is a short journey, not a cut: the page that arrives fades in from
- * the side the user travelled towards — from the right when a platform's
- * configuration opens, from the left when "返回用量总览" brings the overview back
- * — and the heading that names the page comes with it instead of swapping in
- * place. The page that leaves is simply gone: at 350px there is no room for two
- * pages sliding past each other, and cross-fading would mean holding a second,
- * still-live copy of a view in the DOM — the height measurement reads the body's
- * first child, and every test query would have to tell the two apart.
- *
- * `Panel.tsx` keys the body and the heading by `viewKey`, so a swap remounts them
- * and the animation below replays on its own; `PanelApp` reports the direction it
- * travelled as `data-view-direction`. The tool row is deliberately not here: it
- * stays mounted and fades between its two states (see `.panel-tools`), because a
- * fading-out row is an exit and this animation only ever describes an arrival.
- *
- * Only `opacity` and `translateX` move. The window is exactly as tall as this
- * content and the height is measured from these boxes, so a `scale` (the one the
- * window's own fade uses) would be measured mid-flight and drag the window along
- * with it; a translate cancels out of that measurement, which reads card bottoms
- * relative to the content's own top. The layer WebKit promotes for these 180ms
- * comes and goes between gestures, not during one, which is the case the window
- * fade already relies on.
- *
- * Reduced motion is not handled here: the file's closing `*` fallback silences
- * every animation at once, this one included.
- */
-@keyframes panel-page-in-forward {
-  from {
-    opacity: 0;
-    transform: translateX(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes panel-page-in-back {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.panel[data-view-direction='forward'] .panel-heading,
-.panel[data-view-direction='forward'] .panel-body > * {
-  animation: panel-page-in-forward 180ms cubic-bezier(0.22, 0.8, 0.24, 1);
-}
-
-.panel[data-view-direction='back'] .panel-heading,
-.panel[data-view-direction='back'] .panel-body > * {
-  animation: panel-page-in-back 180ms cubic-bezier(0.22, 0.8, 0.24, 1);
-}
 
 /* ---------------------------------------------------------------- overview */
 
@@ -1842,33 +1776,6 @@ button {
 .settings-view {
   display: grid;
   gap: 9px;
-}
-
-.back-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  white-space: nowrap;
-  transition: color 150ms ease;
-}
-
-.back-button svg {
-  width: 13px;
-  height: 13px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.back-button:hover {
-  color: var(--action);
 }
 
 .config-block {

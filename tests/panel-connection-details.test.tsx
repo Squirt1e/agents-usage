@@ -18,7 +18,7 @@ function show(snapshot: PanelSnapshot, settings: Partial<PanelSettings> = {}) {
     <PanelApp
       client={client}
       host={{ pinned: false, onTogglePin: vi.fn(), onRequestHide: vi.fn(), onSetHeight: vi.fn() }}
-      now={NOW}
+      now={NOW} onOpenSettings={() => undefined}
     />
   );
   return client;

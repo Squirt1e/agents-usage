@@ -74,7 +74,7 @@ function renderPanel(
     onRequestHide: vi.fn(),
     onSetHeight: vi.fn()
   };
-  render(<PanelApp client={client} host={host} now={NOW} />);
+  render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
   return { client, host };
 }
 

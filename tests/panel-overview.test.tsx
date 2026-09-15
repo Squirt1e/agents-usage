@@ -18,7 +18,6 @@ import {
 import type { ProviderId } from '../src/shared/contracts';
 import type { PanelSettings, PanelSnapshot } from '../src/shared/desktop-contract';
 import type { PanelHostProps } from '../src/desktop/PanelApp';
-import { PANEL_MIN_HEIGHT } from '../src/desktop/panel-height';
 
 const NOW = new Date('2026-09-10T08:00:00.000Z');
 
@@ -101,7 +100,7 @@ function renderPanel(options: { client?: FakeUsageClient; settings?: Partial<Pan
     onSetHeight: vi.fn(),
     ...options.host
   };
-  const view = render(<PanelApp client={client} host={host} now={NOW} />);
+  const view = render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
   return { client, host, view };
 }
 
@@ -232,90 +231,6 @@ describe('panel overview', () => {
     expect(await screen.findByTestId('quota-item-five-hour')).toBeInTheDocument();
   });
 
-  it('opens the settings page with platform management first, and persists visibility', async () => {
-    const { client } = renderPanel();
-    await screen.findByTestId('card-glm');
-
-    fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    const page = await screen.findByTestId('app-settings');
-    // Platform management is the first section of the settings page.
-    expect(within(page).getByTestId('platform-settings')).toBeInTheDocument();
-    expect(within(page).getByRole('heading', { name: '平台管理' })).toBeInTheDocument();
-
-    const glmSwitch = within(page).getByRole('checkbox', { name: '显示 GLM' });
-    expect(glmSwitch).toBeChecked();
-    fireEvent.click(glmSwitch);
-
-    await waitFor(() => expect(client.methodCalls('updateSettings')).toHaveLength(1));
-    expect(client.methodCalls('updateSettings')[0]?.[0]).toEqual({ platformVisibility: { glm: false } });
-
-    // Back on the overview the hidden platform is gone.
-    fireEvent.click(screen.getByRole('button', { name: '返回用量总览' }));
-    await waitFor(() => expect(screen.queryByTestId('card-glm')).not.toBeInTheDocument());
-    expect(screen.getByTestId('card-codex')).toBeInTheDocument();
-    expect(screen.getByTestId('card-deepseek')).toBeInTheDocument();
-
-    // Hiding is display-only: no credential is deleted and the connection is kept.
-    expect(client.methodCalls('deleteCredential')).toHaveLength(0);
-    expect(client.currentSnapshot().providers.map((state) => state.provider)).toContain('glm');
-  });
-
-  it('reorders platforms from the keyboard as well', async () => {
-    const { client } = renderPanel();
-    await screen.findByTestId('card-codex');
-
-    fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    const page = await screen.findByTestId('app-settings');
-    const handle = within(page).getByRole('button', { name: '拖动排序 GLM' });
-    fireEvent.keyDown(handle, { key: 'ArrowUp' });
-
-    await waitFor(() => expect(client.methodCalls('updateSettings')).toHaveLength(1));
-    expect(client.methodCalls('updateSettings')[0]?.[0]).toEqual({
-      platformOrder: ['glm', 'codex', 'deepseek']
-    });
-  });
-
-  it('restores a hidden platform without touching its connection', async () => {
-    const client = createFakeUsageClient({
-      snapshot: overviewSnapshot(),
-      settings: defaultPanelSettings({ platformVisibility: { glm: false } })
-    });
-    renderPanel({ client });
-    await screen.findByTestId('card-codex');
-    expect(screen.queryByTestId('card-glm')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    fireEvent.click(within(await screen.findByTestId('platform-settings')).getByRole('checkbox', { name: '显示 GLM' }));
-    fireEvent.click(screen.getByRole('button', { name: '返回用量总览' }));
-
-    expect(await screen.findByTestId('card-glm')).toBeInTheDocument();
-    expect(within(screen.getByTestId('card-glm')).getByRole('group', { name: '5 小时额度 剩余 72%' })).toBeInTheDocument();
-    expect(client.methodCalls('deleteCredential')).toHaveLength(0);
-  });
-
-  it('shows an empty state with a way back when every platform is hidden', async () => {
-    const client = createFakeUsageClient({
-      snapshot: overviewSnapshot(),
-      settings: defaultPanelSettings({ platformVisibility: { codex: false, glm: false, deepseek: false } })
-    });
-    renderPanel({ client });
-
-    const empty = await screen.findByTestId('empty-selection');
-    expect(empty).toHaveTextContent('尚未选择展示的平台');
-    expect(screen.queryByTestId('card-codex')).not.toBeInTheDocument();
-
-    fireEvent.click(within(empty).getByRole('button', { name: '管理平台' }));
-    const page = await screen.findByTestId('platform-settings');
-    for (const provider of ['Codex', 'GLM', 'DeepSeek']) {
-      expect(within(page).getByRole('checkbox', { name: `显示 ${provider}` })).not.toBeChecked();
-    }
-    // Turning one back on brings its card back.
-    fireEvent.click(within(page).getByRole('checkbox', { name: '显示 DeepSeek' }));
-    fireEvent.click(screen.getByRole('button', { name: '返回用量总览' }));
-    expect(await screen.findByTestId('card-deepseek')).toBeInTheDocument();
-    expect(client.methodCalls('deleteCredential')).toHaveLength(0);
-  });
-
   it('refreshes the displayed platforms silently and replays their readings', async () => {
     const { client } = renderPanel();
     await screen.findByTestId('card-codex');
@@ -399,11 +314,13 @@ describe('panel overview', () => {
     fireEvent.click(screen.getByRole('button', { name: '刷新全部平台' }));
     expect(held.asked).toEqual(['codex', 'glm', 'deepseek']);
 
-    // Hide GLM, then walk back to the overview: its card is gone, Codex and
-    // DeepSeek are still there.
-    fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    fireEvent.click(within(await screen.findByTestId('platform-settings')).getByRole('checkbox', { name: '显示 GLM' }));
-    fireEvent.click(screen.getByRole('button', { name: '返回用量总览' }));
+    // The settings window hides GLM while the refresh is in flight: the host writes
+    // the setting and broadcasts it, and the card is gone by the time the verdict
+    // lands. Codex and DeepSeek are still there.
+    client.emit({
+      type: 'settings',
+      settings: defaultPanelSettings({ platformVisibility: { glm: false } })
+    });
     await waitFor(() => expect(screen.queryByTestId('card-glm')).not.toBeInTheDocument());
 
     // Every platform now reports a failure, GLM's included.
@@ -416,24 +333,6 @@ describe('panel overview', () => {
     expect(screen.queryByText('GLM 刷新失败')).not.toBeInTheDocument();
   });
 
-  it('says nothing at all when the overview is no longer on screen', async () => {
-    const client = createFakeUsageClient({ snapshot: overviewSnapshot() });
-    const held = holdRefreshes(client);
-    renderPanel({ client });
-    await screen.findByTestId('card-codex');
-
-    fireEvent.click(screen.getByRole('button', { name: '刷新全部平台' }));
-    // Into the settings page, which has no cards at all, before the results land.
-    fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    await screen.findByTestId('app-settings');
-
-    client.setSnapshot(failedSnapshot(['codex', 'glm', 'deepseek']));
-    held.release();
-    await settle();
-
-    expect(screen.queryAllByTestId('panel-toast')).toHaveLength(0);
-  });
-
   it('renders no footer of its own inside the compact panel', async () => {
     renderPanel();
     await screen.findByTestId('card-codex');
@@ -442,25 +341,29 @@ describe('panel overview', () => {
     expect(screen.queryByRole('button', { name: /打开网页版/ })).not.toBeInTheDocument();
   });
 
-  it('keeps the sync line in the bottom module on every page', async () => {
+  it('keeps the sync line in the frame bottom module', async () => {
     renderPanel();
     await screen.findByTestId('card-codex');
 
+    // Frame furniture, not content: it sits below the scrolling body, so opening the
+    // settings window (a separate window) cannot move it.
     const footer = screen.getByTestId('panel-footer');
     expect(within(footer).getByText(/最近同步于 \d{2}:\d{2}/)).toBeInTheDocument();
-    // The module belongs to the frame, not to a view, so a sub-page keeps it.
-    fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    await screen.findByTestId('app-settings');
-    expect(within(screen.getByTestId('panel-footer')).getByText(/最近同步于 \d{2}:\d{2}/)).toBeInTheDocument();
   });
 
   it('asks the host to size the window to the panel content', async () => {
     const { host } = renderPanel();
     await screen.findByTestId('card-codex');
 
-    // jsdom has no layout, so the measurement collapses to the floor; what this
-    // pins is that the panel reports a height at all, and never below the floor.
-    await waitFor(() => expect(host.onSetHeight).toHaveBeenCalledWith(PANEL_MIN_HEIGHT));
+    // jsdom computes no layout, so every measurement here is legitimately zero —
+    // including the frame. What this pins is that the panel reports a height at all
+    // (a zero-height content is a real answer, not "nothing to report") and that the
+    // number is an integer the host can apply. The measured rule itself is covered by
+    // panel-height.test.ts and panel-height-hook.test.tsx.
+    await waitFor(() => expect(host.onSetHeight).toHaveBeenCalled());
+    const reported = (host.onSetHeight as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as number;
+    expect(Number.isInteger(reported)).toBe(true);
+    expect(reported).toBeGreaterThanOrEqual(0);
   });
 
   it('reports a missing sync time as missing rather than as a time', async () => {

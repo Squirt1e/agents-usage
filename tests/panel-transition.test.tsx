@@ -1,20 +1,21 @@
 // @vitest-environment jsdom
-// Swapping the overview for a settings page used to be a cut. It is a transition
-// now: the arriving page animates in from the side the user travelled towards.
-// jsdom computes no animations, so these tests pin the three things the
-// transition actually rests on — the direction the app reports, the remount that
-// replays the animation, and the CSS that consumes both.
+// What is left of "the panel swaps pages".
+//
+// There are no pages any more: the settings surfaces are their own window, so the
+// panel shows the overview and nothing else. This file replaced the page-transition
+// assertions, which pinned a *page swap* — a direction the app reported, a remount
+// that replayed the animation, and the CSS that consumed both. That they are gone is
+// now itself the property worth pinning: a switch nobody can reach would still sit in
+// the motion guard's registry, and the guard's whole point is that every registered
+// switch is a switch that happens.
 import { readFileSync } from 'node:fs';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { PanelApp, type PanelHostProps } from '../src/desktop/PanelApp';
-import { createFakeUsageClient } from '../src/desktop/fake-client';
+import { fireEvent, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import { renderPanel } from './helpers/windows';
 
 // The stylesheet is read by relative path: this file runs in jsdom, where
 // `import.meta.url` is not a file URL.
 const CSS = readFileSync('src/desktop/panel.css', 'utf8');
-
-/** Rule blocks are read without comments, so a commented-out rule cannot pass. */
 const clean = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /** The body of the block whose opening brace follows `start`. */
@@ -32,93 +33,68 @@ function blockAt(css: string, start: number, label: string): string {
   throw new Error(`unterminated block: ${label}`);
 }
 
-function renderPanel() {
-  const client = createFakeUsageClient();
-  const host: PanelHostProps = { pinned: false, onTogglePin: vi.fn(), onRequestHide: vi.fn(), onSetHeight: vi.fn() };
-  render(<PanelApp client={client} host={host} now={new Date('2026-09-10T08:00:00.000Z')} />);
-  return { client, host };
-}
-
 const panelElement = () => document.querySelector('.panel') as HTMLElement;
 const bodyElement = () => document.querySelector('.panel-body') as HTMLElement;
 
-describe('panel page transition', () => {
-  it('reports the direction of the swap, including when it turns around', async () => {
-    renderPanel();
-
-    fireEvent.click(await screen.findByRole('button', { name: '设置' }));
-    expect(panelElement().dataset.viewDirection).toBe('forward');
-
-    fireEvent.click(screen.getByRole('button', { name: '返回用量总览' }));
-    expect(panelElement().dataset.viewDirection).toBe('back');
-
-    // Turning around again must not keep the previous direction: the direction is
-    // set in the same update as the view it describes.
-    fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    expect(panelElement().dataset.viewDirection).toBe('forward');
-  });
-
-  it('remounts the page on every swap, which is what replays the animation', async () => {
-    renderPanel();
+describe('the panel has one page', () => {
+  it('keeps the overview mounted when a settings entry point is used', async () => {
+    const { onOpenSettings } = renderPanel();
     const overview = bodyElement();
 
     fireEvent.click(await screen.findByRole('button', { name: '设置' }));
-    const settings = bodyElement();
-    expect(settings).not.toBe(overview);
 
-    fireEvent.click(screen.getByRole('button', { name: '返回用量总览' }));
-    expect(bodyElement()).not.toBe(settings);
+    // The same element, still there: nothing was swapped out, because the settings
+    // surface is not this window's page. (It used to remount here — that remount was
+    // what replayed the page-entrance animation.)
+    expect(bodyElement()).toBe(overview);
+    expect(screen.getByTestId('overview')).toBeInTheDocument();
+    expect(onOpenSettings).toHaveBeenCalledWith('appearance');
   });
 
-  it('animates the arriving page from the side the user travelled towards', () => {
-    const forwardKeys = blockAt(clean, clean.indexOf('@keyframes panel-page-in-forward'), 'forward keyframes');
-    const backKeys = blockAt(clean, clean.indexOf('@keyframes panel-page-in-back'), 'back keyframes');
-    expect(forwardKeys).toMatch(/translateX\(10px\)/);
-    expect(backKeys).toMatch(/translateX\(-10px\)/);
-    // The window is sized from this content, so a scale here would be measured
-    // mid-flight and resize the window with it; only a translate is safe.
-    expect(forwardKeys).not.toMatch(/scale/);
-    expect(backKeys).not.toMatch(/scale/);
+  it('carries no view-state markers any more', async () => {
+    renderPanel();
+    await screen.findByTestId('overview');
 
-    expect(blockAt(clean, clean.indexOf(".panel[data-view-direction='forward']"), 'forward rule')).toMatch(
-      /animation:\s*panel-page-in-forward/
-    );
-    expect(blockAt(clean, clean.indexOf(".panel[data-view-direction='back']"), 'back rule')).toMatch(
-      /animation:\s*panel-page-in-back/
-    );
+    // `data-view-direction` drove the page-entrance animation and the view key keyed
+    // the remount. Both went with the pages; a panel that reports either has grown a
+    // page back without anyone deciding to.
+    expect(panelElement().dataset.viewDirection).toBeUndefined();
+    expect(panelElement().dataset.viewKey).toBeUndefined();
+    // And there is no "back to the overview" control, because the overview never left.
+    expect(screen.queryByRole('button', { name: '返回用量总览' })).not.toBeInTheDocument();
   });
 
-  it('fades the tool row between pages instead of unmounting it', async () => {
+  it('keeps the tool row on screen, since it is the only page', async () => {
     renderPanel();
     const gear = await screen.findByRole('button', { name: '设置' });
-    // Visible: no marking at all, so the buttons are ordinary, queryable controls.
+
+    // The row used to fade out on a sub-page (`aria-hidden`, opacity 0, visibility
+    // hidden) while its three buttons stayed mounted. With no sub-page there is
+    // nothing to fade for, so it is an ordinary visible control.
     expect(document.querySelector('.panel-tools')).not.toHaveAttribute('aria-hidden');
+    expect(gear).toBeInTheDocument();
+    expect(document.querySelectorAll('.panel-tools .icon-button')).toHaveLength(3);
+  });
 
-    fireEvent.click(gear);
-    // Still mounted — a row that unmounted would have no exit to animate — but the
-    // role query that used to prove "gone" now proves "hidden", which is what
-    // `aria-hidden` buys and what lets the fade be a transition.
-    const tools = document.querySelector('.panel-tools');
-    expect(tools).not.toBeNull();
-    expect(tools).toHaveAttribute('aria-hidden', 'true');
-    expect(tools?.querySelectorAll('.icon-button')).toHaveLength(3);
-    expect(screen.queryByRole('button', { name: '设置' })).not.toBeInTheDocument();
-
-    const hiddenRule = blockAt(clean, clean.indexOf(".panel-tools[aria-hidden='true']"), 'hidden tool row');
-    expect(hiddenRule).toMatch(/opacity:\s*0/);
-    expect(hiddenRule).toMatch(/visibility:\s*hidden/);
+  it('has no page-entrance animation left in the sheet', () => {
+    expect(clean).not.toMatch(/panel-page-in-forward/);
+    expect(clean).not.toMatch(/panel-page-in-back/);
+    expect(clean).not.toMatch(/data-view-direction/);
   });
 
   it('leaves reduced motion to the file-wide fallback', () => {
-    // AGENTS.md: a new switch needs no block of its own, the closing fallback
-    // silences every transition and animation at once — so it has to exist, and it
-    // has to be the `!important` one that outranks every rule above it.
+    // AGENTS.md: a new switch needs no block of its own, the closing fallback silences
+    // every transition and animation at once — so it has to exist, and it has to be the
+    // `!important` one that outranks every rule above it.
     const reduceBlocks = [...clean.matchAll(/@media \(prefers-reduced-motion: reduce\)/g)].map((match) =>
       blockAt(clean, match.index, 'reduced motion block')
     );
     expect(
       reduceBlocks.some(
-        (block) => block.includes('*::after') && /animation:\s*none\s*!important/.test(block) && /transition:\s*none\s*!important/.test(block)
+        (block) =>
+          block.includes('*::after') &&
+          /animation:\s*none\s*!important/.test(block) &&
+          /transition:\s*none\s*!important/.test(block)
       )
     ).toBe(true);
   });

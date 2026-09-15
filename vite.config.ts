@@ -3,15 +3,23 @@ import react from '@vitejs/plugin-react';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// One entry point: `src/desktop/index.html` (+ `src/desktop`), the compact menubar
-// panel of the Tauri host. It is built into `dist/desktop-client` and loaded as
-// `frontendDist` by `src-tauri/tauri.conf.json`.
+// Two entry points, both under `src/desktop` and both built into
+// `dist/desktop-client`, which is the `frontendDist` used by
+// `src-tauri/tauri.conf.json`:
+//
+//   - `index.html`    → the compact menubar panel (the "panel" window),
+//   - `settings.html` → the settings window (the "settings" window).
+//
+// They are separate documents because they are separate host windows with
+// different chrome: the panel is borderless, transparent and sized to its content,
+// while the settings window is a fixed 560x380 window with a system title bar.
+// They share `panel.css` and every component underneath it — see settings.css.
 
 // Rollup mirrors the source path of an HTML entry inside `outDir`
-// (`src/desktop/index.html`), but the Tauri host serves the panel from the output
-// root. Flatten the document to `index.html` so both the bundled assets and the
-// dev URL (`/desktop/`) resolve to the same document, then drop the nested copy
-// the HTML plugin has already written.
+// (`src/desktop/index.html`), but the Tauri host serves both documents from the
+// output root. Flatten them to the root so the bundled assets and the dev URLs
+// (`/desktop/` and `/desktop/settings.html`) resolve to the same documents, then
+// drop the nested copies the HTML plugin has already written.
 function flattenPanelDocument(outputDir: string, sourceDir: string): Plugin {
   const prefix = `${sourceDir}/`;
   return {
@@ -39,7 +47,10 @@ export default defineConfig({
   build: {
     outDir: desktopOutDir,
     rollupOptions: {
-      input: { desktop: resolve(__dirname, 'src/desktop/index.html') }
+      input: {
+        desktop: resolve(__dirname, 'src/desktop/index.html'),
+        settings: resolve(__dirname, 'src/desktop/settings.html')
+      }
     },
     // The output directory is cleared by `scripts/clear-dir.mjs` before the build.
     emptyOutDir: false
