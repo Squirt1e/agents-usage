@@ -233,12 +233,16 @@ async fn a_switched_off_experimental_connection_is_never_attempted() {
         recorded_connections(&snapshots, "deepseek").contains(&"web".to_string()),
         "an enabled connection reports its own state: {snapshots}"
     );
-    // And it reports its own reason (no token is stored in a test environment),
-    // rather than the "connection is disabled" verdict the switch used to leave.
+    // And it reports its own reason, rather than the "connection is disabled"
+    // verdict the switch used to leave. Which reason that is depends on machine
+    // state this test does not own — with no token stored the collector reports
+    // the missing credential, with one stored the request itself fails — so what
+    // is pinned here is the part that is behaviour: a genuine collection outcome
+    // came back, never the disabled verdict.
     let detail = recorded_error(&snapshots, "deepseek", "web").unwrap_or_default();
     assert!(
-        detail.contains("credential is not configured"),
-        "the enabled connection reports its own failure: {snapshots}"
+        !detail.is_empty() && !detail.contains("disabled"),
+        "the enabled connection reports its own failure, not a disabled verdict: {snapshots}"
     );
 
     running.shutdown().await;
@@ -474,7 +478,9 @@ async fn deepseek_web_usage_is_off_by_default_and_round_trips() {
     let client = reqwest::Client::new();
 
     // The experimental connection ships disabled: no collector may touch the
-    // console endpoints until the user opts in.
+    // console endpoints until the user opts in. `configured` is deliberately not
+    // asserted: whether a token is already in the keychain is machine state this
+    // test does not own, while `enabled` is the settings flag under test.
     assert_eq!(bootstrap["settings"]["deepseekWebEnabled"], false);
     let web_status = bootstrap["settings"]["credentials"]
         .as_array()
@@ -482,7 +488,6 @@ async fn deepseek_web_usage_is_off_by_default_and_round_trips() {
         .iter()
         .find(|status| status["target"] == "deepseek-web")
         .expect("deepseek-web credential status must be reported");
-    assert_eq!(web_status["configured"], false);
     assert_eq!(web_status["enabled"], false);
 
     // The opt-in persists and flips the credential's enabled flag with it.
