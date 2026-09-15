@@ -48,8 +48,9 @@ DeepSeek 余额与今日消费集中在一块紧凑面板里。所有数据只�
 
 ## 安装
 
-从 [Releases](https://github.com/Squirt1e/agents-usage/releases) 下载最新的
-`Agents Usage_<版本>_universal.dmg`（Intel 与 Apple Silicon 通用）。
+从 [Releases](https://github.com/Squirt1e/agents-usage/releases) 下载最新的 universal 版 dmg
+（例如 `Agents.Usage_1.0.0_universal.dmg`；GitHub 会把文件名里的空格写成点）。它是 Intel 与
+Apple Silicon 通用的单一安装包。
 
 1. 打开 dmg，把 `Agents Usage.app` 拖进“应用程序”。
 2. 首次启动会被 Gatekeeper 拦下：当前发布包**未做 Apple 公证**。任选一种放行方式：
