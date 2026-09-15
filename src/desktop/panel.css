@@ -1,0 +1,2255 @@
+/*
+ * Compact Chinese "tech" theme for the macOS menubar panel — the confirmed
+ * design (compact C): ~350 logical pixels wide, near-black tile on a darker page,
+ * mint #77e6d8 and lime #c8ff4d accents, small monospaced numerics, no decorative
+ * background and no hero typography.
+ *
+ * Layout rules that matter:
+ * - `.panel` is a full-height flex column, so the host can size the window
+ *   (350 × ~420–600) and `.panel-body` scrolls inside a bounded height while the
+ *   header stays reachable.
+ * - Numeric values use a monospaced face with tabular figures so a live countdown
+ *   does not make the layout jump.
+ *
+ * Motion rules (mandatory — see AGENTS.md and tests/panel-motion.test.ts):
+ * - Every switch travels: a page swap, a window height change, a state toggle, a
+ *   value change, hover feedback. Nothing cuts, and nothing is silenced outside
+ *   `prefers-reduced-motion`.
+ * - A switch is a `transition` on the base rule when one element changes state,
+ *   and an `animation` when the element mounts already in the new state.
+ * - Durations stay inside the panel's budget: 150ms for feedback, 180–260ms for
+ *   travel. No `transition: all` — it would drag layout into the animation, and
+ *   the window is measured from this content.
+ * - A new switch needs a new entry in `tests/panel-motion.test.ts`.
+ */
+
+:root {
+  color-scheme: dark;
+  --page: #080a0d;
+  --tile: #0b0f18;
+  --tile-top: #111a26;
+  --card: rgba(255, 255, 255, 0.035);
+  --card-strong: rgba(255, 255, 255, 0.055);
+  --line: #22303f;
+  --line-soft: rgba(255, 255, 255, 0.07);
+  --text: #e6ebf5;
+  --text-dim: #93a6bd;
+  --text-faint: #7b8ca1;
+  --action: #77e6d8;
+  --mint: #77e6d8;
+  --lime: #c8ff4d;
+  --indigo: #9aa6ff;
+  --danger: #ff9090;
+  --warning: #f2c069;
+  --estimate: #ffa66b;
+  --mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 11px;
+  --tile-bottom: #090d15;
+  --control-border: #33465b;
+  --control-bg: rgba(255, 255, 255, 0.02);
+  --control-text: #b6c8dc;
+  --control-hover-border: #47607a;
+  --control-hover-text: #d8e6f6;
+  --active-border: #39695f;
+  --active-bg: #17423c;
+  --healthy-border: #39695f;
+  --card-border: #2b3a4c;
+  --card-shadow: rgba(0, 0, 0, 0);
+  --card-hover-shadow: rgba(0, 0, 0, 0.34);
+  --badge-bg: rgba(255, 255, 255, 0.06);
+  --detail-border: #2f4055;
+  --ring-track: #24313f;
+  --bar-track: #1d2a38;
+  --status-border: #35455a;
+  --notice-bg: rgba(8, 12, 18, 0.42);
+  /* The frosted cover's own tint. It dims; the blur that hides the values is on
+     the covered content itself (see `.is-covered`). */
+  --cover-bg: rgba(7, 11, 17, 0.5);
+  --toast-bg: rgba(17, 26, 38, 0.94);
+  --toast-shadow: rgba(0, 0, 0, 0.38);
+  --soft-button-bg: rgba(255, 255, 255, 0.03);
+  --button-text: #cddcec;
+  --primary-border: #2f6a60;
+  --primary-bg: #17423c;
+  --primary-text: #8fe8d6;
+  --input-border: #2d3d50;
+  --input-bg: #080d14;
+  --placeholder: #55657a;
+  --overlay-bg: rgba(4, 7, 11, 0.86);
+  --dialog-top: #131d2a;
+  --dialog-bottom: #0c1219;
+  --switch-bg: #16202c;
+  --switch-thumb: #7d8ea3;
+  /* No edge: on a near-black track the knob is the brighter shape already. The
+     light theme is the one that needs it (see its own value). */
+  --switch-thumb-shadow: rgba(0, 0, 0, 0);
+  --switch-on-border: #39695f;
+  --switch-on-bg: #17423c;
+  --switch-on-thumb: #77e6d8;
+  --config-border: #273647;
+  /* Accent tints that must follow the theme: a bright mint at low alpha reads on
+     a near-black panel and vanishes on a white one, so each tint has a light
+     value of its own instead of a hardcoded dark-theme colour. */
+  --ring-codex: rgba(119, 230, 216, 0.35);
+  --ring-glm: rgba(200, 255, 77, 0.3);
+  --ring-deepseek: rgba(154, 166, 255, 0.32);
+  --active-ring: rgba(119, 230, 216, 0.35);
+  --warning-border: rgba(242, 192, 105, 0.4);
+  /* Traffic amber ("slow", not "stop"): the peak card must read at a glance,
+     so this is its own saturated hue rather than the pale --warning. */
+  --peak: #ffb020;
+  --peak-border: rgba(255, 176, 32, 0.6);
+  --peak-shadow: rgba(255, 176, 32, 0.32);
+  --estimate-border: rgba(255, 166, 107, 0.4);
+  --danger-border: rgba(255, 144, 144, 0.4);
+  --spinner-track: rgba(119, 230, 216, 0.3);
+  --drag-bg: rgba(119, 230, 216, 0.09);
+  --drag-ring: rgba(119, 230, 216, 0.28);
+  --drag-shadow: rgba(0, 0, 0, 0.22);
+}
+
+
+/* macOS uses a quiet system-grey canvas behind white grouped surfaces. Platform
+   colours keep identifying data; system blue and green are reserved for actions
+   and enabled controls so those meanings do not compete. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --page: #e5e5ea;
+  --tile: #f2f2f7;
+  --tile-top: #f8f8fa;
+  --card: #ffffff;
+  --card-strong: #f2f2f7;
+  --line: #d1d1d6;
+  --line-soft: rgba(60, 60, 67, 0.12);
+  --text: #1c1c1e;
+  --text-dim: #54545a;
+  --text-faint: #6e6e73;
+  --action: #0066cc;
+  --mint: #0b7f75;
+  --lime: #438034;
+  --indigo: #5856d6;
+  --danger: #c9343a;
+  --warning: #855b0b;
+  --estimate: #a4511b;
+  --tile-bottom: #ededf2;
+  --control-border: #d1d1d6;
+  --control-bg: rgba(255, 255, 255, 0.78);
+  --control-text: #636366;
+  --control-hover-border: #aeb0b5;
+  --control-hover-text: #1c1c1e;
+  --active-border: #a8caeb;
+  --active-bg: #e8f2fb;
+  --healthy-border: #9fcfc8;
+  --card-border: #dcdce1;
+  --card-shadow: rgba(28, 28, 30, 0);
+  --card-hover-shadow: rgba(28, 28, 30, 0.16);
+  --badge-bg: #f2f2f7;
+  --detail-border: #dedee3;
+  --ring-track: #e5e5ea;
+  --bar-track: #e5e5ea;
+  --status-border: #d8d8dd;
+  --notice-bg: rgba(255, 255, 255, 0.92);
+  --cover-bg: rgba(255, 255, 255, 0.84);
+  --toast-bg: rgba(255, 255, 255, 0.97);
+  --toast-shadow: rgba(28, 28, 30, 0.14);
+  --soft-button-bg: #f2f2f7;
+  --button-text: #3a3a3c;
+  --primary-border: #005ebc;
+  --primary-bg: #0066cc;
+  --primary-text: #ffffff;
+  --input-border: #cfcfd4;
+  --input-bg: #ffffff;
+  --placeholder: #77777c;
+  --overlay-bg: rgba(229, 229, 234, 0.9);
+  --dialog-top: #ffffff;
+  --dialog-bottom: #f7f7fa;
+  --switch-bg: #e3e3e8;
+  /* The knob stays the white slider it is when the switch is on. A grey knob is
+     how macOS draws a control that cannot be used, and an off switch is not one:
+     the track carries the state, so off never reads as disabled. */
+  --switch-thumb: #ffffff;
+  --switch-thumb-shadow: rgba(28, 28, 30, 0.28);
+  --switch-on-border: #2fba50;
+  --switch-on-bg: #34c759;
+  --switch-on-thumb: #ffffff;
+  --config-border: #dcdce1;
+  --ring-codex: rgba(11, 127, 117, 0.18);
+  --ring-glm: rgba(67, 128, 52, 0.18);
+  --ring-deepseek: rgba(88, 86, 214, 0.18);
+  --active-ring: rgba(0, 102, 204, 0.2);
+  --warning-border: rgba(133, 91, 11, 0.25);
+  --peak: #8f5a00;
+  --peak-border: rgba(143, 90, 0, 0.5);
+  --peak-shadow: rgba(143, 90, 0, 0.26);
+  --estimate-border: rgba(164, 81, 27, 0.24);
+  --danger-border: rgba(201, 52, 58, 0.24);
+  --spinner-track: rgba(0, 102, 204, 0.16);
+  --drag-bg: rgba(0, 102, 204, 0.06);
+  --drag-ring: rgba(0, 102, 204, 0.2);
+  --drag-shadow: rgba(28, 28, 30, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  width: 350px;
+  /* Nothing about this panel scrolls sideways, and a trackpad's horizontal pan
+     must not be able to shift it off its own window: a page that overflows
+     sideways is panned by the first two-finger swipe, and what the user then sees
+     is the frame cut off at the left edge. The panel is exactly as wide as its
+     window, so the only way to overflow is a child that is too wide — which is a
+     bug to fix in that child, not something to scroll around.
+     `clip` and not `hidden`: a hidden box is still scrollable, clip is not. The
+     `hidden` line before it is the fallback for WebKit versions without `clip`. */
+  overflow-x: hidden;
+  overflow-x: clip;
+  /* The host window is transparent, so anything outside `.panel` must stay
+     see-through for the rounded corners to look right. */
+  background: transparent;
+  color: var(--text);
+  font: 400 12.5px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#panel-root {
+  height: 100%;
+  /* Enter/leave transition, driven by `panel://visibility` from the host. The
+     host waits `PANEL_HIDE_ANIMATION_MS` before hiding the window, so this
+     duration must stay below that constant or the fade is cut off. */
+  transform-origin: top center;
+  transition:
+    opacity 260ms ease,
+    transform 260ms cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+
+#panel-root[data-anim='enter'] {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.985);
+}
+
+#panel-root[data-anim='leave'] {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.99);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #panel-root {
+    transition: none;
+  }
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ------------------------------------------------------------------ shell */
+
+/*
+ * Scrollbars are hidden, not disabled. `.panel-body` keeps `overflow-y: auto`, so
+ * the wheel, the two-finger pan, keyboard scrolling and `scrollIntoView` all keep
+ * working — only the bar's painting is suppressed, which is what a 350px panel
+ * wants. The two spellings cover the two WebKit generations: `scrollbar-width`
+ * for current WebKit (which then ignores the pseudo-element, harmlessly, since it
+ * asks for the same result) and `::-webkit-scrollbar` for the older one.
+ */
+* {
+  scrollbar-width: none;
+}
+
+::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/*
+ * The panel shows readings and controls, not a document: nothing in it is meant
+ * to be copied out, so a stray drag across it must not paint a text selection —
+ * and on the header that same drag already belongs to the window
+ * (`data-tauri-drag-region`, see Panel.tsx). `user-select` is inherited by
+ * value, so this one declaration covers the header, the scrolling body, the
+ * footer and every overlay. Form fields are the exception, right below. Both
+ * spellings are kept: older WebKit only reads the prefixed one, the same reason
+ * `::-webkit-scrollbar` is spelled out above.
+ */
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 350px;
+  height: 100%;
+  min-height: 320px;
+  max-height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(158deg, var(--tile-top) 0%, var(--tile) 58%, var(--tile-bottom) 100%);
+  border-radius: 14px;
+  border: 1px solid var(--line-soft);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/*
+ * A selection inside a field is how a key or a base URL gets edited, so inputs
+ * stay selectable even though the surface around them is not. Without this they
+ * would inherit the `none` above, since a form field's own `auto` takes the
+ * parent's used value.
+ */
+.panel input,
+.panel textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 12px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  /*
+   * Collapse travel (a pinned panel that lost focus, see panel-header.ts): the
+   * height itself is written per frame in script — the window follows it
+   * through `data-panel-animating`, and a CSS height transition would race that
+   * with a second clock. CSS owns only the two steps height cannot express: the
+   * divider fading like any colour change, and the contents leaving the tab
+   * order exactly when the height lands on zero — a delayed `visibility` step
+   * keyed on the target state (`.panel[data-header-hidden]` below), the same
+   * idiom `.panel-tools` uses for its fade.
+   */
+  transition:
+    border-bottom-color 150ms ease,
+    visibility 0s linear 0s;
+  /*
+   * The header carries `data-tauri-drag-region` (see Panel.tsx), so it is the
+   * window's drag handle: advertise that with a move cursor. Interactive
+   * controls must keep their own affordance, so the rules below restore the
+   * clickable/text cursors on top of the inherited one.
+   */
+  cursor: move;
+}
+
+.panel[data-header-hidden] .panel-header {
+  visibility: hidden;
+  border-bottom-color: transparent;
+  /* The 240ms here is `PANEL_HEIGHT_ANIMATION_MS` (panel-height.ts): the step
+   * must land when the scripted height does. Discrete properties sit outside
+   * the timing budget on purpose — the travel is the height's. */
+  transition:
+    border-bottom-color 150ms ease,
+    visibility 0s linear 240ms;
+}
+
+.panel-header button,
+.panel-header a,
+.panel-header [role='button'],
+.panel-header [role='link'] {
+  cursor: pointer;
+}
+
+.panel-header input,
+.panel-header select,
+.panel-header textarea {
+  cursor: auto;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/*
+ * The tool row belongs to the overview. On a sub-page the header keeps its shape
+ * but the buttons fade out instead of blinking away, which is why the row stays
+ * mounted and is only marked `aria-hidden` (see Panel.tsx): one element with two
+ * states can be a `transition`, and a row that unmounted would have no exit to
+ * animate at all.
+ *
+ * `visibility` rides along on a delay so it lands after the fade. It is what takes
+ * the hidden buttons out of the tab order, and switching it at once would cut the
+ * fade short.
+ */
+.panel-tools {
+  display: flex;
+  gap: 5px;
+  flex: 0 0 auto;
+  transition:
+    opacity 150ms ease,
+    visibility 0s linear 0s;
+}
+
+.panel-tools[aria-hidden='true'] {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 150ms ease,
+    visibility 0s linear 150ms;
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: var(--control-text);
+  /* Hover tint, pressed pin and the disabled fade share this element, so the
+     feedback fades between them instead of snapping. */
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.icon-button svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-button:hover:not(:disabled) {
+  border-color: var(--control-hover-border);
+  color: var(--control-hover-text);
+}
+
+.icon-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.icon-button.is-active,
+.icon-button[aria-pressed="true"] {
+  border-color: var(--active-border);
+  background: var(--active-bg);
+  color: var(--action);
+}
+
+.panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* `overflow-y: auto` alone makes this axis scrollable too (CSS computes the
+     other axis of a scroll container to `auto`), which is how a wide card used to
+     hand the whole panel to a horizontal pan. `clip` cannot be used beside
+     `overflow-y: auto` — that pair is invalid and the used value falls back to
+     `hidden`, which is still pannable — so this axis is `hidden` and the content
+     is what has to fit: long provider messages break inside a word and the blocks
+     carrying them are allowed to shrink (see `.state-block`). */
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* The bottom inset is smaller than the other three: the status module below
+     carries a gap of its own, and the two together read as a loose end under the
+     last card. */
+  padding: 10px 10px 4px;
+}
+
+/* The frame's bottom status module: the sync line lives here rather than beside
+   the title, so the header stays a single line and the figure keeps one fixed
+   home on the overview and on the settings pages alike. */
+.panel-footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  /* No rule above it: the status line sits on the panel's own background, a
+     little clear of the content instead of fenced off from it. */
+  padding: 4px 108px 9px 12px;
+  font-size: 9.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-footer-dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  /* Lights up when a sync lands: the switch from idle to live is a state change,
+     so it fades rather than blinking on. */
+  transition: background-color 150ms ease;
+}
+
+.panel-footer-dot.is-live {
+  background: var(--mint);
+}
+
+/* The trigger stays outside the cards and reserves no conditional layout space. */
+.connection-trigger {
+  position: absolute;
+  right: 10px;
+  top: 1px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 2px 5px;
+  background: transparent;
+  color: var(--warning);
+  font: inherit;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  cursor: pointer;
+  transition:
+    opacity 150ms ease,
+    visibility 0s linear 150ms,
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+.connection-trigger.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 150ms ease,
+    visibility 0s,
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+.connection-trigger.is-visible:hover,
+.connection-trigger.is-visible[aria-expanded='true'] {
+  background: var(--control-bg);
+  border-color: var(--line-soft);
+}
+
+.link-button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--action);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+/* --------------------------------------------------------- page transition */
+
+/*
+ * A page swap is a short journey, not a cut: the page that arrives fades in from
+ * the side the user travelled towards — from the right when a platform's
+ * configuration opens, from the left when "返回用量总览" brings the overview back
+ * — and the heading that names the page comes with it instead of swapping in
+ * place. The page that leaves is simply gone: at 350px there is no room for two
+ * pages sliding past each other, and cross-fading would mean holding a second,
+ * still-live copy of a view in the DOM — the height measurement reads the body's
+ * first child, and every test query would have to tell the two apart.
+ *
+ * `Panel.tsx` keys the body and the heading by `viewKey`, so a swap remounts them
+ * and the animation below replays on its own; `PanelApp` reports the direction it
+ * travelled as `data-view-direction`. The tool row is deliberately not here: it
+ * stays mounted and fades between its two states (see `.panel-tools`), because a
+ * fading-out row is an exit and this animation only ever describes an arrival.
+ *
+ * Only `opacity` and `translateX` move. The window is exactly as tall as this
+ * content and the height is measured from these boxes, so a `scale` (the one the
+ * window's own fade uses) would be measured mid-flight and drag the window along
+ * with it; a translate cancels out of that measurement, which reads card bottoms
+ * relative to the content's own top. The layer WebKit promotes for these 180ms
+ * comes and goes between gestures, not during one, which is the case the window
+ * fade already relies on.
+ *
+ * Reduced motion is not handled here: the file's closing `*` fallback silences
+ * every animation at once, this one included.
+ */
+@keyframes panel-page-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes panel-page-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.panel[data-view-direction='forward'] .panel-heading,
+.panel[data-view-direction='forward'] .panel-body > * {
+  animation: panel-page-in-forward 180ms cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+
+.panel[data-view-direction='back'] .panel-heading,
+.panel[data-view-direction='back'] .panel-body > * {
+  animation: panel-page-in-back 180ms cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+
+/* ---------------------------------------------------------------- overview */
+
+.overview {
+  display: grid;
+  gap: 9px;
+}
+
+.provider-card {
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 10px;
+  box-shadow: 0 1px 2px var(--card-shadow);
+  /* 高峰/错峰 repaints the edge, while hover deepens the card's shadow to
+     separate it from the grouped background without disturbing layout. */
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.provider-card:hover {
+  box-shadow: 0 7px 18px var(--card-hover-shadow);
+}
+
+.provider-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+}
+
+.provider-head-spacer {
+  flex: 1 1 auto;
+}
+
+.brand-badge {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  background: var(--badge-bg);
+}
+
+.brand-codex {
+  color: var(--mint);
+  box-shadow: inset 0 0 0 1px var(--ring-codex);
+}
+
+.brand-glm {
+  color: var(--lime);
+  box-shadow: inset 0 0 0 1px var(--ring-glm);
+}
+
+.brand-deepseek {
+  color: var(--indigo);
+  box-shadow: inset 0 0 0 1px var(--ring-deepseek);
+}
+
+.provider-name {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.plan-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--detail-border);
+  border-radius: 999px;
+  font-size: 9.5px;
+  color: var(--text-dim);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.gear-button {
+  align-self: center;
+  width: 24px;
+  height: 24px;
+  border-color: transparent;
+  background: none;
+  color: var(--text-faint);
+  transition: color 150ms ease;
+}
+
+.gear-button:hover {
+  color: var(--action);
+}
+
+.gear-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.provider-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ------------------------------------------------------------ codex gauges */
+
+/* Shared wrapper for both quota display modes. The bottom clearance serves the
+   rows that may follow (Tokens, connection state), so it exists only while one
+   actually does: with no Tokens row and a healthy connection nothing follows,
+   and an unconditional padding stacks with the card's own into a strip the user
+   reads as the missing row's reserved seat. */
+.quota-display {
+  position: relative;
+}
+
+.quota-display:not(:last-child) {
+  padding-bottom: 10px;
+}
+
+/* Ring form: the two windows side by side, each ring centred in its own cell. */
+.gauge-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* -------------------------------------------------------------- glm layout */
+
+.quota-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px 14px;
+}
+
+.provider-card[data-provider='codex'] .quota-list:not(:last-child) {
+  padding-bottom: 10px;
+}
+
+.quota-label {
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.quota-value {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The reset line under the shape, in *both* forms.
+   It is placed by a shift rather than by two alignments: the design centres
+   it under the ring and puts it at the item's left edge under the bar, and the
+   line is the same line all the way through a morph, so switching sides would be
+   a jump the eye catches before anything else has moved. `--quota-reset-centre`
+   is half of what the item has left over (written by QuotaDisplay), and the shift
+   fades out with the drop: centred while the ring is, at the left once the bar
+   has landed. */
+.quota-reset {
+  justify-self: start;
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  transform: translateX(calc(var(--quota-reset-centre, 0px) * (1 - var(--quota-drop))));
+  /* Above the toggle, so this line can keep a click of its own … */
+  position: relative;
+  z-index: 2;
+  /* … and only where it has one: a reading with no action of its own lets the
+     click through to the mode toggle instead of swallowing it. */
+  pointer-events: none;
+  /* The reset wording turns into "等待刷新"; its tone carries the state change
+     while the words themselves are replaced. */
+  transition: color 150ms ease;
+}
+
+.quota-reset-waiting {
+  color: var(--warning);
+}
+
+/* Clickable reset line: flips countdown <-> absolute time. No hover styling on
+   purpose, same as the shape toggle: hovering must not suggest a state change
+   that only the click makes. */
+.quota-reset-toggle {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.quota-reset-toggle:focus-visible {
+  outline: 1px solid var(--action);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* The line's own click, where it has one: a countdown that flips to an absolute
+   time takes the click, and a reading with no action lets the mode toggle have it. */
+.quota-reset-toggle {
+  pointer-events: auto;
+}
+
+.quota-reset-toggle:disabled {
+  pointer-events: none;
+  cursor: default;
+}
+
+.glm-wallet {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: var(--card-strong);
+}
+
+/* Web usage belongs to the balance card, not another card nested inside it.
+   A quiet rule separates the two readings without drawing a second outline. */
+.deepseek-web {
+  margin-top: 6px;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+}
+
+.deepseek-web .frost-hint {
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 今日钱包消费 follows the design draft: label with its marker on one line,
+   the value on its own line below. */
+.wallet-spend {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+}
+
+.wallet-spend-value {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------- metric rows */
+
+.metric-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  /* Label and value always share one line: the amount never drops below its
+     label into an orphaned line. */
+  white-space: nowrap;
+}
+
+.metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.metric-value {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-row-strong .metric-value {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.metric-note {
+  margin: 0;
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+
+.tag {
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 8.5px;
+  white-space: nowrap;
+  /* 估算 / 已过期 swap the badge between tones on the same element. */
+  transition:
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.tag-confidence {
+  border: 1px solid var(--status-border);
+  color: var(--text-dim);
+}
+
+/* 估算 also warns, but must stay tellable apart from 已过期's amber, so it gets
+   its own orange instead of sharing --warning. */
+.tag-estimate {
+  border-color: var(--estimate-border);
+  color: var(--estimate);
+}
+
+/* ---------------------------------------------------------------- statuses */
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+}
+
+.status-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  /* 正常 / 注意 / 异常 repaint the dot as the connection changes. */
+  transition: background-color 150ms ease;
+}
+
+.status-dot-healthy {
+  background: var(--mint);
+}
+
+.status-dot-warning {
+  background: var(--warning);
+}
+
+.status-dot-danger {
+  background: var(--danger);
+}
+
+/* The label above carries the tone class, so the colour change lands here: the
+   status word keeps its place and changes tone instead of being replaced. */
+.status-label {
+  transition: color 150ms ease;
+}
+
+.status-row-healthy .status-label {
+  color: var(--mint);
+}
+
+.status-row-warning .status-label {
+  color: var(--warning);
+}
+
+.status-row-danger .status-label {
+  color: var(--danger);
+}
+
+.status-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+}
+
+/* Settings carry recovery steps here; truncation would hide the action to take. */
+.settings-view .status-row {
+  align-items: baseline;
+}
+
+.settings-view .status-label {
+  flex-shrink: 0;
+}
+
+.settings-view .status-detail {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.status-actions {
+  margin-left: auto;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  line-height: 1;
+  border: 1px solid var(--status-border);
+  color: var(--text-dim);
+  /* Source tags (平台数据 / 估算 / 已过期) change tone in place. */
+  transition:
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.status-chip-healthy {
+  border-color: var(--healthy-border);
+  color: var(--mint);
+}
+
+.status-chip-warning {
+  border-color: var(--warning-border);
+  color: var(--warning);
+}
+
+.status-chip-danger {
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------------- peak period */
+
+/* The one card state fed by the wall clock alone. Peak gets a warm edge and a
+   caption; off-peak is visually identical to a card with no schedule. The
+   corner stays mounted while a schedule is active so its arrival and departure
+   can travel instead of being cut off, but visibility and aria-hidden remove it
+   completely once off-peak. */
+.provider-card[data-period='peak'] {
+  border-color: var(--peak-border);
+  box-shadow: 0 0 0 1px var(--peak-border), 0 0 18px var(--peak-shadow);
+}
+
+.peak-corner {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--mint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(2px);
+  transition:
+    color 150ms ease,
+    opacity 150ms ease,
+    transform 160ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    visibility 0s linear 150ms;
+}
+
+.provider-card[data-period='peak'] .peak-corner {
+  color: var(--peak);
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    color 150ms ease,
+    opacity 150ms ease,
+    transform 160ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    visibility 0s linear 0s;
+}
+
+/* The settings editor: builtin hours read back, custom rows edit in place.
+   Each custom schedule is one inset row — weekdays, times, remove — so a
+   window reads (and dies) as a unit rather than as scattered controls. */
+.peak-builtin {
+  display: grid;
+  gap: 3px;
+}
+
+.peak-builtin-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.peak-builtin-time {
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.peak-editor {
+  display: grid;
+  gap: 5px;
+}
+
+.peak-window-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--soft-button-bg);
+}
+
+/* The weekday keys are one joined control: tighter than the theme switch's
+   segments (nine-char rows cannot afford nine-pixel padding) but the same
+   resting/lit treatment. */
+.peak-weekdays {
+  margin-left: 0;
+  flex: none;
+  gap: 1px;
+  padding: 1.5px;
+}
+
+.peak-weekdays .segmented-option {
+  padding: 0 4px;
+  font-size: 9px;
+  line-height: 15px;
+  border-radius: 5px;
+}
+
+/* Plain text typed as digits and normalized on blur — the native time field
+   renders whatever AM/PM costume the host locale prefers and will not shrink
+   to fit the row. Centered mono keeps the two clocks visually one range. */
+.peak-window-row .text-input {
+  width: 42px;
+  min-width: 0;
+  flex: none;
+  padding: 2.5px 3px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.peak-window-row .text-input::placeholder {
+  color: var(--placeholder);
+}
+
+.peak-dash {
+  flex: none;
+  color: var(--text-faint);
+  font-family: var(--mono);
+}
+
+.peak-remove {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 2px 3px;
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.peak-remove:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.peak-remove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.peak-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.peak-editor-actions .primary-button {
+  flex: none;
+}
+
+.peak-timezone-row .text-input {
+  width: 118px;
+  max-width: 100%;
+  min-width: 0;
+  flex: none;
+  margin-left: auto;
+}
+
+/* Frosted-glass hint over a card module that is not configured yet: the formal
+   layout stays underneath, the cover blurs it and carries the hint text.
+ *
+ * Two rules hold here, both learned the hard way — the fake values showed through
+ * the glass in the frames after a page swap (returning from a settings page
+ * remounts the card, because the body is keyed by `viewKey`):
+ *
+ * 1. The cover is instant, and nothing in it animates. What it covers is the
+ *    placeholder data the card falls back to — `GlmCard` renders 28% / 16% and a
+ *    ¥42.60 wallet so the shape stays realistic — so any entrance, of the cover or
+ *    of its text, spends its whole duration showing exactly what it hides.
+ * 2. The hiding is done by `filter` on the covered content (`.is-covered`), never
+ *    by `backdrop-filter`. A backdrop is sampled late — or not at all — for an
+ *    element that mounts inside an animating card, and this cover always mounts
+ *    that way; with the blur still missing, a thin tint leaves the placeholder
+ *    numbers perfectly readable. A plain `filter` is painted with the content it
+ *    blurs, so the glass is frosted on the very first frame. */
+.frost-hint {
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-content: center;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--cover-bg);
+  color: inherit;
+  cursor: default;
+  text-align: center;
+}
+
+/* Everything a cover sits on: blurred and dimmed here, not by a backdrop filter.
+   The cover itself is excluded, so the hint stays sharp. */
+.is-covered > :not(.frost-hint) {
+  filter: blur(4px);
+  opacity: 0.55;
+}
+
+.frost-hint-label {
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.frost-hint-detail {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+
+/*
+ * The message stack: bottom centre, growing upward, newest nearest the bottom
+ * edge, so a second message pushes the first one up rather than replacing it.
+ *
+ * It hangs off the frame's bottom row (`bottom: 100%` on a wrapper that holds the
+ * footer, so no footer height is hardcoded here) and sits outside the body's flow
+ * on purpose: a row of its own inside the body would push every card down and ask
+ * the host for a taller window — `panel-height.ts` measures the cards. The stack
+ * out-paints the cards and their frost covers and the lifted row of a drag
+ * (levels 1–2) and stays under the `.overlay` dialog layer.
+ */
+.panel-bottom {
+  /* The stack's containing block. The wrapper hugs the footer, so it adds no
+     height of its own and the window's chrome measurement is unaffected. */
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* Opened only on demand. Its width and height never enter card measurement. */
+.connection-details {
+  position: absolute;
+  z-index: 4;
+  right: 10px;
+  bottom: 100%;
+  width: min(320px, calc(100% - 20px));
+  max-height: min(360px, 60vh);
+  margin-bottom: 7px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 11px;
+  padding: 10px;
+  background: var(--toast-bg);
+  box-shadow: 0 8px 20px var(--toast-shadow);
+  color: var(--text);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity 150ms ease,
+    transform 170ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    visibility 0s linear 170ms;
+}
+
+.connection-details.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition:
+    opacity 150ms ease,
+    transform 170ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    visibility 0s;
+}
+
+.connection-details-title {
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.connection-details-list {
+  display: grid;
+  gap: 7px;
+}
+
+.connection-detail {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 7px;
+  min-width: 0;
+}
+
+.connection-detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.connection-detail-head span {
+  flex-shrink: 0;
+  color: var(--warning);
+}
+
+.connection-detail p {
+  margin: 4px 0 0;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.panel-toasts {
+  position: absolute;
+  z-index: 3;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  /* The stack hugs its messages: a full-width bar over the cards reads as a piece
+     of furniture that arrived, not as a note passing through. */
+  width: max-content;
+  max-width: calc(100% - 20px);
+  margin-bottom: 8px;
+  /* The gaps between toasts must not swallow a click meant for the content. */
+  pointer-events: none;
+}
+
+.panel-toast {
+  max-width: 100%;
+  pointer-events: auto;
+  /* Text only, so the padding is symmetric and the capsule is the height of one
+     line. Nothing sits at the right edge to make it look off-centre. */
+  padding: 6px 11px;
+  /* Half of the one-line height: a capsule for one line, a rounded card for two. */
+  border-radius: 14px;
+  border: 1px solid var(--line-soft);
+  /* Opaque-ish, because it floats over cards and their bars; the blur keeps the
+     edge behind it from reading as a hard cut. */
+  background: var(--toast-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 20px var(--toast-shadow);
+  font-size: 11px;
+  line-height: 1.35;
+  /* Neutral: the message names what happened, and the tone is left to the dwell
+     time and the ARIA role rather than to a colour. */
+  color: var(--text);
+  animation: panel-toast-in 160ms ease-out;
+  /*
+   * Leaving is a state, not an unmount, so the exit is a transition rather than
+   * an animation — which also means a repeated message can pull a leaving toast
+   * back without it remounting.
+   */
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+
+.panel-toast.is-leaving {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+/* From below: the stack grows upward, so a new message slides up into the slot
+   nearest the bottom edge. */
+@keyframes panel-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.state-block {
+  display: grid;
+  gap: 7px;
+  justify-items: start;
+  /* Provider messages arrive as English sentences and occasionally as one long
+     token (a URL, a header value). Left to itself such a word is a box's
+     min-content width, which widens the card, the body and the window's document
+     in turn; breaking inside the word keeps the frame's width a property of the
+     frame. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 14px 11px;
+  border: 1px dashed var(--card-border);
+  border-radius: var(--radius);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.state-block strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.state-block p {
+  margin: 0;
+}
+
+.state-loading {
+  grid-auto-flow: column;
+  align-items: center;
+  justify-content: start;
+  border-style: solid;
+}
+
+.spinner {
+  width: 11px;
+  height: 11px;
+  border: 1.6px solid var(--spinner-track);
+  border-top-color: var(--action);
+  border-radius: 50%;
+  animation: panel-spin 0.9s linear infinite;
+}
+
+@keyframes panel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.state-hint {
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+
+/* ---------------------------------------------------------------- controls */
+
+.ghost-button,
+.primary-button {
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 10.5px;
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
+  color: var(--button-text);
+  /* Button labels stay on one line; a tight row shrinks elsewhere. */
+  white-space: nowrap;
+  /* Hover, the primary tone and the disabled fade all land on this element. */
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.ghost-button:hover:not(:disabled) {
+  border-color: var(--control-hover-border);
+}
+
+.primary-button {
+  border-color: var(--primary-border);
+  background: var(--primary-bg);
+  color: var(--primary-text);
+}
+
+.primary-button:disabled,
+.ghost-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.text-input,
+.select-input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.text-input::placeholder {
+  color: var(--placeholder);
+}
+
+.input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.input-row .text-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The submit button keeps its natural width: the input is what shrinks when
+   the row runs out of space, so the label never wraps. */
+.input-row .primary-button {
+  flex: none;
+}
+
+/* The single-choice groups share one moving pill; the weekday multi-select
+   keeps independent fills because several days can be selected at once. */
+.segmented {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  padding: 2px;
+  border: 1px solid var(--control-border);
+  border-radius: 9px;
+  background: var(--control-bg);
+}
+
+.segmented-slider {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  border-radius: 7px;
+  background: var(--active-bg);
+  box-shadow: inset 0 0 0 1px var(--active-ring);
+  pointer-events: none;
+  transition:
+    transform 180ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    width 240ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.segmented-option {
+  position: relative;
+  z-index: 1;
+  padding: 3px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  /* Weekday choices still light their own fill and ring; single-choice text
+     changes tone while the shared pill carries the selection. */
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease,
+    opacity 150ms ease;
+}
+
+.peak-weekdays .segmented-option:hover:not(:disabled):not(.is-active) {
+  color: var(--text);
+}
+
+.segmented-option.is-active {
+  background: var(--active-bg);
+  color: var(--action);
+  box-shadow: inset 0 0 0 1px var(--active-ring);
+}
+
+.has-slider .segmented-option.is-active {
+  background: transparent;
+  box-shadow: none;
+}
+
+.segmented-option:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Saving still blocks repeat clicks; its temporary disabled state must not
+   dim the text under the moving pill or produce a blink on pointer release. */
+.has-slider .segmented-option:disabled {
+  opacity: 1;
+}
+
+/* ----------------------------------------------------------------- overlays */
+
+/* A dialog covers everything, the floating message included. Named rather than
+   left to DOM order, which is what used to decide it by accident. */
+.overlay {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: var(--overlay-bg);
+  backdrop-filter: blur(2px);
+}
+
+.dialog {
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 11px;
+  border: 1px solid var(--input-border);
+  border-radius: 12px;
+  background: linear-gradient(160deg, var(--dialog-top), var(--dialog-bottom));
+  display: grid;
+  gap: 8px;
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog-title {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.dialog-note {
+  margin: 0;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.manage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  /* Every row keeps the same box height for pointer reordering. A radius here
+     bends the separator at both ends, as in the settings screenshot. */
+  border-top: 1px solid var(--line-soft);
+  /*
+   * Every row is a positioned, composited layer from the moment the settings
+   * page renders — never from the moment a drag starts.
+   *
+   * The panel window is transparent, so the whole surface is re-composited
+   * whenever the layer tree changes shape, and on a transparent window that
+   * reads as the panel blinking out and back in. WebKit promotes an element on
+   * its own once its transform starts changing, and drops the layer again when
+   * the transform settles, so a drag used to add and remove a layer mid-gesture.
+   * Promoting up front and keeping the stacking order stable means the drag only
+   * ever changes transform *values* and paint order inside layers that already
+   * exist.
+   */
+  position: relative;
+  z-index: 1;
+  will-change: transform;
+  /* Being lifted is a state and fades in with the row's tint and shadow. The
+     movement is not: that transform belongs to the drag code and must never be
+     transitioned, or the row would trail the cursor. */
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.manage-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The row under the pointer: lifted above its neighbours and moved by the drag
+   code's own transform — never by a transition, or it would trail the cursor.
+   Only paint order changes here; no layer is created or destroyed. */
+.manage-row.is-dragging {
+  z-index: 2;
+  background: var(--drag-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--drag-ring),
+    0 6px 16px var(--drag-shadow);
+}
+
+.manage-row.is-dragging .drag-handle {
+  cursor: grabbing;
+}
+
+/* The grip is the drag source; clicking it does nothing else. */
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 24px;
+  color: var(--text-faint);
+  cursor: grab;
+  /* Pointer-driven drag: never let the webview turn the gesture into a scroll. */
+  touch-action: none;
+  transition: color 150ms ease;
+}
+
+.drag-handle svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.drag-handle:hover {
+  color: var(--text-dim);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle:focus-visible {
+  outline: 1px solid var(--action);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+.manage-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.manage-text strong {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.manage-desc {
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+
+.switch {
+  appearance: none;
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--control-border);
+  background: var(--switch-bg);
+  position: relative;
+  /* Track and rim light up together as the platform is enabled, and the switch
+     fades out and back around its own save (see `:disabled` below) — never for
+     a settings write it is not part of. */
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    opacity 150ms ease;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--switch-thumb);
+  /* The knob needs an edge of its own in the light theme, where it is white on a
+     light track: without it the off state is a flat disc rather than a slider. */
+  box-shadow: 0 1px 2px var(--switch-thumb-shadow);
+  /* The thumb is the switch: it slides and takes the accent colour. */
+  transition:
+    transform 150ms ease,
+    background-color 150ms ease;
+}
+
+.switch:checked {
+  border-color: var(--switch-on-border);
+  background: var(--switch-on-bg);
+}
+
+.switch:checked::after {
+  transform: translateX(14px);
+  background: var(--switch-on-thumb);
+}
+
+/* Disabled is the panel's usual fade, so it never looks like the off state. */
+.switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dialog-done {
+  justify-self: stretch;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------- settings */
+
+.app-settings,
+.settings-view {
+  display: grid;
+  gap: 9px;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  transition: color 150ms ease;
+}
+
+.back-button svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.back-button:hover {
+  color: var(--action);
+}
+
+.config-block {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid var(--config-border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.block-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.config-block h3 {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.credential-form {
+  display: grid;
+  gap: 5px;
+}
+
+.field-label {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+
+.credential-status {
+  display: flex;
+  align-items: center;
+  /* A failure reason can be a full sentence. Without wrapping it competed with
+     the stored state for the same row and squeezed it to one character per line
+     ("尚未配置" stacked vertically); with it, the reason takes its own line below
+     and the state keeps the row. */
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* The stored state (mask or 尚未配置) and the delete link are never the flexible
+   ones: they are short, they are the answer to "did my save work", and a long
+   service message must not erode them. */
+.credential-status > span:first-child {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.credential-status .link-button {
+  margin-left: auto;
+}
+
+/* Feedback claims its own row, so a sentence-length reason wraps at the panel's
+   width instead of fighting the state beside it, and `anywhere` keeps a message
+   with no spaces (an id, a URL) from pushing the panel sideways. */
+.credential-feedback {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  animation: credential-feedback-in 160ms ease-out;
+}
+
+@keyframes credential-feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.feedback-success {
+  color: var(--mint);
+}
+
+.feedback-error {
+  color: var(--danger);
+}
+
+.feedback-progress {
+  color: var(--text-dim);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-text {
+  display: grid;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-label {
+  font-size: 10.5px;
+}
+
+.setting-desc {
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+
+.select-input {
+  width: auto;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* ---------------------------------------------------------------- the morph
+   One quota item draws both display forms: the ring and the bar are the same
+   stroke along one path, and `QuotaDisplay` rewrites that path's geometry a
+   frame at a time (see quota-morph.ts for the three beats). Nothing here is a
+   transition — a path cannot be interpolated by CSS — so this block only says
+   where the pieces sit for a given `--quota-drop`, and the resting values are
+   written so that both endpoints of the morph are also what the sheet says on
+   its own. That is what lets the frame loop hand the item back to CSS when it
+   lands, with no numbers written twice. */
+
+.quota-item {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  /* The morph's layout budget, in one place:
+     - `--quota-ring-box` is the ring's slot: the 68px ring plus its stroke and its
+       clearance, which is also the height the item has in ring form;
+     - `--quota-bar-box` is the bar's slot: the 4px bar and the round caps' overhang;
+     - `--quota-bar-row` is what the bar's own label line takes above it — one line
+       of 10.5/11.5px text (17px) plus this grid's gap. The shape drops by exactly
+       that when the label line arrives, so the bar lands where the bar form puts it.
+     `--quota-drop` runs 0..1 and is written per frame while the morph plays. */
+  --quota-ring-box: 82px;
+  --quota-bar-box: 8px;
+  --quota-bar-row: 20px;
+  --quota-drop: 0;
+  --quota-head: 0;
+  /* The height the item has in each form: the ring's box, becoming the bar's box
+     plus the row its label line takes. Written once because the empty slot and the
+     stroke's own box are exactly this. */
+  --quota-slot-height: calc(
+    var(--quota-ring-box) + (var(--quota-bar-box) + var(--quota-bar-row) - var(--quota-ring-box)) * var(--quota-drop)
+  );
+}
+
+.quota-item[data-mode='bar'] {
+  --quota-drop: 1;
+  --quota-head: 1;
+}
+
+/* The shape's own box in the layout. The stroke is drawn by the absolutely
+   positioned toggle over the whole item, so this empty block is what the item's
+   height in each form comes from — and it keeps the shape out of deciding how wide
+   the item is. */
+.quota-shape-slot {
+  /* Not `relative`: an empty spacer has nothing to position inside it, and while it
+     was positioned it painted over the toggle and swallowed the clicks the toggle
+     exists to take. */
+  width: 100%;
+  height: var(--quota-slot-height);
+}
+
+/* The toggle is the shape's own block, not the stroke: a 4px bar is a poor
+   target, and the ring's inside belongs to the ring it is drawn around. In ring
+   form that block is the ring's box — interior and all; in bar form it is the
+   label line above the bar plus the bar itself, because those two read as one
+   control (the block is the slot's height, which is exactly that pair). The reset
+   reading sits below the block, where it keeps a click of its own. The toggle sits
+   *behind* the content (`z-index: 0`), which is what lets that reading take its
+   click without anything having to be made click-through. */
+.quota-shape-button {
+  appearance: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: var(--quota-slot-height);
+  z-index: 0;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.quota-shape-button:disabled {
+  cursor: default;
+}
+
+/* The SVG carries the shape's own coordinates, which never change: 82 units of
+   ring space, with the drop applied as a transform. Its height is the slot's, so
+   the stroke starts at the item's top whatever the button spans — and it is
+   placed absolutely because a button centres its content, which would otherwise
+   drop the stroke half the item's height down the card. */
+.quota-shape {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--quota-slot-height);
+  overflow: visible;
+  transform: translateY(calc(var(--quota-bar-row) * var(--quota-drop)));
+  /* Decoration inside the toggle, never a target of its own. `overflow: visible`
+     plus the drop would otherwise let the drawing's box — 20px lower than the
+     button's in bar form — extend the hot area down over the reset reading, which
+     is the one row the shape must not claim. Hits fall through to the button where
+     the two overlap and to the item where they do not. */
+  pointer-events: none;
+}
+
+.quota-shape-track {
+  fill: none;
+  /* A palette token, not a literal: a hex here keeps the dark value under the
+     light theme, which `tests/panel-palette.test.ts` fails on. */
+  stroke: var(--ring-track);
+  stroke-linecap: round;
+}
+
+.quota-shape-fill {
+  fill: none;
+  stroke: var(--mint);
+  stroke-linecap: round;
+  /* The quota moves: an arc that jumps to its new length reads as a different
+     reading instead of the same one changing. The value is carried by
+     `stroke-dasharray` against `pathLength="100"`, so the transition covers the
+     reading and never the morph — the path's own length changes every frame
+     without touching this property. */
+  transition:
+    stroke-dasharray 260ms ease,
+    stroke 150ms ease;
+}
+
+/* A successful manual refresh remounts the reading with a fresh replay key.
+   The final dasharray is still the path's own value, including when it has not
+   changed since the previous collection. */
+.quota-item.is-replaying .quota-shape-fill {
+  animation: quota-refresh-fill 260ms ease both;
+}
+
+@keyframes quota-refresh-fill {
+  from { stroke-dasharray: 0 100; }
+}
+
+/* The old counter changed glyphs without moving them. A clipped digit column
+   now travels through one full turn, and the exact text stays accessible. */
+.replay-number {
+  position: relative;
+  white-space: nowrap;
+}
+
+.replay-number-target {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.rolling-number-reel {
+  display: inline-block;
+  width: 1ch;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: -0.08em;
+}
+
+.rolling-number-strip {
+  display: block;
+  animation: replay-digit-roll 260ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
+}
+
+.rolling-number-digit {
+  display: block;
+  height: 1em;
+  line-height: 1em;
+  text-align: center;
+}
+
+@keyframes replay-digit-roll {
+  from { transform: translateY(0); }
+}
+
+/* The quota's ring value is otherwise SVG text, whose text content cannot be
+   rolled with HTML digit columns. Place the reel over that text only on replay. */
+.quota-item.is-replaying .quota-item-ringtext .quota-value {
+  opacity: 0;
+}
+
+.quota-ring-replay {
+  position: absolute;
+  top: 25px;
+  left: 0;
+  width: 100%;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  line-height: 22px;
+  text-align: center;
+  opacity: calc(1 - var(--quota-head));
+}
+
+.quota-ring-replay .replay-number-percent {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.quota-item:nth-child(2) .quota-shape-fill {
+  stroke: var(--indigo);
+}
+
+/* Ring-centred percent + label: SVG text, so it is centred on the ring's own
+   centre rather than on whatever box the form happens to have. */
+.quota-item-ringtext {
+  fill: var(--text);
+}
+
+.quota-item-ringtext .quota-value {
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.quota-item-ringtext .pct {
+  font-size: 10px;
+  fill: var(--text-dim);
+}
+
+.quota-item-ringtext .quota-label {
+  font-size: 10.5px;
+  fill: var(--text-faint);
+}
+
+/* The bar's label line. It is out of the flow in both forms — in ring form it is
+   simply invisible — so mounting it can never move the shape, and the shape's
+   drop is the only thing that carries the bar down to it. Its opacity is the
+   drop itself: the design's third beat is the bar landing and the words
+   arriving together. */
+.quota-item-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  z-index: 1;
+  /* Its own value, not the drop: the words come in over their own slower ramp
+     (`headTextOpacity`), starting before the bar lands and finishing with it. */
+  opacity: var(--quota-head, 0);
+  /* Only words: the toggle behind it keeps every click. */
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- motion off */
+
+/*
+ * The last clause of the motion rules: everything above is motion, and motion is
+ * a preference. The specific blocks earlier in this file say what a switch does
+ * with it; this one is the blanket the rule needs — a switch added later inherits
+ * the escape without its author remembering to opt in, and the guard test reads
+ * this block to confirm no animated switch can outlive the preference.
+ *
+ * The loading spinner stops with the rest: `state-loading` carries its own text,
+ * so nothing is lost when the rotation goes away.
+ *
+ * `!important` is load-bearing: a bare `*` rule loses to every class rule in the
+ * file, and each of those declares the transition this rule exists to remove.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
