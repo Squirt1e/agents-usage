@@ -91,7 +91,7 @@ export function createRuntime(env: Record<string, string | undefined> = process.
     config,
     clientDir: options.clientDir ?? builtClientDir,
     collectorVersions: options.collectorVersions ?? {
-      dashboard: '0.1.0', codex: installedCodexVersion(), glm: 'monitor-v1', deepseek: 'balance-v1'
+      dashboard: '1.0.0', codex: installedCodexVersion(), glm: 'monitor-v1', deepseek: 'balance-v1'
     }
   });
   let listening = false;
