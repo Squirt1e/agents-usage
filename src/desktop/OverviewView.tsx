@@ -107,7 +107,9 @@ export function OverviewView(props: OverviewViewProps) {
                   key={provider}
                   view={view}
                   peak={peak}
+                  quotaConfigured={props.settings.credentials.glm.configured === true}
                   walletEnabled={props.settings.glmWalletEnabled}
+                  walletConfigured={props.settings.credentials['glm-wallet'].configured === true}
                   quotaDisplayMode={props.settings.glmQuotaDisplay}
                   quotaValueMode={props.settings.quotaValueMode}
                   resetTimeFormat={props.settings.glmResetFormat}
@@ -123,6 +125,7 @@ export function OverviewView(props: OverviewViewProps) {
                 key={provider}
                 view={view}
                 peak={peak}
+                balanceConfigured={props.settings.credentials.deepseek.configured === true}
                 webEnabled={props.settings.deepseekWebEnabled}
                 webConfigured={props.settings.credentials['deepseek-web'].configured === true}
                 replayKey={props.replayKeys?.deepseek}

@@ -422,9 +422,48 @@ describe('per-platform configuration', () => {
 
     await waitFor(() => expect(client.methodCalls('validateCredential')).toHaveLength(1));
     expect(client.methodCalls('validateCredential')[0]).toEqual(['deepseek', 'sk-live-7788']);
-    expect(await screen.findByText(/密钥已验证并保存 ····7788/)).toBeInTheDocument();
-    expect(screen.getByText('已保存 ····7788')).toBeInTheDocument();
+    // The mask row *is* the confirmation: a save leaves the form looking exactly
+    // like the same form at rest, with no extra sentence and no displaced delete
+    // button.
+    expect(await screen.findByText('已保存 ····7788')).toBeInTheDocument();
+    expect(screen.queryByText(/已验证并保存/)).not.toBeInTheDocument();
     expect(input.value).toBe('');
+    // And the freshly configured connection is collected right away, so walking
+    // back to the overview shows its data instead of an empty card.
+    await waitFor(() => expect(client.methodCalls('refresh')).toEqual([['deepseek']]));
+  });
+
+  it('keeps the delete button on the status line while a reason fills the row below', async () => {
+    const client = createFakeUsageClient({
+      snapshot: panelSnapshot(),
+      validateError: 'DeepSeek rejected the API key'
+    });
+    renderPanel({ client });
+    fireEvent.click(await screen.findByRole('button', { name: '配置 DeepSeek' }));
+
+    const input = (await screen.findByLabelText('DeepSeek API Key')) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'sk-wrong' } });
+    fireEvent.click(screen.getByRole('button', { name: '验证并替换' }));
+    await screen.findByRole('alert');
+
+    // The message claims a full row of its own, so it has to come last: a flex row
+    // breaks in DOM order, and a button written after it was pushed onto its own
+    // line under the state.
+    const row = screen.getByText('已保存 ····9012').parentElement!;
+    const children = [...row.children];
+    expect(children.map((node) => node.tagName.toLowerCase())).toEqual(['span', 'button', 'span']);
+    expect(children[1]).toHaveTextContent('删除');
+    expect(children[2]).toHaveClass('credential-feedback');
+  });
+
+  it('collects GLM as soon as the experimental wallet connection is switched on', async () => {
+    const { client } = renderPanel({ settings: { glmWalletEnabled: false } });
+    fireEvent.click(await screen.findByRole('button', { name: '配置 GLM' }));
+    await screen.findByTestId('settings-glm');
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '启用实验钱包连接' }));
+
+    await waitFor(() => expect(client.methodCalls('refresh')).toEqual([['glm']]));
   });
 
   it('deletes a platform credential from its own form', async () => {
@@ -435,6 +474,30 @@ describe('per-platform configuration', () => {
     fireEvent.click(screen.getByRole('button', { name: '删除 DeepSeek API Key' }));
     await waitFor(() => expect(client.methodCalls('deleteCredential')).toEqual([['deepseek']]));
     expect(await screen.findByText(/已删除该平台账号凭据/)).toBeInTheDocument();
+    // And the platform is collected again, so the connection's status stops
+    // claiming 数据正常 for a reading whose key no longer exists.
+    await waitFor(() => expect(client.methodCalls('refresh')).toEqual([['deepseek']]));
+  });
+
+  it('collects the platform again when a setting changes what is collected', async () => {
+    // Which endpoint answers (region), which CLI collects Codex, and whether an
+    // experimental connection is on at all: each of them invalidates the reading
+    // on screen, so the card is refreshed instead of showing the previous answer.
+    const { client } = renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: '配置 GLM' }));
+    await screen.findByTestId('settings-glm');
+
+    fireEvent.click(screen.getByRole('button', { name: '国际区' }));
+    await waitFor(() => expect(client.methodCalls('refresh')).toEqual([['glm']]));
+
+    fireEvent.click(screen.getByRole('button', { name: '返回用量总览' }));
+    fireEvent.click(await screen.findByRole('button', { name: '配置 Codex' }));
+    await screen.findByTestId('settings-codex');
+    const path = screen.getByLabelText('Codex CLI 绝对路径') as HTMLInputElement;
+    fireEvent.change(path, { target: { value: '/opt/homebrew/bin/codex' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => expect(client.methodCalls('refresh')).toEqual([['glm'], ['codex']]));
   });
 });
 

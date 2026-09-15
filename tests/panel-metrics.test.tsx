@@ -33,6 +33,7 @@ const cardProps = {
   resetTimeFormat: 'countdown' as const,
   onOpenSettings: noop,
   onRefresh: noop,
+  balanceConfigured: true,
   webEnabled: false,
   webConfigured: false
 };
@@ -312,6 +313,10 @@ describe('GLM quota and wallet', () => {
     states: PanelSnapshot,
     options: {
       enabled?: boolean;
+      /** `credentials.glm.configured`: false turns the quota module into its cover. */
+      quotaConfigured?: boolean;
+      /** `credentials['glm-wallet'].configured`: false covers the wallet module. */
+      walletConfigured?: boolean;
       quotaDisplayMode?: 'ring' | 'bar';
       quotaValueMode?: 'remaining' | 'used';
       onToggleResetTimeFormat?(): void;
@@ -320,7 +325,9 @@ describe('GLM quota and wallet', () => {
     return render(
       <GlmCard
         view={providerView(states, 'glm')}
+        quotaConfigured={options.quotaConfigured ?? true}
         walletEnabled={options.enabled ?? true}
+        walletConfigured={options.walletConfigured ?? true}
         onToggleResetTimeFormat={options.onToggleResetTimeFormat}
         {...cardProps}
         quotaDisplayMode={options.quotaDisplayMode ?? 'bar'}
@@ -408,6 +415,8 @@ describe('GLM quota and wallet', () => {
     view.rerender(
       <GlmCard
         view={providerView(snapshotOf([providerStateOf('glm', glmMetrics)]), 'glm')}
+        quotaConfigured
+        walletConfigured
         walletEnabled={false}
         {...cardProps}
         quotaDisplayMode="bar"
@@ -550,6 +559,8 @@ describe('GLM quota and wallet', () => {
     const view = render(
       <GlmCard
         view={providerView(snapshotOf([providerStateOf('glm', glmMetrics.slice(0, 2), { connection: { provider: 'glm', connection: 'quota' } })]), 'glm')}
+        quotaConfigured
+        walletConfigured
         walletEnabled
         {...cardProps}
         quotaDisplayMode="bar"
@@ -566,6 +577,8 @@ describe('GLM quota and wallet', () => {
     view.rerender(
       <GlmCard
         view={providerView(snapshotOf([providerStateOf('glm', glmMetrics.slice(0, 2), { connection: { provider: 'glm', connection: 'quota' } })]), 'glm')}
+        quotaConfigured
+        walletConfigured
         walletEnabled
         {...cardProps}
         quotaDisplayMode="bar"
@@ -622,6 +635,28 @@ describe('DeepSeek balances and spend', () => {
     expect(screen.queryByText(/估算/)).not.toBeInTheDocument();
     expect(screen.queryByText(/98\.47/)).not.toBeInTheDocument();
     expect(screen.queryByText(/4\.00/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the balance module shaped while the key is not configured', () => {
+    // The balance is the platform's own official answer to the API key, so an
+    // unconfigured card keeps the module's formal layout under the frosted cover
+    // instead of collapsing to a header with nothing on it. The identity arrives
+    // the way the service really sends it — in `connections` alone, because a
+    // connection that never succeeded has no snapshot to carry one.
+    const unconfigured: DesktopProviderState = {
+      provider: 'deepseek',
+      error: { kind: 'missing_config', message: 'DeepSeek API key is not configured', at: '2026-09-10T08:00:00.000Z' },
+      connections: [{ provider: 'deepseek', connection: 'wallet' }]
+    };
+    render(
+      <DeepSeekCard view={providerView(snapshotOf([unconfigured]), 'deepseek')} {...cardProps} />
+    );
+
+    const module = screen.getByTestId('deepseek-balance');
+    expect(module).toHaveTextContent('剩余余额');
+    expect(module).toHaveTextContent('¥ 86.42');
+    expect(module.className).toContain('is-covered');
+    expect(screen.getByTestId('deepseek-balance-mask')).toHaveTextContent('配置 API Key 后显示余额');
   });
 
   it('shows only billed spend from an enabled and configured web connection', () => {

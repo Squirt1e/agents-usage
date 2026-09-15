@@ -43,6 +43,7 @@ describe('the card period row', () => {
     const snapshot = deepseekSnapshot();
     render(
       <DeepSeekCard
+      balanceConfigured
       webEnabled={false}
       webConfigured={false}
         view={providerView(snapshot, 'deepseek')}
@@ -64,6 +65,7 @@ describe('the card period row', () => {
     const snapshot = deepseekSnapshot();
     render(
       <DeepSeekCard
+      balanceConfigured
       webEnabled={false}
       webConfigured={false}
         view={providerView(snapshot, 'deepseek')}
@@ -80,6 +82,7 @@ describe('the card period row', () => {
     const snapshot = deepseekSnapshot();
     render(
       <DeepSeekCard
+        balanceConfigured
         webEnabled={false}
         webConfigured={false}
         view={providerView(snapshot, 'deepseek')}
@@ -111,7 +114,9 @@ describe('the card period row', () => {
         quotaDisplayMode="ring"
         quotaValueMode="used"
         resetTimeFormat="countdown"
+        quotaConfigured
         walletEnabled
+        walletConfigured
         onOpenSettings={noop}
         onToggleResetTimeFormat={noop}
         onToggleQuotaDisplay={noop}

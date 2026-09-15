@@ -57,6 +57,40 @@ const CONNECTION_TAG = 'connection';
 /** The empty answer to "which cards are on screen", shared so a panel with none reuses one set. */
 const NO_PROVIDERS: ReadonlySet<ProviderId> = new Set<ProviderId>();
 
+/**
+ * The platform a credential belongs to.
+ *
+ * Both experimental connections sit on the platform whose card shows them, so
+ * saving either one collects that platform: the wallet credential is GLM's and the
+ * web token is DeepSeek's.
+ */
+function providerOfCredential(target: CredentialTarget): ProviderId {
+  return target === 'glm' || target === 'glm-wallet' ? 'glm' : 'deepseek';
+}
+
+/**
+ * The platforms a settings write makes stale, so they are collected again.
+ *
+ * Everything else the panel can write is presentation — theme, quota value mode,
+ * reset formats, platform visibility and order, peak schedules — and needs no
+ * collection. A credential is handled separately (saving or deleting one always
+ * keeps the two in step), while these are the writes that change *what* would be
+ * collected: which region's endpoint answers, which CLI collects Codex, and which
+ * experimental connections are on at all.
+ *
+ * Without this, a region switch kept showing the previous region's quota and a
+ * corrected CLI path kept showing the failure it was meant to fix, until the next
+ * scheduled pass — which reads as "the setting did nothing".
+ */
+function providersToRecollect(patch: PanelSettingsPatch): ProviderId[] {
+  const providers: ProviderId[] = [];
+  if (patch.glmRegion !== undefined) providers.push('glm');
+  if (patch.glmWalletEnabled === true) providers.push('glm');
+  if (patch.deepseekWebEnabled === true) providers.push('deepseek');
+  if (patch.codexCliPath !== undefined) providers.push('codex');
+  return [...new Set(providers)];
+}
+
 /** Window controls the panel asks the host for; the host owns the real state. */
 export interface PanelHostProps {
   /** Current pinned state as reported by the host. */
@@ -395,6 +429,10 @@ export function PanelApp(props: PanelAppProps) {
       try {
         const next = await client.updateSettings(patch);
         setSettings(next);
+        // A write that changes what would be collected is collected again right
+        // away, so the card shows the answer to the setting the user just made
+        // instead of the previous one until the next scheduled pass.
+        for (const provider of providersToRecollect(patch)) void refresh(provider);
         // No clearing here: a message reports the moment it describes and leaves on
         // its own clock, so a successful save does not sweep away a refresh verdict.
       } catch (error) {
@@ -403,7 +441,7 @@ export function PanelApp(props: PanelAppProps) {
         setSettingsBusy(false);
       }
     },
-    [client, describeError, announce]
+    [client, describeError, announce, refresh]
   );
 
   const validateCredential = useCallback(
@@ -411,17 +449,28 @@ export function PanelApp(props: PanelAppProps) {
       const status = await client.validateCredential(target, secret);
       // The service returns the mask; re-read the settings so every view sees it.
       setSettings(await client.readSettings());
+      // A credential that just validated is a connection that just became usable,
+      // so collect it right away: without this the card went on showing nothing (or
+      // the previous reading) until the next scheduled pass, and coming back from a
+      // fresh, working key to an empty card reads as "the key was wrong".
+      void refresh(providerOfCredential(target));
       return status;
     },
-    [client]
+    [client, refresh]
   );
 
   const deleteCredential = useCallback(
     async (target: CredentialTarget) => {
       await client.deleteCredential(target);
       setSettings(await client.readSettings());
+      // Deleting is the other half of the same rule: the connection is now
+      // unusable, so collect again and let the service say so. The card itself is
+      // already back to its template (a credential is part of its display gate),
+      // but the connection's own status line would otherwise go on claiming 数据正常
+      // from a reading whose key no longer exists.
+      void refresh(providerOfCredential(target));
     },
-    [client]
+    [client, refresh]
   );
 
   // A switch is disabled only by its own write: tracking the platforms with a

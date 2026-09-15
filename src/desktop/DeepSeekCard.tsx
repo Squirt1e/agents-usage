@@ -4,6 +4,11 @@
  * Behaviour pinned by the spec (task 6.5, extended by the web usage collector):
  * - each currency is displayed on its own; currencies are never added together
  *   and no exchange rate is invented,
+ * - the balance module is the platform's *official* data (the answer to its API
+ *   key), so it always renders its formal layout: with no reading the placeholder
+ *   row stays and the frosted cover carries the way to configure it, the same
+ *   shape the GLM quota and wallet modules have. A card that emptied itself
+ *   instead left the user a bare header and nothing to act on,
  * - daily spend is shown only from the enabled experimental web connection; the
  *   balance-delta estimate is deliberately omitted,
  * - a balance the API did not report stays hidden: only a real zero is shown as
@@ -34,16 +39,44 @@ import {
 } from './metrics';
 
 export interface DeepSeekCardProps extends PlatformCardViewProps {
+  /** Whether a balance API key is stored (`credentials.deepseek.configured`).
+   *  Without one the balance module is a placeholder under the cover: the reading
+   *  collected before the key was deleted must not keep standing in for a live
+   *  balance. */
+  balanceConfigured: boolean;
   /** `settings.deepseekWebEnabled`: the experimental web usage connection. */
   webEnabled: boolean;
   /** Whether a web login token is stored (`credentials['deepseek-web'].configured`). */
   webConfigured: boolean;
 }
 
+/**
+ * Placeholder balance for the frosted cover, the figure the confirmed design
+ * draft uses: a card with no API key still has the shape of a real one under the
+ * glass, and the cover hides this row on the very first frame.
+ */
+const PLACEHOLDER_BALANCE = { currency: 'CNY', amount: 86.42 };
+
 export function DeepSeekCard(props: DeepSeekCardProps) {
-  const { view, now, gate, webEnabled, webConfigured } = props;
+  const { view, now, gate, balanceConfigured, webEnabled, webConfigured } = props;
   void now;
   const balances = totalBalances(view);
+  // A stored key is part of the display gate, not just the collector gate — the
+  // same rule the web rows below already follow. The service goes on publishing
+  // the last persisted snapshot after a credential is deleted, so reading the view
+  // alone kept a deleted key's balance on the card.
+  const renderedBalances = balanceConfigured
+    ? balances.filter(({ metric }) => shouldRenderMetric(metric, gate).render)
+    : [];
+  // The balance connection's own error decides the cover's wording. The primary
+  // state is the fallback for a service that publishes one merged balance state
+  // without a connection identity — the same shape the GLM quota module reads.
+  const balanceState = view.state('wallet') ?? view.primary;
+  const balanceError = balanceState?.error ?? balanceState?.snapshot?.error;
+  // The balance module always renders its formal layout; only the *reading* can be
+  // missing, and that is what the cover is for. `multipleCurrencies` keeps reading
+  // the full list so the labels of real rows do not change with the gate.
+  const balanceEmpty = renderedBalances.length === 0;
   // A stored token is part of the display gate, not just the collector gate:
   // cached web rows must not leak around the cover after the token is removed.
   const webReady = webEnabled && webConfigured;
@@ -67,20 +100,38 @@ export function DeepSeekCard(props: DeepSeekCardProps) {
       registerGear={props.registerGear}
       onOpenSettings={props.onOpenSettings}
     >
-      {balances.map(({ currency, metric }) => {
-        const gateResult = shouldRenderMetric(metric, gate);
-        if (!gateResult.render) return null;
-        const value = metricNumber(metric);
-        return (
-          <MetricRow
-            key={`balance-${currency}`}
-            label={multipleCurrencies ? `剩余余额（${currency}）` : '剩余余额'}
-            strong
-            value={value === null ? String(metric.value) : formatMoney(value, currency)}
-            replayKey={props.replayKey}
-          />
-        );
-      })}
+      <div className={`card-module${balanceEmpty ? ' is-covered' : ''}`} data-testid="deepseek-balance">
+        {renderedBalances.map(({ currency, metric }) => {
+          const value = metricNumber(metric);
+          return (
+            <MetricRow
+              key={`balance-${currency}`}
+              label={multipleCurrencies ? `剩余余额（${currency}）` : '剩余余额'}
+              strong
+              value={value === null ? String(metric.value) : formatMoney(value, currency)}
+              replayKey={props.replayKey}
+            />
+          );
+        })}
+        {balanceEmpty ? (
+          <>
+            <MetricRow
+              label="剩余余额"
+              strong
+              value={formatMoney(PLACEHOLDER_BALANCE.amount, PLACEHOLDER_BALANCE.currency)}
+            />
+            <FrostedHint
+              testId="deepseek-balance-mask"
+              label={
+                !balanceConfigured || balanceError?.kind === 'missing_config'
+                  ? '配置 API Key 后显示余额'
+                  : '暂无余额数据'
+              }
+              onActivate={() => props.onOpenSettings('deepseek')}
+            />
+          </>
+        ) : null}
+      </div>
       {spends.map(({ currency, metric }) => {
         const gateResult = shouldRenderMetric(metric, { ...gate, rangeRequired: true });
         if (!gateResult.render) return null;

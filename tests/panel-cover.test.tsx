@@ -8,9 +8,13 @@
 //   - placeholder columns -> marked, so the fake 28% / 16% pair is blurred,
 //   - real columns, cached readings included -> not marked, so a real reading is
 //     never dimmed as if it were a lie,
-//   - the wallet block follows the same rule with its placeholder balances.
+//   - the wallet block follows the same rule with its placeholder balances,
+//   - the DeepSeek balance module does too: its row is the platform's official
+//     data, so a card without a key keeps the row (blurred) and gains the cover
+//     rather than collapsing to a bare header.
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { DeepSeekCard } from '../src/desktop/DeepSeekCard';
 import { GlmCard } from '../src/desktop/GlmCard';
 import { failedStateOf, metricOf, providerStateOf, snapshotOf } from '../src/desktop/fake-client';
 import { providerView } from '../src/desktop/metrics';
@@ -24,7 +28,9 @@ const noop = () => undefined;
 function renderGlm(
   providers: Parameters<typeof snapshotOf>[0],
   options: {
+    quotaConfigured?: boolean;
     walletEnabled?: boolean;
+    walletConfigured?: boolean;
     onOpenSettings?(provider: ProviderId): void;
   } = {}
 ) {
@@ -37,10 +43,36 @@ function renderGlm(
       quotaDisplayMode="ring"
       quotaValueMode="used"
       resetTimeFormat="countdown"
+      quotaConfigured={options.quotaConfigured ?? true}
       walletEnabled={options.walletEnabled ?? false}
+      walletConfigured={options.walletConfigured ?? true}
       onOpenSettings={options.onOpenSettings ?? noop}
       onToggleResetTimeFormat={noop}
       onToggleQuotaDisplay={noop}
+      registerGear={noop}
+    />
+  );
+}
+
+function renderDeepSeek(
+  providers: Parameters<typeof snapshotOf>[0],
+  options: {
+    balanceConfigured?: boolean;
+    webEnabled?: boolean;
+    webConfigured?: boolean;
+    onOpenSettings?(provider: ProviderId): void;
+  } = {}
+) {
+  const snapshot: PanelSnapshot = snapshotOf(providers);
+  render(
+    <DeepSeekCard
+      view={providerView(snapshot, 'deepseek')}
+      now={NOW}
+      gate={{ now: NOW, timezone: TIMEZONE, localDay: localDayIn(TIMEZONE, NOW) }}
+      balanceConfigured={options.balanceConfigured ?? true}
+      webEnabled={options.webEnabled ?? false}
+      webConfigured={options.webConfigured ?? false}
+      onOpenSettings={options.onOpenSettings ?? noop}
       registerGear={noop}
     />
   );
@@ -178,5 +210,121 @@ describe('frosted cover wiring', () => {
     expect(wallet.className).not.toContain('is-covered');
     expect(wallet.querySelector('.frost-hint')).toBeNull();
     expect(wallet).toHaveTextContent('¥ 12.50');
+  });
+});
+
+describe('DeepSeek balance cover wiring', () => {
+  it('keeps the formal balance layout and covers it while no key is configured', () => {
+    const onOpenSettings = vi.fn();
+    const unconfigured = failedStateOf('deepseek', {
+      kind: 'missing_config',
+      message: 'DeepSeek API key is not configured',
+      at: '2026-09-10T08:00:00.000Z'
+    });
+    renderDeepSeek([unconfigured], { onOpenSettings });
+
+    const module = screen.getByTestId('deepseek-balance');
+    expect(module.className).toContain('is-covered');
+    // The template stays: label plus a realistic amount, blurred on the first
+    // frame by the cover — never a bare card with only its header.
+    expect(module).toHaveTextContent('剩余余额');
+    expect(module).toHaveTextContent('¥ 86.42');
+
+    const cover = screen.getByTestId('deepseek-balance-mask');
+    expect(cover).toHaveTextContent('配置 API Key 后显示余额');
+    // The provider's own plumbing is not shown, and the cover is the settings way in.
+    expect(cover).not.toHaveTextContent('DeepSeek API key is not configured');
+    fireEvent.click(cover);
+    expect(onOpenSettings).toHaveBeenCalledWith('deepseek');
+  });
+
+  it('describes a failing balance neutrally instead of quoting the error', () => {
+    renderDeepSeek([
+      failedStateOf('deepseek', {
+        kind: 'network',
+        message: 'DeepSeek balance request timed out',
+        at: '2026-09-10T08:00:00.000Z'
+      })
+    ]);
+
+    const cover = screen.getByTestId('deepseek-balance-mask');
+    expect(cover).toHaveTextContent('暂无余额数据');
+    expect(cover).not.toHaveTextContent('timed out');
+    expect(screen.getByTestId('deepseek-balance').className).toContain('is-covered');
+  });
+
+  it('leaves a balance with a reading uncovered and shows the real amount', () => {
+    renderDeepSeek([
+      providerStateOf('deepseek', [
+        metricOf({ key: 'wallet.CNY.total', value: 21.52, unit: 'CNY', direction: 'balance' })
+      ])
+    ]);
+
+    const module = screen.getByTestId('deepseek-balance');
+    expect(module.className).not.toContain('is-covered');
+    expect(module.querySelector('.frost-hint')).toBeNull();
+    expect(module).toHaveTextContent('¥ 21.52');
+    expect(screen.queryByTestId('deepseek-balance-mask')).not.toBeInTheDocument();
+  });
+});
+
+describe('a deleted credential turns its module back into a template', () => {
+  // The service goes on publishing the last persisted snapshot after a credential
+  // is deleted, so the view still carries the readings. Every module has to treat
+  // "credential stored" as part of its display gate — otherwise deleting a key left
+  // its last balance or quota standing on the card as if it were still live.
+
+  it('covers the GLM quota of a key that is no longer stored', () => {
+    renderGlm(configured([...quotaMetrics, ...walletMetrics]), {
+      quotaConfigured: false,
+      walletEnabled: true,
+      walletConfigured: false
+    });
+
+    expect(quotaList().className).toContain('is-covered');
+    expect(screen.getByTestId('glm-quota-mask')).toHaveTextContent('配置 API Key 后显示额度');
+    expect(quotaList()).not.toHaveTextContent('63%');
+    // The wallet credential is gone too, so that module is a template as well.
+    const wallet = screen.getByTestId('glm-wallet');
+    expect(wallet.className).toContain('is-covered');
+    expect(wallet).not.toHaveTextContent('¥ 12.50');
+    expect(screen.getByTestId('glm-wallet-mask')).toHaveTextContent('配置钱包凭据后显示用量');
+  });
+
+  it('covers the DeepSeek balance of a key that is no longer stored', () => {
+    renderDeepSeek(
+      [
+        providerStateOf('deepseek', [
+          metricOf({ key: 'wallet.CNY.total', value: 21.52, unit: 'CNY', direction: 'balance' })
+        ])
+      ],
+      { balanceConfigured: false }
+    );
+
+    const module = screen.getByTestId('deepseek-balance');
+    expect(module.className).toContain('is-covered');
+    expect(module).not.toHaveTextContent('¥ 21.52');
+    expect(module).toHaveTextContent('¥ 86.42');
+    expect(screen.getByTestId('deepseek-balance-mask')).toHaveTextContent('配置 API Key 后显示余额');
+  });
+
+  it('still shows cached readings while the credential is in place', () => {
+    // A stale reading is not a deleted credential: with the key still stored the
+    // cached value keeps its place and carries its own 过期 marker instead.
+    renderDeepSeek([
+      providerStateOf('deepseek', [
+        metricOf({
+          key: 'wallet.CNY.total',
+          value: 21.52,
+          unit: 'CNY',
+          direction: 'balance',
+          confidence: ['stale']
+        })
+      ])
+    ]);
+
+    const module = screen.getByTestId('deepseek-balance');
+    expect(module.className).not.toContain('is-covered');
+    expect(module).toHaveTextContent('¥ 21.52');
   });
 });

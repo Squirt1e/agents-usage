@@ -78,13 +78,15 @@ function CredentialForm(props: {
     setPending(true);
     setFeedback({ tone: 'progress', text: '正在验证并保存…' });
     try {
-      const next = await props.onValidateCredential(props.target, secret);
-      // A validated key is saved: clear the input, keep only the mask.
+      await props.onValidateCredential(props.target, secret);
+      // A validated key is saved: clear the input and say nothing else. The status
+      // line below now reads 已保存 ····mask, and that *is* the confirmation — the
+      // old success sentence repeated it, claimed a row of its own and pushed the
+      // delete button off the status line, so a successful save looked nothing like
+      // the state it produced. The stored-state row is the whole answer, which is
+      // also what "成功清空输入并仅返回掩码状态" asks for.
       setValue('');
-      setFeedback({
-        tone: 'success',
-        text: next.suffix ? `密钥已验证并保存 ····${next.suffix}` : '密钥已验证并保存'
-      });
+      setFeedback(undefined);
     } catch (error) {
       // The previous credential is still in place; say so instead of pretending.
       setFeedback({ tone: 'error', text: error instanceof Error ? error.message : '密钥验证失败' });
@@ -129,13 +131,11 @@ function CredentialForm(props: {
       </div>
       <div className="credential-status">
         {/* The stored status stays visible beside validation feedback so a
-            failed replacement cannot look like it removed the credential. */}
+            failed replacement cannot look like it removed the credential, and the
+            delete button stays on the status line: the feedback element claims a
+            full row of its own, so anything after it in this flex row would be
+            pushed below the button instead of beside the state (see panel.css). */}
         <span>{props.status.configured ? `已保存 ····${props.status.suffix}` : '尚未配置'}</span>
-        {feedback ? (
-          <span role={feedback.tone === 'error' ? 'alert' : 'status'} className={`credential-feedback feedback-${feedback.tone}`}>
-            {feedback.text}
-          </span>
-        ) : null}
         {props.status.configured ? (
           <button
             type="button"
@@ -146,6 +146,11 @@ function CredentialForm(props: {
           >
             删除
           </button>
+        ) : null}
+        {feedback ? (
+          <span role={feedback.tone === 'error' ? 'alert' : 'status'} className={`credential-feedback feedback-${feedback.tone}`}>
+            {feedback.text}
+          </span>
         ) : null}
       </div>
       {props.hint ? <p className="field-hint">{props.hint}</p> : null}

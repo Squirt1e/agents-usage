@@ -881,6 +881,18 @@ button {
 
 /* ----------------------------------------------------------- metric rows */
 
+/* A coverable metric module: it holds a module's formal layout (or the
+   placeholder that stands in for it) together with the frosted hint covering it,
+   and draws no block of its own — the DeepSeek balance rows sit directly on the
+   card by design, so a box here would invent a shape the design does not have.
+   The gap repeats `.provider-body`'s, so wrapping rows that used to be direct
+   children changes nothing about their spacing. */
+.card-module {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+
 .metric-row {
   display: flex;
   align-items: baseline;
@@ -1923,7 +1935,12 @@ button {
 
 /* Feedback claims its own row, so a sentence-length reason wraps at the panel's
    width instead of fighting the state beside it, and `anywhere` keeps a message
-   with no spaces (an id, a URL) from pushing the panel sideways. */
+   with no spaces (an id, a URL) from pushing the panel sideways.
+ *
+ * Because it claims a whole row, the markup puts the delete button *before* it:
+ * a flex row breaks in DOM order, so a button written after this element landed
+ * on a line of its own below the state, and a save that produced a message looked
+ * like a different layout from the same form at rest. */
 .credential-feedback {
   flex: 1 1 100%;
   min-width: 0;

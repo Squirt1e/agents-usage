@@ -16,6 +16,10 @@
  * - switched on without a credential the module keeps its formal layout under the
  *   配置钱包凭据后显示用量 hint, so the door to configuring it is visible rather
  *   than the module simply vanishing,
+ * - a deleted credential is a display gate for every module here, exactly as it is
+ *   for the DeepSeek balance and web rows: the service keeps publishing the last
+ *   persisted snapshot, so without the gate a card kept showing the quota or the
+ *   balance of a key the user had just removed,
  * - the wallet carries the 实验数据源 marker because its endpoint is not a stable
  *   public API; the quota is never converted into a wallet balance.
  *
@@ -76,21 +80,35 @@ export interface GlmCardProps extends PlatformCardViewProps {
   quotaDisplayMode: QuotaDisplayMode;
   quotaValueMode: QuotaValueMode;
   resetTimeFormat: ResetTimeFormat;
+  /** Whether a Coding Plan key is stored (`credentials.glm.configured`). Without
+   *  one the quota module is a placeholder under the cover — a reading collected
+   *  before the key was deleted must not keep standing in for a live quota. */
+  quotaConfigured: boolean;
   /** `settings.glmWalletEnabled`: the experimental connection's own switch — it
    *  decides both collecting and showing. Off, the wallet module does not exist;
    *  on, it renders what the connection has (or the credential prompt when it has
    *  no credential yet). */
   walletEnabled: boolean;
+  /** Whether the wallet credential is stored (`credentials['glm-wallet']`). Like
+   *  the quota key, an absent credential turns the module back into its template
+   *  instead of leaving a cached balance on screen. */
+  walletConfigured: boolean;
 }
 
 export function GlmCard(props: GlmCardProps) {
-  const { view, now, gate, walletEnabled, resetTimeFormat, onToggleResetTimeFormat } = props;
+  const { view, now, gate, quotaConfigured, walletEnabled, walletConfigured, resetTimeFormat, onToggleResetTimeFormat } = props;
   const quotaWindows = glmQuotaWindows(view);
-  const returnedBars = quotaWindows.filter(
-    (bar) => shouldRenderMetric(bar.used, gate).render || shouldRenderMetric(bar.remaining, gate).render
-  );
+  // A stored key is part of the display gate, not just the collector gate: the
+  // service keeps publishing the last persisted snapshot, so a card that read the
+  // view alone went on showing the quota of a key the user had just deleted. The
+  // same rule the DeepSeek card applies to its web rows.
+  const quotaReadings = quotaConfigured
+    ? quotaWindows.filter(
+        (bar) => shouldRenderMetric(bar.used, gate).render || shouldRenderMetric(bar.remaining, gate).render
+      )
+    : [];
   const bars: QuotaBar[] =
-    returnedBars.length > 0
+    quotaReadings.length > 0
       ? quotaWindows
       : PLACEHOLDER_QUOTA.map(({ id, label, percent, offsetSeconds }) => ({
           id,
@@ -98,14 +116,16 @@ export function GlmCard(props: GlmCardProps) {
           used: placeholderMetric(`quota.${id}.used`, percent, new Date(now.getTime() + offsetSeconds * 1000).toISOString()),
           remaining: placeholderMetric(`quota.${id}.remaining`, 100 - percent, new Date(now.getTime() + offsetSeconds * 1000).toISOString())
         }));
-  const wallets = walletEnabled
-    ? walletBalances(view).filter(({ metric }) => shouldRenderMetric(metric, gate).render)
-    : [];
-  const spends = walletEnabled
-    ? dailySpends(view, 'wallet').filter(({ metric }) =>
-        shouldRenderMetric(metric, { ...gate, rangeRequired: true }).render
-      )
-    : [];
+  const wallets =
+    walletEnabled && walletConfigured
+      ? walletBalances(view).filter(({ metric }) => shouldRenderMetric(metric, gate).render)
+      : [];
+  const spends =
+    walletEnabled && walletConfigured
+      ? dailySpends(view, 'wallet').filter(({ metric }) =>
+          shouldRenderMetric(metric, { ...gate, rangeRequired: true }).render
+        )
+      : [];
   const quotaState = view.state('quota') ?? view.primary;
   const walletState = view.state('wallet');
   const quotaError = quotaState?.error ?? quotaState?.snapshot?.error;
@@ -116,9 +136,11 @@ export function GlmCard(props: GlmCardProps) {
   // never change again, and its failure would be reported for a connection the
   // user has deliberately turned off. The view is normally filtered upstream too;
   // this is what makes the card itself follow the switch.
-  const walletError = walletEnabled ? walletState?.error ?? walletState?.snapshot?.error : undefined;
-  // The frosted cover belongs to a module without any data; a connection that
-  // has data (cached included) always keeps the plain formal layout.
+  const walletError =
+    walletEnabled && walletConfigured ? walletState?.error ?? walletState?.snapshot?.error : undefined;
+  // The frosted cover belongs to a module without a reading to stand on; a module
+  // that has one (cached included, as long as its credential is still there) keeps
+  // the plain formal layout.
   const walletEmpty = wallets.length === 0 && spends.length === 0;
 
   return (
@@ -149,11 +171,15 @@ export function GlmCard(props: GlmCardProps) {
         testId="glm-quota-list"
         /* Only when the columns are placeholders: the cover blurs the content it
            sits on, and there is nothing to blur over real data. */
-        covered={returnedBars.length === 0}
-        overlay={returnedBars.length === 0 ? (
+        covered={quotaReadings.length === 0}
+        overlay={quotaReadings.length === 0 ? (
           <FrostedHint
             testId="glm-quota-mask"
-            label={quotaError?.kind === 'missing_config' ? '配置 API Key 后显示额度' : '暂无额度数据'}
+            label={
+              !quotaConfigured || quotaError?.kind === 'missing_config'
+                ? '配置 API Key 后显示额度'
+                : '暂无额度数据'
+            }
             onActivate={() => props.onOpenSettings('glm')}
           />
         ) : null}
@@ -200,7 +226,11 @@ export function GlmCard(props: GlmCardProps) {
               </div>
               <FrostedHint
                 testId="glm-wallet-mask"
-                label={walletError?.kind === 'missing_config' ? '配置钱包凭据后显示用量' : '暂无钱包数据'}
+                label={
+                  !walletConfigured || walletError?.kind === 'missing_config'
+                    ? '配置钱包凭据后显示用量'
+                    : '暂无钱包数据'
+                }
                 onActivate={() => props.onOpenSettings('glm')}
               />
             </>
