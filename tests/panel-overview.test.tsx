@@ -434,7 +434,7 @@ describe('panel overview', () => {
     expect(screen.queryAllByTestId('panel-toast')).toHaveLength(0);
   });
 
-  it('does not render the legacy footer inside the compact panel', async () => {
+  it('renders no footer of its own inside the compact panel', async () => {
     renderPanel();
     await screen.findByTestId('card-codex');
 

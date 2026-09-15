@@ -1,7 +1,7 @@
 //! DeepSeek wallet balance collector and its daily spend estimate.
 //!
-//! Migrated from `src/server/adapters/deepseek.ts` and
-//! `src/server/adapters/deepseek-estimator.ts`. The collector issues exactly one
+//! The rules are the ones this project has always used, carried over from its
+//! earlier TypeScript collector. The collector issues exactly one
 //! read-only `GET` per refresh — `https://api.deepseek.com/user/balance` with a
 //! bearer credential — and turns the documented body
 //!

@@ -2,8 +2,7 @@
 //!
 //! The golden expectations come from `fixtures/contracts/daily-statistics.json`
 //! (the full-day case, the midday case, the timezone boundaries) and from the
-//! migrated TypeScript behaviour in
-//! `src/server/adapters/deepseek-estimator.ts`: only positive decreases between
+//! estimator rules this project has always applied: only positive decreases between
 //! adjacent samples count, a top-up is an adjustment boundary and never negative
 //! spend, an incomplete day is marked partial, and a restart continues the
 //! stored day instead of starting a new one.
