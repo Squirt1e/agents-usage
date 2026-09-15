@@ -311,7 +311,6 @@ describe('GLM quota and wallet', () => {
   function renderGlm(
     states: PanelSnapshot,
     options: {
-      visible?: boolean;
       enabled?: boolean;
       quotaDisplayMode?: 'ring' | 'bar';
       quotaValueMode?: 'remaining' | 'used';
@@ -321,7 +320,6 @@ describe('GLM quota and wallet', () => {
     return render(
       <GlmCard
         view={providerView(states, 'glm')}
-        walletVisible={options.visible ?? true}
         walletEnabled={options.enabled ?? true}
         onToggleResetTimeFormat={options.onToggleResetTimeFormat}
         {...cardProps}
@@ -347,7 +345,7 @@ describe('GLM quota and wallet', () => {
     renderGlm(snapshotOf([providerStateOf('glm', [
       metricOf({ key: 'quota.5h.remaining', value: 100, unit: 'percent', direction: 'remaining', connection: { provider: 'glm', connection: 'quota' } }),
       metricOf({ key: 'quota.tools.monthly.remaining', value: 40, unit: 'percent', direction: 'remaining', connection: { provider: 'glm', connection: 'quota' } })
-    ])]), { quotaValueMode: 'remaining', visible: false });
+    ])]), { quotaValueMode: 'remaining', enabled: false });
 
     expect(screen.getByRole('group', { name: '5 小时额度 剩余 100%' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '每周额度 剩余未返回' })).toHaveTextContent('—');
@@ -399,9 +397,23 @@ describe('GLM quota and wallet', () => {
     expect(screen.queryByTestId('glm-wallet-mask')).not.toBeInTheDocument();
   });
 
-  it('hides only the wallet section when the display toggle is off', () => {
-    renderGlm(snapshotOf([providerStateOf('glm', glmMetrics)]), { visible: false });
+  it('shows the wallet module only while its connection switch is on', () => {
+    // The connection switch is the wallet module's only condition — one switch,
+    // the same interaction the DeepSeek web usage module has. On it collects and
+    // shows; off it is gone from the card, quota untouched.
+    const view = renderGlm(snapshotOf([providerStateOf('glm', glmMetrics)]), { enabled: true });
+    expect(screen.getByTestId('glm-wallet')).toBeInTheDocument();
+    expect(screen.getByText('钱包余额')).toBeInTheDocument();
 
+    view.rerender(
+      <GlmCard
+        view={providerView(snapshotOf([providerStateOf('glm', glmMetrics)]), 'glm')}
+        walletEnabled={false}
+        {...cardProps}
+        quotaDisplayMode="bar"
+        quotaValueMode="used"
+      />
+    );
     expect(screen.queryByTestId('glm-wallet')).not.toBeInTheDocument();
     expect(screen.queryByText('钱包余额')).not.toBeInTheDocument();
     expect(screen.getByText('28%')).toBeInTheDocument();
@@ -454,7 +466,7 @@ describe('GLM quota and wallet', () => {
       message: 'GLM Coding Plan API key is not configured',
       at: '2026-09-10T08:00:00.000Z'
     });
-    renderGlm(snapshotOf([state]), { visible: false });
+    renderGlm(snapshotOf([state]), { enabled: false });
 
     const mask = screen.getByTestId('glm-quota-mask');
     expect(mask).toHaveTextContent('配置 API Key 后显示额度');
@@ -467,11 +479,19 @@ describe('GLM quota and wallet', () => {
     expect(screen.queryByRole('button', { name: '前往配置' })).not.toBeInTheDocument();
   });
 
-  it('covers the wallet module with the frosted hint while the connection is not enabled', () => {
-    renderGlm(snapshotOf([providerStateOf('glm', glmMetrics.slice(0, 2))]), { enabled: false });
+  it('covers the wallet module with the frosted hint while no credential is configured', () => {
+    // Enabled but unconfigured: the module keeps its layout and prompts for the
+    // credential instead of vanishing, so the way to configure it stays visible.
+    const quotaState = providerStateOf('glm', glmMetrics.slice(0, 2), { connection: { provider: 'glm', connection: 'quota' } });
+    const walletState = failedStateOf(
+      'glm',
+      { kind: 'missing_config', message: 'the experimental GLM wallet credential is not configured', at: '2026-09-10T08:00:00.000Z' },
+      { connection: { provider: 'glm', connection: 'wallet' } }
+    );
+    renderGlm(snapshotOf([quotaState, walletState]), { enabled: true });
 
     const mask = screen.getByTestId('glm-wallet-mask');
-    expect(mask).toHaveTextContent('启用后显示钱包用量');
+    expect(mask).toHaveTextContent('配置钱包凭据后显示用量');
     // The formal wallet layout stays underneath with placeholder values; the
     // neutral cover is the settings entry, without an additional link label.
     expect(screen.getByTestId('glm-wallet')).toBeInTheDocument();
@@ -487,8 +507,8 @@ describe('GLM quota and wallet', () => {
   it('never renders the cached readings of a switched-off wallet connection', () => {
     // Switching the experimental connection off stops collection but does not
     // erase what it collected: the last persisted reading is still published in
-    // the snapshot. Rendering it would show a balance that can never change again,
-    // which is exactly how the switch came to look unconnected to the module.
+    // the snapshot. It must not reach the card either — the module is gone, so a
+    // balance that can never change again cannot be mistaken for a live one.
     const cached = [
       metricOf({
         key: 'wallet.CNY.balance',
@@ -516,11 +536,10 @@ describe('GLM quota and wallet', () => {
       { enabled: false }
     );
 
+    expect(screen.queryByTestId('glm-wallet')).not.toBeInTheDocument();
     expect(screen.queryByText('¥ 12.50')).not.toBeInTheDocument();
     expect(screen.queryByText('¥ 9.75')).not.toBeInTheDocument();
-    // The module keeps its formal empty layout under the settings entry.
-    expect(screen.getByTestId('glm-wallet-mask')).toHaveTextContent('启用后显示钱包用量');
-    expect(screen.getByText('¥ 42.60')).toBeInTheDocument();
+    expect(screen.queryByText('¥ 42.60')).not.toBeInTheDocument();
     // The wallet switch never touches the quota connection.
     expect(screen.getByText('28%')).toBeInTheDocument();
     expect(screen.queryByTestId('glm-quota-mask')).not.toBeInTheDocument();
@@ -531,7 +550,6 @@ describe('GLM quota and wallet', () => {
     const view = render(
       <GlmCard
         view={providerView(snapshotOf([providerStateOf('glm', glmMetrics.slice(0, 2), { connection: { provider: 'glm', connection: 'quota' } })]), 'glm')}
-        walletVisible={false}
         walletEnabled
         {...cardProps}
         quotaDisplayMode="bar"
@@ -548,7 +566,6 @@ describe('GLM quota and wallet', () => {
     view.rerender(
       <GlmCard
         view={providerView(snapshotOf([providerStateOf('glm', glmMetrics.slice(0, 2), { connection: { provider: 'glm', connection: 'quota' } })]), 'glm')}
-        walletVisible={false}
         walletEnabled
         {...cardProps}
         quotaDisplayMode="bar"

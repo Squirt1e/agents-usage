@@ -111,7 +111,6 @@ describe('the card period row', () => {
         quotaDisplayMode="ring"
         quotaValueMode="used"
         resetTimeFormat="countdown"
-        walletVisible
         walletEnabled
         onOpenSettings={noop}
         onToggleResetTimeFormat={noop}

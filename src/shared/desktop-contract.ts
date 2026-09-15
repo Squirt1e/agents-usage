@@ -172,10 +172,10 @@ export interface PanelSettings {
   theme: ThemePreference;
   timezone: string;
   glmRegion: GlmRegion;
-  /** Whether the experimental GLM wallet connection is enabled at all. */
+  /** Whether the experimental GLM wallet connection is enabled at all. On means
+   *  it collects *and* shows: one switch, the same interaction as the DeepSeek web
+   *  connection. Revoking the credential is a separate, explicit deletion. */
   glmWalletEnabled: boolean;
-  /** Whether the wallet is displayed. Hiding keeps the credential and collection. */
-  glmWalletVisible: boolean;
   /** Whether the experimental DeepSeek web usage connection is enabled at all. */
   deepseekWebEnabled: boolean;
   platformVisibility: Partial<Record<ProviderId, boolean>>;
@@ -294,7 +294,6 @@ export type PanelSettingsPatch = Partial<
     | 'theme'
     | 'glmRegion'
     | 'glmWalletEnabled'
-    | 'glmWalletVisible'
     | 'deepseekWebEnabled'
     | 'platformVisibility'
     | 'platformOrder'
@@ -664,8 +663,6 @@ function parsePeakWindows(value: unknown): PeakWindow[] | undefined {
  * - `glmWalletEnabled` falls back to `false` (the experimental connection needs
  *   an explicit opt-in),
  * - `deepseekWebEnabled` falls back to `false` for the same reason,
- * - `glmWalletVisible` falls back to `true`; visibility is not data, and an
- *   enabled-but-hidden-on-first-run wallet would look like a bug,
  * - quota value modes fall back to `remaining`, so a fresh card answers how
  *   much capacity is still available,
  * - platform visibility defaults to visible (see `platformVisible`).
@@ -681,7 +678,6 @@ export function parsePanelSettings(value: unknown): PanelSettings {
     theme: isOneOf(THEME_PREFERENCES, record.theme) ? record.theme : 'dark',
     glmRegion: isOneOf(GLM_REGIONS, record.glmRegion) ? record.glmRegion : 'china',
     glmWalletEnabled: record.glmWalletEnabled === true,
-    glmWalletVisible: record.glmWalletVisible !== false,
     deepseekWebEnabled: record.deepseekWebEnabled === true,
     platformVisibility: parseVisibility(record.platformVisibility),
     codexResetFormat: isOneOf(RESET_TIME_FORMATS, record.codexResetFormat) ? record.codexResetFormat : 'countdown',

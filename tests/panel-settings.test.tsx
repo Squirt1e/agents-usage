@@ -274,7 +274,7 @@ describe('per-platform configuration', () => {
     expect(screen.queryByRole('group', { name: '额度数值' })).not.toBeInTheDocument();
   });
 
-  it('persists the GLM region and the wallet display toggle without deleting credentials', async () => {
+  it('persists the GLM region without touching credentials', async () => {
     const { client } = renderPanel();
     fireEvent.click(await screen.findByRole('button', { name: '配置 GLM' }));
     await screen.findByTestId('settings-glm');
@@ -282,36 +282,46 @@ describe('per-platform configuration', () => {
     fireEvent.click(screen.getByRole('button', { name: '国际区' }));
     await waitFor(() => expect(client.methodCalls('updateSettings')).toHaveLength(1));
     expect(client.methodCalls('updateSettings')[0]?.[0]).toEqual({ glmRegion: 'international' });
-
-    fireEvent.click(screen.getByRole('checkbox', { name: '主面板展示钱包余额' }));
-    await waitFor(() => expect(client.methodCalls('updateSettings')).toHaveLength(2));
-    expect(client.methodCalls('updateSettings')[1]?.[0]).toEqual({ glmWalletVisible: false });
-    // Hiding keeps the credential: only `updateSettings` was called.
     expect(client.methodCalls('deleteCredential')).toHaveLength(0);
   });
 
-  it('clears only the wallet credential when the experimental connection is disabled', async () => {
+  it('keeps the wallet credential when the experimental connection is switched off', async () => {
+    // One switch means collect-and-show, and nothing else: switching off hides the
+    // module and stops collecting, while the pasted credential stays put — the
+    // delete button in the form below is what revokes it. Deleting it here is what
+    // used to make "switch off, switch on" look like it had lost the wallet.
     const { client } = renderPanel();
     fireEvent.click(await screen.findByRole('button', { name: '配置 GLM' }));
     await screen.findByTestId('settings-glm');
 
     fireEvent.click(screen.getByRole('checkbox', { name: '启用实验钱包连接' }));
 
-    await waitFor(() => expect(client.methodCalls('deleteCredential')).toHaveLength(1));
-    expect(client.methodCalls('deleteCredential')[0]).toEqual(['glm-wallet']);
+    await waitFor(() => expect(client.methodCalls('updateSettings')).toHaveLength(1));
     expect(client.methodCalls('updateSettings')[0]?.[0]).toEqual({ glmWalletEnabled: false });
-    // The quota connection keeps its credential and its form.
+    expect(client.methodCalls('deleteCredential')).toHaveLength(0);
+    // The wallet form goes away with the connection; the quota one stays.
     expect(screen.getByLabelText('GLM Coding Plan API Key')).toBeInTheDocument();
     expect(screen.queryByLabelText('GLM 钱包账号凭据')).not.toBeInTheDocument();
-    const deletedTargets = client.methodCalls('deleteCredential').map((args) => args[0]);
-    expect(deletedTargets).not.toContain('glm');
-    expect(deletedTargets).not.toContain('deepseek');
   });
 
-  it('takes the wallet module off its cached reading when the connection switch is turned off', async () => {
-    // The switch is the connection's own, so the card has to follow it: with the
-    // connection off, the reading collected before must not stay on screen as if it
-    // were live, or the switch looks like it does nothing.
+  it('revokes only the wallet credential from the form delete button', async () => {
+    const { client } = renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: '配置 GLM' }));
+    await screen.findByTestId('settings-glm');
+
+    fireEvent.click(screen.getByRole('button', { name: '删除 GLM 钱包账号凭据' }));
+
+    await waitFor(() => expect(client.methodCalls('deleteCredential')).toHaveLength(1));
+    expect(client.methodCalls('deleteCredential')[0]).toEqual(['glm-wallet']);
+    // The switch and the other connections are untouched by a deletion.
+    expect(client.methodCalls('updateSettings')).toHaveLength(0);
+    expect(client.currentSettings().glmWalletEnabled).toBe(true);
+  });
+
+  it('takes the wallet module off the card when its connection is switched off', async () => {
+    // One switch, the DeepSeek web interaction: on it shows, off it is gone — and
+    // the reading collected before must not stay on screen as if it were live, or
+    // the switch looks like it does nothing.
     const client = createFakeUsageClient({
       snapshot: snapshotOf([
         providerStateOf('codex', [metricOf({ key: 'codex.primary.used', value: 42, unit: 'percent', direction: 'used' })]),
@@ -335,7 +345,7 @@ describe('per-platform configuration', () => {
           { connection: { provider: 'glm', connection: 'wallet' } }
         )
       ]),
-      settings: defaultPanelSettings({ glmWalletEnabled: true, glmWalletVisible: true })
+      settings: defaultPanelSettings({ glmWalletEnabled: true })
     });
     renderPanel({ client });
 
@@ -348,12 +358,11 @@ describe('per-platform configuration', () => {
     await waitFor(() => expect(client.currentSettings().glmWalletEnabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: '返回用量总览' }));
 
-    // Off: the module renders as empty, under the same settings entry, and the
-    // quota connection keeps its own reading.
-    const wallet = await screen.findByTestId('glm-wallet');
-    expect(within(wallet).queryByText('¥ 12.50')).not.toBeInTheDocument();
-    expect(within(wallet).getByTestId('glm-wallet-mask')).toHaveTextContent('启用后显示钱包用量');
-    expect(within(screen.getByTestId('card-glm')).getByRole('group', { name: /5 小时额度/ })).toBeInTheDocument();
+    // Off: no wallet module at all, and the quota connection keeps its reading.
+    const card = screen.getByTestId('card-glm');
+    expect(within(card).queryByTestId('glm-wallet')).not.toBeInTheDocument();
+    expect(within(card).queryByText('¥ 12.50')).not.toBeInTheDocument();
+    expect(within(card).getByRole('group', { name: /5 小时额度/ })).toBeInTheDocument();
   });
 
   it('keeps the previous DeepSeek key when a replacement fails to validate', async () => {

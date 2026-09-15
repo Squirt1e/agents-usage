@@ -10,9 +10,10 @@
  * - Codex uses the local managed login; the panel never asks for its auth files,
  *   it only reports the connection state and offers CLI recovery guidance.
  * - GLM manages the Coding Plan quota connection and the experimental wallet
- *   connection independently. The wallet display switch only changes display;
- *   switching the experimental connection *off* is the only action that deletes
- *   the wallet credential, and it never touches the quota connection.
+ *   connection independently, each behind one switch. The wallet switch means
+ *   "collect and show": on it appears on the card, off it disappears and keeps its
+ *   credential, and revoking that credential is the delete button in its own form.
+ *   Neither ever touches the quota connection.
  * - DeepSeek keeps one API key. A replacement is validated with a read-only query
  *   first: an invalid key leaves the working credential in place, and a valid one
  *   clears the input and returns only the masked status. The experimental web
@@ -274,10 +275,13 @@ function GlmSection(props: {
   };
 
   const setWalletEnabled = async (enabled: boolean) => {
+    // One switch, one meaning — the same interaction the DeepSeek web connection
+    // uses: switching off stops collecting and takes the module off the card, and
+    // that is all it does. Revoking the credential is the delete button inside the
+    // form below, never a side effect of the switch: the old behaviour threw the
+    // pasted credential away, so turning the switch back on showed nothing and the
+    // user had to paste it again.
     await props.onUpdateSettings({ glmWalletEnabled: enabled });
-    // Disabling the experimental connection is an explicit stop: only then is the
-    // wallet credential revoked, and the quota credential is never touched.
-    if (!enabled) await props.onDeleteCredential('glm-wallet');
   };
 
   return (
@@ -328,7 +332,7 @@ function GlmSection(props: {
           ariaLabel="启用实验钱包连接"
           checked={props.settings.glmWalletEnabled}
           onChange={(checked) => void setWalletEnabled(checked)}
-          description="关闭即停止采集并删除钱包凭据"
+          description="开启即采集并在主面板展示，关闭即隐藏；凭据保留，删除用下方按钮"
         />
         {props.settings.glmWalletEnabled ? (
           <>
@@ -344,13 +348,6 @@ function GlmSection(props: {
             />
           </>
         ) : null}
-        <Switch
-          label="主面板展示钱包余额"
-          ariaLabel="主面板展示钱包余额"
-          checked={props.settings.glmWalletVisible}
-          onChange={(checked) => void props.onUpdateSettings({ glmWalletVisible: checked })}
-          description="隐藏仍继续采集，保留凭据"
-        />
       </section>
     </>
   );

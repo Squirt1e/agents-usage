@@ -62,7 +62,6 @@ const serviceSettings = {
   timezone: 'Asia/Shanghai',
   glmRegion: 'china',
   glmWalletEnabled: true,
-  glmWalletVisible: true,
   platformVisibility: { glm: false },
   codexResetFormat: 'absolute',
   peakReminder: { deepseek: { mode: 'builtin' } },
@@ -80,7 +79,6 @@ const serviceSettingsArray = {
   timezone: 'Asia/Shanghai',
   glmRegion: 'china',
   glmWalletEnabled: false,
-  glmWalletVisible: false,
   deepseekWebEnabled: true,
   credentials: [
     { target: 'glm', configured: false, delegated: false, enabled: true },
@@ -143,7 +141,6 @@ describe('http usage client', () => {
     expect(settings.theme).toBe('dark');
     expect(settings.glmRegion).toBe('china');
     expect(settings.glmWalletEnabled).toBe(true);
-    expect(settings.glmWalletVisible).toBe(true);
     // Nothing between the service and the panel: a mapped-out field would
     // quietly reset a user's choice (platformVisibility, peakReminder).
     expect(settings.platformVisibility).toEqual({ glm: false });
@@ -457,7 +454,7 @@ describe('desktop usage client', () => {
   it('talks to the Tauri host when a bridge is present', async () => {
     const invoke = vi.fn(async (command: string) => {
       if (command === DESKTOP_COMMANDS.snapshot) return providersPayload;
-      if (command === DESKTOP_COMMANDS.settings) return { timezone: 'Asia/Shanghai', glmWalletVisible: false };
+      if (command === DESKTOP_COMMANDS.settings) return { timezone: 'Asia/Shanghai', glmWalletEnabled: false };
       if (command === DESKTOP_COMMANDS.validateCredential) return { configured: true, suffix: '9999' };
       if (command === DESKTOP_COMMANDS.refresh) return { status: 'success', at: '2026-09-10T08:00:00.000Z' };
       return {};
@@ -472,7 +469,7 @@ describe('desktop usage client', () => {
     expect(snapshot.providers[0]?.provider).toBe('glm');
 
     const settings = await client.readSettings();
-    expect(settings.glmWalletVisible).toBe(false);
+    expect(settings.glmWalletEnabled).toBe(false);
     expect(settings.timezone).toBe('Asia/Shanghai');
 
     const status = await client.validateCredential('glm', 'sk-live');

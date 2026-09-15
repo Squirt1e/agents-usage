@@ -10,12 +10,12 @@
  * - the Coding Plan quota and the experimental wallet are *separate*
  *   connections: each renders what it has, and a failure of one never hides
  *   the other,
- * - the wallet section appears only when the user displays it; hiding it keeps
- *   collecting and keeps the credential (nothing here deletes anything),
- * - the wallet connection switch is the connection's own and gates the readings:
- *   switched off, the module renders as an empty one (placeholder money under the
- *   启用后显示钱包用量 hint) instead of the balance collected before the switch
- *   was turned off,
+ * - the wallet module exists exactly while its connection is switched on: off, it
+ *   and everything the connection collected disappear from the card (the switch is
+ *   the only display condition, the same interaction the DeepSeek web module has),
+ * - switched on without a credential the module keeps its formal layout under the
+ *   配置钱包凭据后显示用量 hint, so the door to configuring it is visible rather
+ *   than the module simply vanishing,
  * - the wallet carries the 实验数据源 marker because its endpoint is not a stable
  *   public API; the quota is never converted into a wallet balance.
  *
@@ -76,15 +76,15 @@ export interface GlmCardProps extends PlatformCardViewProps {
   quotaDisplayMode: QuotaDisplayMode;
   quotaValueMode: QuotaValueMode;
   resetTimeFormat: ResetTimeFormat;
-  /** `settings.glmWalletVisible`: display toggle only. */
-  walletVisible: boolean;
-  /** `settings.glmWalletEnabled`: the experimental connection itself. Off renders
-   *  the wallet as empty — never from the readings collected before it was off. */
+  /** `settings.glmWalletEnabled`: the experimental connection's own switch — it
+   *  decides both collecting and showing. Off, the wallet module does not exist;
+   *  on, it renders what the connection has (or the credential prompt when it has
+   *  no credential yet). */
   walletEnabled: boolean;
 }
 
 export function GlmCard(props: GlmCardProps) {
-  const { view, now, gate, walletVisible, walletEnabled, resetTimeFormat, onToggleResetTimeFormat } = props;
+  const { view, now, gate, walletEnabled, resetTimeFormat, onToggleResetTimeFormat } = props;
   const quotaWindows = glmQuotaWindows(view);
   const returnedBars = quotaWindows.filter(
     (bar) => shouldRenderMetric(bar.used, gate).render || shouldRenderMetric(bar.remaining, gate).render
@@ -159,7 +159,7 @@ export function GlmCard(props: GlmCardProps) {
         ) : null}
       />
 
-      {walletVisible ? (
+      {walletEnabled ? (
         <div className={`glm-wallet${walletEmpty ? ' is-covered' : ''}`} data-testid="glm-wallet">
           {wallets.map(({ currency, metric }) => {
             const value = metricNumber(metric);
@@ -200,13 +200,7 @@ export function GlmCard(props: GlmCardProps) {
               </div>
               <FrostedHint
                 testId="glm-wallet-mask"
-                label={
-                  !walletEnabled
-                    ? '启用后显示钱包用量'
-                    : walletError?.kind === 'missing_config'
-                      ? '配置钱包凭据后显示用量'
-                      : '暂无钱包数据'
-                }
+                label={walletError?.kind === 'missing_config' ? '配置钱包凭据后显示用量' : '暂无钱包数据'}
                 onActivate={() => props.onOpenSettings('glm')}
               />
             </>

@@ -603,11 +603,11 @@ pub struct DesktopSettings {
     pub theme: ThemePreference,
     pub timezone: String,
     pub glm_region: GlmRegion,
-    /// Whether the GLM wallet connection is enabled at all.
+    /// Whether the GLM wallet connection is enabled at all. One switch: on means
+    /// the connection collects *and* its module shows on the card, off means both
+    /// stop. Revoking the stored credential is an explicit deletion, never a side
+    /// effect of this flag.
     pub glm_wallet_enabled: bool,
-    /// Whether the GLM wallet card is shown in the panel. Hiding keeps the
-    /// credential and keeps collecting.
-    pub glm_wallet_visible: bool,
     /// Whether the experimental DeepSeek web usage connection is enabled at
     /// all. Off by default: the collector must never touch the console
     /// endpoints without an explicit opt-in.
@@ -825,7 +825,6 @@ impl Default for DesktopSettings {
             timezone: "UTC".to_string(),
             glm_region: GlmRegion::China,
             glm_wallet_enabled: false,
-            glm_wallet_visible: true,
             deepseek_web_enabled: false,
             platform_visibility: ProviderId::ALL
                 .iter()
@@ -1006,7 +1005,9 @@ mod tests {
     #[test]
     fn settings_written_by_an_older_build_still_load() {
         // A record from before the per-window reset formats and quota display
-        // modes existed must keep loading with their documented defaults.
+        // modes existed must keep loading with their documented defaults, and the
+        // retired `glmWalletVisible` flag of the two-switch wallet model must load
+        // as the ignored key it now is rather than failing the whole record.
         let legacy = serde_json::json!({
             "timezone": "Asia/Shanghai",
             "glmRegion": "international",
@@ -1021,7 +1022,6 @@ mod tests {
         assert_eq!(settings.timezone, "Asia/Shanghai");
         assert_eq!(settings.glm_region, GlmRegion::International);
         assert!(settings.glm_wallet_enabled);
-        assert!(!settings.glm_wallet_visible);
         assert_eq!(settings.codex_cli_path, None);
         assert_eq!(settings.codex_reset_format, ResetTimeFormat::Countdown);
         assert_eq!(settings.glm_reset_format, ResetTimeFormat::Countdown);

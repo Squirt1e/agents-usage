@@ -190,7 +190,6 @@ export function defaultPanelSettings(patch: Partial<PanelSettings> = {}): PanelS
     timezone: 'Asia/Shanghai',
     glmRegion: 'china',
     glmWalletEnabled: true,
-    glmWalletVisible: true,
     platformVisibility: {},
     credentials: {
       glm: { configured: true, suffix: '1234' },

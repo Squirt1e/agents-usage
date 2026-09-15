@@ -440,7 +440,6 @@ struct SettingsPatch {
     timezone: Option<String>,
     glm_region: Option<String>,
     glm_wallet_enabled: Option<bool>,
-    glm_wallet_visible: Option<bool>,
     deepseek_web_enabled: Option<bool>,
     platform_visibility: Option<std::collections::BTreeMap<String, bool>>,
     platform_order: Option<Vec<String>>,
@@ -515,9 +514,6 @@ async fn update_settings(
         }
         if let Some(enabled) = patch.glm_wallet_enabled {
             settings.glm_wallet_enabled = enabled;
-        }
-        if let Some(visible) = patch.glm_wallet_visible {
-            settings.glm_wallet_visible = visible;
         }
         if let Some(enabled) = patch.deepseek_web_enabled {
             settings.deepseek_web_enabled = enabled;

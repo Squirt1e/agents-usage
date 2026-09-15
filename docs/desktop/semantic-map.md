@@ -96,9 +96,10 @@
 | 连接身份的判定 | 面板按 `state.connection ?? snapshot.connection` 派生，两者都缺时当作主连接 | 服务按连接逐条发布，身份在 `connections`；面板必须按 state 级标识 → 快照标识 → `connections` 中唯一一条解析（`stateConnection()`），只有无法判定时才退回主连接。首次成功之前同样要判对，否则已关闭的实验连接会以「余额／Coding Plan」的名义混进底部连接状态 |
 | 关闭的实验连接 | 无 | 开关关闭时既不采集也不写健康记录（关闭是用户的选择，不是连接故障）；面板据此既不把它计入「连接异常」，也不在浮层里列出 |
 | 关闭后的残留读数 | 无 | 关闭只停止采集与记录，不擦除上次落库的快照，服务照旧把它发布出去；因此总览必须主动摘掉该连接（`switchedOffConnection()` 走 `withoutConnection`），卡片再按 `glmWalletEnabled` / `deepseekWebEnabled` 兜一层，否则关闭前采集到的余额会一直显示在一个再也不会更新的模块里 |
+| 显隐 | 无（旧 Node 只有实验开关 `glm.wallet.enabled`） | 桌面侧也只有一个开关：`glmWalletEnabled` 同时决定采集与卡片上的钱包模块是否出现，没有独立的显隐设置；关闭保留凭据，撤销凭据只走凭据表单的删除按钮（与 `deepseekWebEnabled` 一致） |
 | 合并方式 | 成功则拼接指标并在 `source` 加 `+experimental`，失败写入 `diagnostic.experimentalError` | 按连接合成视图：任一方失败或未启用时，另一方照常显示，不共享错误 |
 | 凭据 | 套餐 `glm/default`，钱包 `glm/wallet-experimental` | 保持同一 Keychain 服务名与账号标识 |
-| 启用语义 | 钱包由 `glm.wallet.enabled`（或环境开关）控制，关闭时删除钱包凭据 | 同前：显示开关与实验连接启停是两个独立操作，隐藏保留凭据、关闭清除钱包凭据且不影响套餐 |
+| 启用语义 | 钱包由 `glm.wallet.enabled`（或环境开关）控制，关闭时删除钱包凭据 | 桌面侧一个开关管采集与展示，关闭既不采集也不显示、但保留凭据；删除凭据是独立的显式操作，且始终不影响套餐连接 |
 | DeepSeek 网页用量连接 | 无 | 实验连接 `deepseek:web`，凭据 `deepseek/web-experimental`（网页登录 Token），由 `deepseekWebEnabled` 设置控制；关闭保留凭据，采集失败仅影响该连接，桌面主卡不回退展示余额差分估算 |
 | 网页登录态被拒 | 无 | 后台业务码 `40002 Missing Token` 与 `40003 Authorization Failed (invalid token)` 都算认证失败（引导重新粘贴）；写入前去掉粘贴值自带的 `Bearer ` 前缀，整段 `Authorization` 头不应因此被判成无效 |
 | 网页用量的查询窗口 | 无 | 后台用量页只提交整日窗口（`start` = 本地日零点，`end` = 下一个本地日零点，另带 `tz` 偏移秒），因此实验采集也提交完整本地日，SHALL NOT 用「当前时刻」当窗口终点 |

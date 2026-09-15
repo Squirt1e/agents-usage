@@ -107,7 +107,6 @@ export function OverviewView(props: OverviewViewProps) {
                   key={provider}
                   view={view}
                   peak={peak}
-                  walletVisible={props.settings.glmWalletVisible}
                   walletEnabled={props.settings.glmWalletEnabled}
                   quotaDisplayMode={props.settings.glmQuotaDisplay}
                   quotaValueMode={props.settings.quotaValueMode}

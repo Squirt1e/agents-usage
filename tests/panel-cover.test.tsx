@@ -24,7 +24,6 @@ const noop = () => undefined;
 function renderGlm(
   providers: Parameters<typeof snapshotOf>[0],
   options: {
-    walletVisible?: boolean;
     walletEnabled?: boolean;
     onOpenSettings?(provider: ProviderId): void;
   } = {}
@@ -38,7 +37,6 @@ function renderGlm(
       quotaDisplayMode="ring"
       quotaValueMode="used"
       resetTimeFormat="countdown"
-      walletVisible={options.walletVisible ?? false}
       walletEnabled={options.walletEnabled ?? false}
       onOpenSettings={options.onOpenSettings ?? noop}
       onToggleResetTimeFormat={noop}
@@ -120,52 +118,62 @@ describe('frosted cover wiring', () => {
   });
 
   it('leaves real quota columns uncovered', () => {
-    renderGlm(configured([...quotaMetrics, ...walletMetrics]), { walletVisible: true });
+    renderGlm(configured([...quotaMetrics, ...walletMetrics]), { walletEnabled: true });
     expect(quotaList().className).not.toContain('is-covered');
     expect(quotaList().querySelector('.frost-hint')).toBeNull();
     expect(quotaList()).toHaveTextContent('63%');
   });
 
   it('marks the wallet block only while it shows placeholder money', () => {
-    // Quota is real; the wallet connection has produced nothing yet, so the block
-    // shows the placeholder balances and must be covered.
-    renderGlm(configured([...quotaMetrics]), { walletVisible: true, walletEnabled: false });
+    // Quota is real; the enabled wallet connection has produced nothing yet, so
+    // the block shows the placeholder balances and must be covered.
+    renderGlm(configured([...quotaMetrics]), { walletEnabled: true });
     const wallet = screen.getByTestId('glm-wallet');
     expect(wallet.className).toContain('is-covered');
     expect(wallet.querySelector('.frost-hint')).not.toBeNull();
     expect(wallet).toHaveTextContent('¥ 42.60');
   });
 
-  it('opens GLM settings from a disabled wallet cover', () => {
+  it('opens GLM settings from a wallet cover waiting for its credential', () => {
     const onOpenSettings = vi.fn();
-    renderGlm(configured([...quotaMetrics]), {
-      walletVisible: true,
-      walletEnabled: false,
-      onOpenSettings
-    });
+    const walletState = failedStateOf(
+      'glm',
+      {
+        kind: 'missing_config',
+        message: 'the experimental GLM wallet credential is not configured',
+        at: '2026-09-10T08:00:00.000Z'
+      },
+      { connection: { provider: 'glm', connection: 'wallet' } }
+    );
+    renderGlm(
+      [
+        providerStateOf('glm', quotaMetrics, { connection: { provider: 'glm', connection: 'quota' } }),
+        walletState
+      ] as Parameters<typeof snapshotOf>[0],
+      { walletEnabled: true, onOpenSettings }
+    );
 
-    const cover = screen.getByRole('button', { name: '启用后显示钱包用量' });
+    const cover = screen.getByRole('button', { name: '配置钱包凭据后显示用量' });
     fireEvent.click(cover);
 
     expect(onOpenSettings).toHaveBeenCalledWith('glm');
   });
 
-  it('covers the wallet once its connection switch is turned off, reading or not', () => {
-    // The service stops collecting when the switch goes off but keeps publishing
-    // the reading it persisted while the connection was on. A balance rendered
-    // from that would never change again, and the switch would look inert — so the
-    // module has to fall back to its placeholder cover, real reading or not.
-    renderGlm(configured([...quotaMetrics, ...walletMetrics]), { walletVisible: true, walletEnabled: false });
+  it('renders no wallet module at all while its connection switch is off', () => {
+    // One switch: off means the module is gone. The reading the service persisted
+    // while the connection was on is still in the snapshot, and neither it nor a
+    // placeholder cover may show up — the module does not exist to cover.
+    renderGlm(configured([...quotaMetrics, ...walletMetrics]), { walletEnabled: false });
 
-    const wallet = screen.getByTestId('glm-wallet');
-    expect(wallet.className).toContain('is-covered');
-    expect(wallet).not.toHaveTextContent('¥ 12.50');
-    expect(wallet).toHaveTextContent('¥ 42.60');
-    expect(screen.getByTestId('glm-wallet-mask')).toHaveTextContent('启用后显示钱包用量');
+    expect(screen.queryByTestId('glm-wallet')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('glm-wallet-mask')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥ 12.50')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥ 42.60')).not.toBeInTheDocument();
+    expect(quotaList()).toHaveTextContent('63%');
   });
 
   it('leaves a wallet with real balances uncovered', () => {
-    renderGlm(configured([...quotaMetrics, ...walletMetrics]), { walletVisible: true, walletEnabled: true });
+    renderGlm(configured([...quotaMetrics, ...walletMetrics]), { walletEnabled: true });
     const wallet = screen.getByTestId('glm-wallet');
     expect(wallet.className).not.toContain('is-covered');
     expect(wallet.querySelector('.frost-hint')).toBeNull();
