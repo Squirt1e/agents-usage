@@ -1,0 +1,32 @@
+node_modules/
+dist/
+coverage/
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+
+# Rust workspace build output
+target/
+
+# Repository-local cargo cache (see tools/cargo.sh)
+.dsh/
+
+# Tauri generated files
+src-tauri/gen/
+
+# Staged Tauri sidecar binaries
+src-tauri/binaries/
+
+# OpenSpec 与 Superpowers 的工作流产物：只服务于本地规划，不进版本库
+openspec/
+.superpowers/
+.agents/
+docs/superpowers/
+
+# 编辑器配置与临时预览页
+.idea/
+.theme-preview.html
+
+# husky 运行时生成的钩子包装层
+.husky/_/
