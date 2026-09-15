@@ -114,6 +114,38 @@ strings -a "$BIN" | grep -E '^/(index|settings)\.html$'   # 两个文档都在
 8. **面板高度**：隐藏全部平台后窗口不再停在 320，而是收到空状态需要的高度；卡片很多时窗口停在
    工作区高度并在内部滚动；钉住后面板失焦、标题栏收起时窗口跟着变矮、底部不留空白。
 
+## 实机验证记录（设置窗口，2026-09-15）
+
+在一台已登录的 macOS 26.6（Aqua 会话）上跑的是**开发构建**（`npm run dev:desktop`，独立 bundle
+标识 `com.agents-usage.desktop.dev`），用 `osascript` 读真实窗口几何、用 `screencapture` 看渲染、
+用宿主自己的 `diag_log`（`$TMPDIR/agents-usage-panel-events.log`）核对事件顺序。
+
+截图存于本节同级的 [`verification/`](verification/)：`settings-window-dark.png` 是设置窗口的
+深色渲染，`settings-and-panel.png` 是它与面板并排（面板在右、设置在左）。
+
+| 检查 | 结果 | 证据 |
+| --- | --- | --- |
+| 窗口尺寸与装饰 | 通过 | AX 读到 `[设置] size=560380`；截图显示系统标题栏（红黄绿三键）＋标题「设置」（见 `verification/settings-window-dark.png`） |
+| 位置：面板在屏幕右侧 | 通过 | 面板 `pos=2200,40`，设置窗口落在它**左侧** `(1630,40)`，与 `settings_window_origin` 的规则一致（`position_settings_window target=(1630,40)`） |
+| 布局与分类 | 通过 | 截图：左侧纵排「平台管理 / 外观 / Codex / GLM / DeepSeek」，平台管理为当前项，右侧是内容区 |
+| 深色主题观感 | 通过 | 截图：窗口底色与面板同一套变量，导航选中项有青色指示条 |
+| 失焦不关 | 通过 | 记录到面板 `focus(true)`/`focus(false)`，而设置窗口打开后 `hide_panel` 调用数为 **0**，设置窗口始终在窗口列表里 |
+| 主面板高度 | 通过 | 宿主日志 `panel_set_height applied=` 的取值集合是 **304…352**，全部高于旧下限——不再有「所有平台隐藏就落回 320」的行为；面板宽度恒为 350 |
+| 设置窗口入口 | 通过 | 菜单栏右键菜单读作「显示/隐藏面板 / 设置… / 退出」，点「设置…」后 `open_settings section=platforms` → `reveal_settings_window` |
+| 开发期 URL | 通过 | 由 `tests/desktop-dev-entry.test.ts` 抓取两个文档；本轮两个窗口都由 dev server 正常加载 |
+| **Escape 关闭设置窗口** | **无法驱动** | 见下 |
+
+### 一个无法在本机驱动、且可能是真实问题的点
+
+**Escape 无法验证，而且原因不只是测试环境的限制。** 宿主用
+`set_activation_policy(ActivationPolicy::Accessory)`（菜单栏应用不占 Dock），macOS 因此不会让它的
+窗口成为 key window，合成键盘事件（`CGEvent`）也就落不到它的 webview 上。同一台机器上对 TextEdit
+做同样的注入是成功的（读回了输入的字符），所以不是注入权限的问题，而是这个应用**收不到键盘事件**。
+
+这不只影响 Escape：它意味着当前构建里设置窗口的键盘输入整体是可疑的。本轮没有把这一点当作
+"通过"，也没有就此改代码——改激活策略（或给设置窗口单独提升）是产品取舍，需要先确认是否要支持
+键盘操作（Tab 遍历、Escape、Cmd+W），再决定。
+
 ## 尚未接入的检查
 
 以下检查在对应任务完成前不会出现在上面的入口中，避免给出「已通过」的假象：
