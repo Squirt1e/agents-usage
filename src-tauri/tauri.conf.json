@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Agents Usage",
+  "version": "0.1.0",
+  "identifier": "com.agents-usage.desktop",
+  "build": {
+    "frontendDist": "../dist/desktop-client",
+    "devUrl": "http://127.0.0.1:5174/src/desktop/",
+    "beforeDevCommand": "node scripts/desktop/dev-web.mjs",
+    "beforeBuildCommand": "node scripts/desktop/build-web.mjs && node scripts/desktop/build-service.mjs"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "macOSPrivateApi": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
+      "capabilities": []
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "externalBin": ["binaries/usage-service"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  }
+}

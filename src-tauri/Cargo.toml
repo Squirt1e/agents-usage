@@ -1,0 +1,35 @@
+[package]
+name = "agents-usage-desktop"
+description = "macOS menubar host: tray icon, panel window lifecycle and the restricted bridge to the Rust usage service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+# The bundle identifier lives in `tauri.conf.json` so the host and the packaged
+# application cannot disagree about it.
+
+[lib]
+name = "agents_usage_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "agents-usage-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-single-instance = "2"
+tokio = { workspace = true, features = ["time", "macros", "sync"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+url.workspace = true
+usage-core.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSEvent", "NSWindow"] }
