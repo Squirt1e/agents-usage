@@ -53,32 +53,38 @@
 无法插值的对象才允许逐帧驱动。任何新切换必须登记到
 [`panel-motion.test.ts`](../../tests/panel-motion.test.ts)。
 
-## 3. 页面与布局骨架
+## 3. 窗口与布局骨架
+
+两个宿主窗口，两套骨架，共用同一套 Token 与控件。
 
 ```text
-PanelApp                         数据、设置、导航和副作用
-└── Panel                       固定宽度的界面外壳
-    ├── panel-header            标题 / 返回入口 / 总览工具栏
-    ├── panel-body              当前页面，唯一纵向滚动区域
-    │   ├── OverviewView        平台卡片列表
-    │   ├── AppSettings         应用级设置
-    │   └── ProviderSettings    单平台设置
-    ├── panel-bottom
-    │   ├── panel-footer        固定的同步状态
-    │   └── PanelToasts         脱离文档流的临时消息栈
-    └── overlay                 高于所有内容的模态层
+面板窗口（index.html，350 × 内容高）        设置窗口（settings.html，560 × 380 固定）
+PanelApp                                  SettingsApp
+└── Panel                                 └── SettingsPanel
+    ├── panel-header  标题 / 工具栏             ├── settings-nav    分类纵排，不滚动
+    ├── panel-body    唯一纵向滚动区域          │    平台管理 / 外观 / Codex / GLM / DeepSeek
+    │   └── OverviewView  平台卡片列表          └── settings-content  唯一纵向滚动区域
+    ├── panel-bottom                                  └── settings-pane  当前分类
+    │   ├── panel-footer  固定的同步状态                    ├── AppSettings    平台管理 / 外观
+    │   └── PanelToasts   脱离文档流的消息栈                └── ProviderSettings  单平台配置
+    └── ConnectionDetails  底部详情层（无布局占位）
 ```
 
 布局约束：
 
-- `PanelApp` 持有数据和视图状态，展示组件不自行请求数据或持久化设置。
-- `.panel` 是固定宽度、全高的纵向 flex 容器；`.panel-body` 是唯一可滚动内容区。
-- 页面主体只能向下增长。子元素必须允许收缩，并对长单词、URL 和错误信息使用断行；不得通过增加
-  面板宽度或横向滚动解决溢出。
-- 总览页决定宿主窗口高度，最多展示三个完整卡片；空总览使用最小高度。设置页继承总览高度并在
-  body 内滚动，不能自行撑高窗口。
-- 只有总览卡片使用 `data-panel-block="card"` 参与高度测量。设置分组即使带有
-  `data-panel-block="section"` 也不参与计算。
+- `PanelApp` 持有面板的数据与副作用，`useSettingsWindow`（`settings-window.ts`）持有设置窗口的
+  数据与副作用；纯展示组件不自行请求数据或持久化设置。两个窗口各持一个 `settings-store` 实例。
+- 面板只有一个页面（总览），因此没有换页动效、没有返回入口、工具栏不会隐藏。`.panel` 是固定宽度、
+  全高的纵向 flex 容器，`.panel-body` 是唯一可滚动内容区。
+- 面板窗口高度 = 框架 + 总览内容实际高度，上限由宿主的 `clamp_panel_height` 按当前显示器的工作区
+  决定；CSS 侧只保留 `max-height: 100vh` 作为上限。**没有最小高度**，也不再按卡片张数取整：
+  空总览就是一块矮面板。高度由 `usePanelHeight` 测量并逐帧上报，且必须保留重算路径（安全 tick 与
+  `visibilitychange`），理由见 `panel-height.ts` 的模块头注释。
+- 设置窗口尺寸固定，内容区滚动，分类导航不滚动。`.settings-content` 是唯一滚动区；窗口本身
+  不可缩放，`min_inner_size` 与 `max_inner_size` 都等于目标尺寸。
+- 两个窗口的内容都只能向下增长。子元素必须允许收缩，并对长单词、URL 和错误信息使用断行；不得通过
+  增加宽度或横向滚动解决溢出。
+- 面板卡片不再带 `data-panel-block` 标记（高度改为量内容元素的完整高度）；设置分组也不参与计算。
 - 页脚和 toast 不进入卡片高度预算；toast 以 `.panel-bottom` 为锚点浮在正文上方，不能推动内容。
 
 ## 4. 样式 Token
@@ -127,13 +133,14 @@ PanelApp                         数据、设置、导航和副作用
 
 | 组件 | 职责 | 后续使用约束 |
 | --- | --- | --- |
-| `PanelApp` | 聚合快照、设置、导航、刷新、toast 和焦点恢复 | 业务副作用留在此层或专用 hook，不下沉到纯展示组件 |
-| `Panel` | 标题、返回、工具栏、滚动正文、页脚和 overlay 插槽 | 新页面必须通过 `viewKey` 和 `direction` 进入，保证标题与正文共用换页动效 |
+| `PanelApp` | 聚合快照、设置、刷新、toast，并把每个设置入口转成一次开窗请求 | 业务副作用留在此层或专用 hook，不下沉到纯展示组件；面板不新增页面 |
+| `Panel` | 标题、工具栏、滚动正文、页脚和详情插槽 | 面板只有一页，因此没有 `viewKey` / `direction`；新增设置界面属于设置窗口，不属于这里 |
+| `SettingsPanel` | 设置窗口的分类导航与内容区 | 分类一次只挂载一个；分类身份即 pane 的 React key，靠它重放内容入场动效 |
 | `PanelIconButton` | 统一顶部图标按钮、按下态和无障碍名称 | 图标按钮必须提供 `label`；可切换动作使用 `pressed`，临时工作态使用 `disabled` |
 | `PanelToasts` | 展示动作完成后的短暂消息 | 只报告已经发生的结果；不承载确认、输入或必须长期保留的信息 |
 
-返回入口属于标题本身，不再增加第二套面包屑或页内返回按钮。总览工具栏在子页保持挂载并淡出，
-避免显隐剪切，同时通过 `aria-hidden` 退出无障碍树和 Tab 顺序。
+设置窗口的分类导航是竖直 tablist，方向键在同一控件内移动（roving focus），不是一组独立按钮；
+窗口没有返回入口——关掉它就是返回，Escape 由宿主规则处理。面板工具栏常驻，不再有需要淡出的状态。
 
 ### 5.2 内容容器
 
@@ -348,11 +355,12 @@ CSS 动效由文件末尾的 `prefers-reduced-motion` 全局兜底关闭。窗�
 | 关注点 | 实现入口 | 自动验证 |
 | --- | --- | --- |
 | 颜色变量、主题角色、对比度 | `src/desktop/panel.css`、`theme.ts` | `tests/panel-palette.test.ts`、`tests/panel-theme.test.tsx` |
-| 切换动效、时长、减弱动效 | `panel.css`、`panel-height.ts`、`quota-morph.ts` | `tests/panel-motion.test.ts`、`tests/panel-height-hook.test.tsx`、`tests/panel-quota-morph.test.tsx` |
-| 面板宽度与高度预算 | `panel.css`、`panel-height.ts`、`src-tauri/src/lib.rs` | `tests/panel-width.test.ts`、`tests/panel-height.test.ts` |
+| 切换动效、时长、减弱动效 | `panel.css`、`settings.css`、`panel-height.ts`、`quota-morph.ts` | `tests/panel-motion.test.ts`、`tests/panel-height-hook.test.tsx`、`tests/panel-quota-morph.test.tsx` |
+| 面板宽度、高度规则、设置窗口的尺寸中和 | `panel.css`、`settings.css`、`panel-height.ts`、`src-tauri/src/lib.rs` | `tests/panel-width.test.ts`、`tests/panel-height.test.ts` |
+| 两个窗口：开窗入口、分类、共用设置 | `SettingsPanel.tsx`、`settings-window.ts`、`settings-store.ts`、`desktop-client.ts`、`src-tauri/src/lib.rs` | `tests/settings-window.test.tsx`、`tests/panel-settings.test.tsx`、`tests/settings-store.test.ts` |
 | 空态和遮挡 | `MetricStates.tsx`、`GlmCard.tsx` | `tests/panel-cover.test.tsx`、`tests/panel-motion.test.ts` |
-| 页面和平台组合 | `Panel.tsx`、`OverviewView.tsx`、`PlatformCard.tsx` | `tests/panel-overview.test.tsx`、`tests/panel-transition.test.tsx` |
-| 设置控件和排序 | `AppSettings.tsx`、`ProviderSettings.tsx`、`PlatformSettings.tsx` | `tests/panel-settings.test.tsx`、`tests/panel-selection.test.ts` |
+| 面板只有一页（没有页面转场可回归） | `Panel.tsx`、`OverviewView.tsx`、`PlatformCard.tsx` | `tests/panel-overview.test.tsx`、`tests/panel-transition.test.tsx` |
+| 设置控件和排序 | `AppSettings.tsx`、`ProviderSettings.tsx`、`PlatformSettings.tsx` | `tests/settings-window.test.tsx`、`tests/panel-selection.test.ts` |
 | 状态和临时消息 | `StatusRow.tsx`、`PanelToasts.tsx` | `tests/panel-toasts.test.ts`、`tests/panel-toast-stack.test.tsx` |
 
 规范与实现冲突时，不要静默选择其中一边：先判断是实现偏离已有约束，还是规范因新决策需要更新。

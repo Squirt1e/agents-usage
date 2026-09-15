@@ -14,7 +14,7 @@ crates/usage-core/              采集核心：契约、适配器、存储、凭
 crates/usage-service/           独立可执行服务：占用数据目录、回环 HTTP/SSE
 src-tauri/                      Tauri 宿主：菜单栏、窗口生命周期、受限命令/事件桥
 src/shared/                     面板与服务共享的契约与脱敏（TypeScript）
-src/desktop/                    桌面紧凑面板入口（约 350 逻辑像素）
+src/desktop/                    两个窗口的前端：面板（index.html）与设置窗口（settings.html）
 tools/cargo.sh                  cargo 包装脚本（见「环境注意事项」）
 tools/tauri.sh                  Tauri CLI 包装脚本
 scripts/desktop/                面板前端构建/开发入口
@@ -24,6 +24,32 @@ docs/desktop/                   环境基线、依赖锁定、语义对照、验
 面板组件的职责边界、样式 Token、状态语义、动效要求与新功能接入清单见
 [`component-and-style-guide.md`](component-and-style-guide.md)。它从当前实现提炼工程约束；具体功能
 行为仍以 `openspec/` 为准。
+
+## 两个窗口
+
+宿主开两个窗口，前端也对应两个 HTML 入口（`vite.config.ts` 的 `rollupOptions.input`，构建时都被
+扁平化到 `dist/desktop-client` 根下）：
+
+| 窗口 | 标签 | 入口 | 浏览器加载 | 外观与尺寸 |
+| --- | --- | --- | --- | --- |
+| 面板 | `panel` | `index.html` | `WebviewUrl::App("index.html")` | 无装饰、透明、`350 × 内容高`，失焦收起，可钉住 |
+| 设置 | `settings` | `settings.html` | `WebviewUrl::App("settings.html")` | 系统标题栏、固定 `560 × 380`，不可缩放，失焦不关 |
+
+- **设置只有这一个窗口。** 四个入口——面板顶部齿轮（→ 外观）、卡片配置图标（→ 该平台）、空状态的
+  「管理平台」（→ 平台管理）、菜单栏图标右键的「设置…」（→ 平台管理）——都走
+  `panel_open_settings`；窗口已开时只前置并切到该分类，不开第二个。窗口建好后是隐藏的，
+  前端挂载完成才调 `panel_settings_ready` 让宿主显示，因此看不到空窗口的首帧。
+- **两个窗口共用一份设置。** 写入由宿主落盘后广播 `panel://settings` 给所有窗口，每个窗口各持一个
+  `settings-store` 实例订阅它，并按值比较——同一个值再来一次算回声、不算变化，所以一次写入只让
+  两边各重渲染一次。设置窗口改一项，面板当场反映。
+  「这次写入是否改变采集内容」的判断在宿主（`providers_to_recollect`），不在发起写入的窗口——
+  卡片在另一个窗口里，规则只写一份才不会漏。
+- **面板不再有页面。** 设置与各平台配置都不在面板内，因此面板只剩总览一页：没有页面转场、没有
+  「返回」按钮，窗口高度只由总览内容决定（上限是宿主按显示器算出的工作区）。浏览器里没有第二个
+  窗口可开，`main.ts` 把同一套设置界面以 `560 × 380` 浮层挂到面板文档上。
+- **开发期 URL**：面板走 `devUrl`（`http://127.0.0.1:5174/src/desktop/`），设置窗口走
+  `http://127.0.0.1:5174/src/desktop/settings.html`（`settings_window_url()` 里按
+  `tauri::is_dev()` 分支）。
 
 ## 命令
 
@@ -106,8 +132,8 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
 - 本地服务（`crates/usage-service`）：数据目录独占锁、私有服务发现、认证的回环
   HTTP/SSE API、受控退出。运行：`bash tools/cargo.sh run -p usage-service -- --timezone
   Asia/Shanghai`。
-- Tauri 宿主（`src-tauri`）：模板托盘图标、左键展开/收起、右键菜单、无 Dock 生命周期、
-  无装饰面板锚定、钉住/隐藏、单实例唤起、受限命令桥。钉住把窗口加入所有 Space，因此用户
+- Tauri 宿主（`src-tauri`）：模板托盘图标、左键展开/收起、右键菜单（显示/隐藏面板、设置…、退出）、
+  无 Dock 生命周期、无装饰面板锚定、固定尺寸设置窗口、钉住/隐藏、单实例唤起、受限命令桥。钉住把窗口加入所有 Space，因此用户
   切换桌面后钉住的面板仍在新桌面上；取消钉住时清除该行为，临时弹出只留在它被展开的桌面。
   实现是一次性声明窗口集合行为（`apply_pinned` 里的 `set_visible_on_all_workspaces`），
   不是逐次切换重新显示窗口，面板位置不会被再次锚定。压在应用全屏窗口之上不在范围内
@@ -119,10 +145,12 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   顶边允许贴到屏幕边缘，以适应自动隐藏菜单栏的全屏空间。头部自动隐藏的鼠标命中判断先把
   主屏鼠标坐标与窗口坐标各自换算为点，跨不同缩放比例的屏幕也能正确计时；窗口首次显示且
   鼠标已在外面时同样开始计时。
-- 面板界面（`src/desktop`）：约 350 逻辑像素中文紧凑主题，三平台总览、设置页（平台管理为
-  第一项，支持指针拖拽与方向键排序并即时持久化；外观包含主题：浅色 / 深色 / 跟随系统，
-  以及全局额度数值：剩余 / 已用；默认深色并显示剩余额度，跟随系统响应 macOS 外观变化）、Codex 双仪表、GLM 套餐/钱包、
-  DeepSeek 余额与可选的网页账单用量、单平台配置。DeepSeek 网页用量连接关闭时主卡不显示今日
+- 面板界面（`src/desktop`）：约 350 逻辑像素中文紧凑主题，只有总览一页：三平台卡片、底部状态行与
+  消息浮层。设置界面在独立的 560×380 设置窗口里，左侧分类纵排（平台管理 / 外观 / Codex / GLM /
+  DeepSeek），右侧是唯一的内容滚动区；平台管理是第一个分类，支持指针拖拽与方向键排序并即时持久化；
+  外观包含主题：浅色 / 深色 / 跟随系统，以及全局额度数值：剩余 / 已用；默认深色并显示剩余额度，
+  跟随系统响应 macOS 外观变化。Codex 双仪表、GLM 套餐/钱包、DeepSeek 余额与可选的网页账单用量
+  都按平台分到各自的分类里。DeepSeek 网页用量连接关闭时主卡不显示今日
   用量，启用但未配置 Token 时只显示毛玻璃占位，不回退展示余额差分估算。两套配色共用同一组
   颜色变量，规则中不写硬编码颜色
   （由 `tests/panel-palette.test.ts` 守住）。浅色采用 macOS 设置风格的系统灰背景、白色分组卡片、
@@ -133,8 +161,9 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   禁用则整块淡化——关闭因此不会读作「点不动」，见
   [`fix-light-switch-off-state`](../../openspec/changes/fix-light-switch-off-state/proposal.md)。
   界面动效按仓库规则「所有切换都要有过渡动画」
-  实现（`AGENTS.md` §1）：换页、窗口高度、状态切换、数值变化各自用 transition / animation /
-  逐帧上报，`prefers-reduced-motion` 统一关闭，切换点登记在 `tests/panel-motion.test.ts`。
+  实现（`AGENTS.md` §1）：分类选中、内容入场、窗口高度、状态切换、数值变化各自用
+  transition / animation / 逐帧上报，`prefers-reduced-motion` 统一关闭，切换点登记在
+  `tests/panel-motion.test.ts`（该守卫读 `panel.css` 与 `settings.css` 两份样式）。
 - 额度展示的圆环与进度条是同一条描边的两种几何，二者只能通过点击条目本身切换（整个条目都是
   热区，重置时间行只有自身可点时例外；设置页没有形态开关）。全局设置的「外观」提供一个
   「额度数值」的「剩余 / 已用」选择，统一作用于 Codex 与 GLM，默认显示剩余量；缺少所选方向的指标时显示

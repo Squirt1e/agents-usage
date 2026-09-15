@@ -119,7 +119,27 @@ Rust 侧由 `crates/usage-core/tests/contract_conformance.rs` 校验（`npm run 
 - 枚举拼写（provider、confidence、direction、status、error kind）与旧契约完全一致。
 - 账号掩码沿用「最后四位」规则，且只用于展示，不落库、不进日志。
 
-## 8. 覆盖范围说明
+## 8. 界面词与代码对照
+
+面板与设置窗口的界面词、入口与宿主命令的对应关系。放在这里是为了让「用户说的那个入口」能直接
+落到一处代码，不必先猜它属于哪个窗口。
+
+| 界面词 | 所在窗口 | 代码入口 | 结果 |
+| --- | --- | --- | --- |
+| 设置（顶部齿轮） | 面板 | `PanelApp` → `onOpenSettings('appearance')` → `panel_open_settings` | 打开设置窗口并切到「外观」 |
+| 配置 \<平台\>（卡片齿轮） | 面板 | `OverviewView` → `onOpenSettings(provider)` | 打开设置窗口并切到该平台分类 |
+| 管理平台（空状态） | 面板 | `EmptySelectionState` → `onOpenSettings('platforms')` | 打开设置窗口并切到「平台管理」 |
+| 设置…（菜单栏右键） | 菜单栏 | `lib.rs` 的 `on_menu_event("settings")` | 同上，无 section 时落到「平台管理」 |
+| 平台管理 / 外观 / Codex / GLM / DeepSeek | 设置窗口 | `SETTINGS_SECTIONS`（`SettingsPanel.tsx`）与 `SETTINGS_SECTIONS`（`lib.rs`） | 两侧必须同名，`settings_section()` 把未知名字归到「平台管理」 |
+| 额度数值（剩余 / 已用） | 设置窗口 · 外观 | `quotaValueMode` | 作用于 Codex 与 GLM 两张卡片 |
+| 高峰时段提醒 | 设置窗口 · 平台分类 | `peakReminder` | 判定在 `peak-windows.ts`，纯前端计算 |
+| 连接异常 N | 面板 | `connectionIssues` → `ConnectionDetails` | 详情层不出现在卡片内，也不在设置窗口里 |
+
+两个清单必须同时改：`SETTINGS_SECTIONS` 在 `SettingsPanel.tsx` 与 `src-tauri/src/lib.rs` 各有一份
+（前端决定渲染哪个分类，宿主决定请求能否落到一个真实分类上），由 Rust 测试
+`a_section_request_lands_on_a_real_section` 与前端测试 `settings-window.test.tsx` 分别守住。
+
+## 9. 覆盖范围说明
 
 - 样例只覆盖契约语义与解析结果，不访问真实账号；`glm-connections.json` 的钱包端点使用
   `example.invalid`，真实端点可达性属任务 8.7 的实账号验证。
