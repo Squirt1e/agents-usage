@@ -44,6 +44,27 @@
   --estimate: #ffa66b;
   --mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --radius: 11px;
+
+  /* ---- The type scale -------------------------------------------------------
+     Seven steps, and nothing else. This sheet had eleven sizes, three of which
+     (9.5 / 10 / 10.5) sat within half a pixel of each other while carrying three
+     different levels — a hierarchy the eye cannot read, so the levels were really
+     being carried by colour and the odd half-pixel was pure noise. The steps below
+     are far enough apart to be seen, and every `font-size` in either stylesheet now
+     names one of them; `tests/panel-type-scale.test.ts` fails on a raw pixel value,
+     so the sprawl cannot come back one rule at a time.
+
+     `--text-lg` is the menubar panel's own window title (a 350px-wide window sizes
+     its title differently from the 600px settings window, which uses `--text-xl`),
+     and `--text-display` is the overview's large numerics. */
+  --text-2xs: 9.5px;
+  --text-xs: 10.5px;
+  --text-sm: 11.5px;
+  --text-md: 12.5px;
+  --text-base: 13px;
+  --text-lg: 13.5px;
+  --text-xl: 15px;
+  --text-display: 19px;
   --tile-bottom: #090d15;
   --control-border: #33465b;
   --control-bg: rgba(255, 255, 255, 0.02);
@@ -1032,19 +1053,31 @@ button {
     visibility 0s linear 0s;
 }
 
-/* The settings editor: builtin hours read back, custom rows edit in place.
-   Each custom schedule is one inset row — weekdays, times, remove — so a
-   window reads (and dies) as a unit rather than as scattered controls. */
+/* The settings editor: builtin hours read back, custom windows edit in place.
+ *
+ * A custom schedule is a list of cards, and each card answers one question per
+ * row — which days, then which hours. The shape is forced by the width: the
+ * settings content column leaves ~366px for this block, and the strip this
+ * replaces (seven 9px weekday keys, two unlabelled time fields and a bare ✕ on
+ * one line) was what happened when three controls had to share it.
+ *
+ * The read-only builtin table gets an inset of its own so the two modes are
+ * distinguishable at a glance: one is a reference, the other is editable.
+ */
 .peak-builtin {
   display: grid;
   gap: 3px;
+  padding: 7px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--soft-button-bg);
 }
 
 .peak-builtin-row {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
@@ -1055,75 +1088,365 @@ button {
 
 .peak-editor {
   display: grid;
-  gap: 5px;
+  gap: 6px;
 }
 
-.peak-window-row {
+.peak-window-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Removal closes the list as well as fading the row, which needs two boxes:
+ * the item collapses, the clip inside it is what allows that. A border-box can
+ * never be shorter than its own padding + border, so the card itself bottoms out
+ * at ~19px — an empty-padded clip goes to zero and hides nothing at rest.
+ *
+ * The spacing is the item's own `margin-bottom` rather than the list's `gap`
+ * for the same reason: a gap is not part of any element, so it would snap at
+ * the moment React drops the row instead of closing with it.
+ */
+.peak-window-item {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-bottom: 6px;
+  transition:
+    grid-template-rows 200ms ease,
+    margin-bottom 200ms ease;
+}
+
+.peak-window-item:last-child {
+  margin-bottom: 0;
+}
+
+.peak-window-item.is-leaving {
+  grid-template-rows: 0fr;
+  margin-bottom: 0;
+}
+
+.peak-window-clip {
+  min-height: 0;
+}
+
+.peak-window-item.is-leaving .peak-window-clip {
+  overflow: hidden;
+}
+
+.peak-window-card {
+  display: grid;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 1px solid var(--config-border);
+  border-radius: 9px;
+  background: var(--card-strong);
+  /* A new window arrives with an animation because the element is new: a
+     transition needs a previous value, and there is none on the first frame. */
+  animation: peak-window-in 180ms cubic-bezier(0.22, 0.8, 0.24, 1);
+  /* Its exit is a transition, driven by `.is-leaving`. */
+  transition:
+    opacity 150ms ease,
+    transform 160ms cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+
+@keyframes peak-window-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.peak-window-item.is-leaving .peak-window-card {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.peak-window-days {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 5px;
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  background: var(--soft-button-bg);
+  gap: 8px;
 }
 
-/* The weekday keys are one joined control: tighter than the theme switch's
-   segments (nine-char rows cannot afford nine-pixel padding) but the same
-   resting/lit treatment. */
+/* The weekday keys are one joined multi-select: each key grows to the same
+   width, and the weekend is pulled apart by a seam — 一…五 is the working week
+   and 六日 is not, which a flat seven-glyph strip made the reader work out. */
 .peak-weekdays {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   margin-left: 0;
-  flex: none;
-  gap: 1px;
-  padding: 1.5px;
+  gap: 2px;
+  padding: 2px;
 }
 
 .peak-weekdays .segmented-option {
-  padding: 0 4px;
-  font-size: 9px;
-  line-height: 15px;
-  border-radius: 5px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0;
+  font-size: var(--text-xs);
+  line-height: 18px;
+  border-radius: 6px;
 }
 
-/* Plain text typed as digits and normalized on blur — the native time field
-   renders whatever AM/PM costume the host locale prefers and will not shrink
-   to fit the row. Centered mono keeps the two clocks visually one range. */
-.peak-window-row .text-input {
-  width: 42px;
+/* A margin, not a spacer column: the fixed margins come out of the free space
+   before it is shared, so every key still ends up the same width. */
+.peak-weekdays .segmented-option:nth-child(6) {
+  margin-left: 6px;
+}
+
+/* Typed as digits and normalized on blur — the native time field renders
+   whatever AM/PM costume the host locale prefers and will not shrink to fit.
+   Centered mono keeps the two clocks visually one range. */
+.peak-times {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.peak-time-field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* `开始` / `结束` as dim prefixes rather than labels above the fields: at this
+   width a stacked label costs a row per field, and the range reads better on one
+   line — `开始 09:00 → 结束 18:00` — than split into two columns. The previous
+   version named neither end on screen; the names lived in `aria-label` only. */
+.peak-time-label {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.peak-times .text-input {
+  width: 50px;
   min-width: 0;
   flex: none;
-  padding: 2.5px 3px;
+  padding: 3px 4px;
   text-align: center;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
-.peak-window-row .text-input::placeholder {
+.peak-times .text-input::placeholder {
   color: var(--placeholder);
 }
 
-.peak-dash {
+.peak-times-arrow {
   flex: none;
   color: var(--text-faint);
-  font-family: var(--mono);
+  font-size: var(--text-xs);
 }
 
+/* The overnight marker is always in the box and only ever becomes visible: it
+   is pushed left by `margin-left: auto`, so showing and hiding it by mounting
+   would move the fields — here nothing shifts, and the marker fades in on the
+   row that wraps. `visibility` steps at the end of the fade so the hidden
+   marker leaves the tab order and the accessibility tree. */
+.peak-overnight {
+  flex: none;
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--warning-border);
+  border-radius: 999px;
+  color: var(--warning);
+  font-size: var(--text-2xs);
+  line-height: 16px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-3px);
+  transition:
+    opacity 150ms ease,
+    transform 160ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    visibility 0s linear 150ms;
+}
+
+.peak-window-card.is-overnight .peak-overnight {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 150ms ease,
+    transform 160ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    visibility 0s linear 0s;
+}
+
+.peak-add-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Dashed, and part of the list it extends: "one more window" belongs beside the
+   windows, not as a blue link at the far left of the block with the save button
+   pushed to the far right. */
+.peak-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 4px 9px;
+  border: 1px dashed var(--control-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--control-text);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.peak-add:hover:not(:disabled) {
+  border-color: var(--control-hover-border);
+  background: var(--control-bg);
+  color: var(--control-hover-text);
+}
+
+.peak-add:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Two steps are worth one line of text: a field that only answers to the arrow
+   keys is a field nobody knows about. */
+.peak-keyhint {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* No windows yet. Before this the editor was simply blank, and the only sign
+   that something was missing was the refusal to save. */
+.peak-empty {
+  margin: 0;
+  padding: 12px 8px;
+  border: 1px dashed var(--line-soft);
+  border-radius: 9px;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  text-align: center;
+  animation: peak-window-in 180ms cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+
+/* The read-back: what the schedule in the editor means right now.
+ *
+ * Editing used to end at the save button — the only way to learn what a schedule
+ * did was to save it, leave for the overview and read the card there. The strip
+ * judges the *draft*, so both the effect and the mistakes show up before saving,
+ * and it is the same `peakStateAt` the cards use, so the two can never disagree.
+ *
+ * Peak takes the warning tone (the same one the card's frame uses) and off-peak
+ * stays neutral: off-peak is the ordinary state, not a second alarm. */
+.peak-verdict {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--soft-button-bg);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.peak-verdict-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: background-color 150ms ease;
+}
+
+.peak-verdict[data-period='peak'] {
+  border-color: var(--peak-border);
+  color: var(--text);
+}
+
+.peak-verdict[data-period='peak'] .peak-verdict-dot {
+  background: var(--peak);
+}
+
+.peak-verdict-period {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.peak-verdict[data-period='peak'] .peak-verdict-period {
+  color: var(--peak);
+}
+
+/* A half-typed schedule has no answer, and the strip says so instead of judging
+   against whichever part happens to be valid. */
+.peak-verdict.is-unknown {
+  color: var(--text-faint);
+}
+
+/* The status sits on the same line as the action it reports on: a failure reason
+   belongs beside the button that produced it, not at the bottom of the block. */
+.peak-save-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.peak-save-row .credential-feedback {
+  flex: 1 1 auto;
+  /* The shared rule is sized for `.credential-status` (10px); this row inherits
+     the settings window's 13px body size, which would make a two-word status the
+     largest text in the block. */
+  font-size: var(--text-xs);
+  text-align: left;
+}
+
+.peak-save-row .primary-button {
+  flex: none;
+  margin-left: auto;
+}
+
+/* A 20px target rather than a bare glyph: the ✕ is the one destructive control
+   in this block and it was previously a few pixels wide, tinted only on hover. */
 .peak-remove {
   appearance: none;
-  border: 0;
-  background: none;
-  padding: 2px 3px;
-  margin-left: auto;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  background: transparent;
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--text-xs);
   line-height: 1;
-  border-radius: 5px;
   cursor: pointer;
-  transition: color 150ms ease;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
 }
 
 .peak-remove:hover:not(:disabled) {
+  border-color: var(--danger-border);
+  background: var(--badge-bg);
   color: var(--danger);
 }
 
@@ -1132,23 +1455,18 @@ button {
   cursor: default;
 }
 
-.peak-editor-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.peak-editor-actions .primary-button {
-  flex: none;
-}
-
 .peak-timezone-row .text-input {
   width: 118px;
   max-width: 100%;
   min-width: 0;
   flex: none;
   margin-left: auto;
+}
+
+/* The zone's own reading takes the failure tone: an unparseable name is the one
+   mistake here that a read-back cannot reveal. */
+.peak-timezone-row .setting-desc.is-invalid {
+  color: var(--danger);
 }
 
 /* Frosted-glass hint over a card module that is not configured yet: the formal

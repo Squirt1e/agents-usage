@@ -15,6 +15,7 @@ import {
   snapshotOf
 } from '../src/desktop/fake-client';
 import { providerView } from '../src/desktop/metrics';
+import { PEAK_ROW_EXIT_MS } from '../src/desktop/ProviderSettings';
 import { SettingsWindowHarness } from './helpers/windows';
 import { DeepSeekCard } from '../src/desktop/DeepSeekCard';
 import { GlmCard } from '../src/desktop/GlmCard';
@@ -224,6 +225,148 @@ describe('the settings block', () => {
     expect(codex.mode).toBe('custom');
     expect(codex.timezone).toBe(TIMEZONE);
     expect(codex.windows).toEqual([{ weekdays: [1, 2, 3, 4, 5], start: '09:00', end: '10:00' }]);
+  });
+});
+
+// The editor's own behaviour (refine-peak-window-editor): what it reads back
+// before anything is saved. This window renders while its first settings read is
+// still in flight, so every one of these starts from a *stored* schedule — the
+// case that used to arrive empty.
+describe('the custom window editor', () => {
+  async function renderStored(
+    provider: 'codex' | 'glm' | 'deepseek',
+    windows: Array<{ weekdays: number[]; start: string; end: string }>
+  ) {
+    const client = createFakeUsageClient({
+      snapshot: deepseekSnapshot(),
+      settings: settingsWith({
+        peakReminder: { [provider]: { mode: 'custom' as const, windows, timezone: TIMEZONE } }
+      })
+    });
+    render(<SettingsWindowHarness client={client} section={provider} />);
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme'));
+    const block = await screen.findByTestId(`peak-settings-${provider}`);
+    return { client, block };
+  }
+
+  const rowsOf = (block: HTMLElement) => Array.from(block.querySelectorAll('.peak-window-item'));
+
+  it('fills the editor from the stored schedule instead of coming up empty', async () => {
+    const { block } = await renderStored('deepseek', [{ weekdays: [1, 2, 3], start: '22:00', end: '01:00' }]);
+    // The mode is the reader's stored choice, not the default 关闭: it used to be
+    // seeded once from the settings that were on screen at mount, which are the
+    // parser's defaults while the read is in flight.
+    await waitFor(() =>
+      expect(within(block).getByRole('button', { name: '自定义' })).toHaveAttribute('aria-pressed', 'true')
+    );
+    await waitFor(() => expect(rowsOf(block)).toHaveLength(1));
+    expect(screen.getByLabelText('第 1 条时段开始')).toHaveValue('22:00');
+    expect(screen.getByLabelText('第 1 条时段结束')).toHaveValue('01:00');
+    expect(within(block).getByRole('button', { name: '周一' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(block).getByRole('button', { name: '周四' })).toHaveAttribute('aria-pressed', 'false');
+    // Nothing has been touched, so there is nothing to write.
+    expect(within(block).getByRole('button', { name: '保存' })).toBeDisabled();
+    expect(block.textContent).toContain('已保存');
+  });
+
+  it('marks a window that runs past midnight on the row itself', async () => {
+    const { block } = await renderStored('codex', [
+      { weekdays: [1], start: '09:00', end: '18:00' },
+      { weekdays: [6], start: '22:00', end: '02:00' }
+    ]);
+    await waitFor(() => expect(rowsOf(block)).toHaveLength(2));
+    const [daily, overnight] = rowsOf(block).map((row) => row.querySelector('.peak-window-card')!);
+    expect(overnight!.className).toContain('is-overnight');
+    expect(daily!.className).not.toContain('is-overnight');
+  });
+
+  it('steps a time with the arrow keys, in minutes and in hours', async () => {
+    const { block } = await renderStored('codex', [{ weekdays: [1], start: '09:00', end: '10:00' }]);
+    await waitFor(() => expect(rowsOf(block)).toHaveLength(1));
+    const start = screen.getByLabelText('第 1 条时段开始');
+    fireEvent.keyDown(start, { key: 'ArrowUp' });
+    expect(start).toHaveValue('09:01');
+    fireEvent.keyDown(start, { key: 'ArrowDown', shiftKey: true });
+    expect(start).toHaveValue('08:01');
+    // Wraps inside the day rather than leaving `HH:mm`.
+    fireEvent.keyDown(start, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(start, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(start, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(start, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(start, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(start, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(start, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(start, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(start, { key: 'ArrowDown', shiftKey: true });
+    expect(start).toHaveValue('23:01');
+    // A stepped field is an edit like any other.
+    expect(screen.getByLabelText('第 1 条时段开始')).toHaveValue('23:01');
+    expect(block.textContent).toContain('有未保存的改动');
+  });
+
+  it('plays the exit before dropping a window, and ends on the empty placeholder', async () => {
+    const { block } = await renderStored('codex', [
+      { weekdays: [1], start: '09:00', end: '10:00' },
+      { weekdays: [2], start: '11:00', end: '12:00' }
+    ]);
+    await waitFor(() => expect(rowsOf(block)).toHaveLength(2));
+
+    fireEvent.click(screen.getByLabelText('删除第 1 条时段'));
+    // Still in the document, wearing the exit: leaving is a state, not an unmount.
+    expect(rowsOf(block)).toHaveLength(2);
+    expect(rowsOf(block)[0]!.className).toContain('is-leaving');
+    await waitFor(() => expect(rowsOf(block)).toHaveLength(1), { timeout: PEAK_ROW_EXIT_MS + 500 });
+    expect(screen.getByLabelText('第 1 条时段开始')).toHaveValue('11:00');
+
+    fireEvent.click(screen.getByLabelText('删除第 1 条时段'));
+    await waitFor(() => expect(rowsOf(block)).toHaveLength(0), { timeout: PEAK_ROW_EXIT_MS + 500 });
+    expect(block.textContent).toContain('还没有时段，至少添加一条才能保存');
+  });
+
+  it('reads the draft back as the period it means, and refuses to guess at a half-typed one', async () => {
+    const { block } = await renderStored('codex', [{ weekdays: [1], start: '00:00', end: '23:59' }]);
+    const verdict = await screen.findByTestId('peak-verdict-codex');
+    await waitFor(() => expect(['peak', 'offpeak']).toContain(verdict.getAttribute('data-period')));
+    expect(verdict.textContent).toMatch(/现在 (高峰|错峰)/);
+
+    // Clear the only day: the schedule can no longer answer, and the strip says so
+    // rather than judging against the part that happens to be left.
+    fireEvent.click(within(block).getByRole('button', { name: '周一' }));
+    await waitFor(() => expect(verdict.getAttribute('data-period')).toBeNull());
+    expect(verdict.textContent).toContain('时段不完整，无法判定');
+
+    // Put it back and the judgement returns.
+    fireEvent.click(within(block).getByRole('button', { name: '周一' }));
+    await waitFor(() => expect(['peak', 'offpeak']).toContain(verdict.getAttribute('data-period')));
+  });
+
+  it('shows the same read-back for the builtin table, and names the zone it judged in', async () => {
+    const client = createFakeUsageClient({
+      snapshot: deepseekSnapshot(),
+      settings: settingsWith({ peakReminder: { deepseek: { mode: 'builtin' } } })
+    });
+    render(<SettingsWindowHarness client={client} section="deepseek" />);
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme'));
+    await screen.findByTestId('peak-settings-deepseek');
+    const verdict = await screen.findByTestId('peak-verdict-deepseek');
+    await waitFor(() => expect(['peak', 'offpeak']).toContain(verdict.getAttribute('data-period')));
+    // Only the custom editor carries the zone row; the builtin table brings its own.
+    expect(screen.queryByLabelText('判定时区')).toBeNull();
+  });
+
+  it('turns the zone field to its failure tone while the name cannot be parsed', async () => {
+    const { block } = await renderStored('codex', [{ weekdays: [1], start: '09:00', end: '10:00' }]);
+    await waitFor(() => expect(rowsOf(block)).toHaveLength(1));
+    const zone = screen.getByLabelText('判定时区');
+    expect(zone.className).not.toContain('is-invalid');
+    expect(block.textContent).toMatch(/该时区现在 \d{2}:\d{2}/);
+
+    fireEvent.change(zone, { target: { value: 'Not/AZone' } });
+    expect(zone.className).toContain('is-invalid');
+    expect(zone).toHaveAttribute('aria-invalid', 'true');
+    expect(block.textContent).toContain('无法解析');
+    // The preview cannot judge without a zone either.
+    expect(screen.getByTestId('peak-verdict-codex')).toHaveTextContent('时段不完整，无法判定');
   });
 });
 

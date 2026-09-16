@@ -35,8 +35,8 @@ import {
   type PeakWindow
 } from '../shared/desktop-contract';
 import type { ProviderView } from './metrics';
-import { BUILTIN_PEAK_DEFS } from './peak-windows';
 import { ConfidenceTag, statusFor, StatusDot, StatusRow } from './StatusRow';
+import { BUILTIN_PEAK_DEFS, peakPreviewOf } from './peak-windows';
 import { SegmentedGroup } from './SegmentedGroup';
 
 export interface ProviderSettingsProps {
@@ -460,6 +460,260 @@ function weekdayLabel(days: number[]): string {
     .join('、');
 }
 
+/** The weekday keys' visible glyphs; the full names live in `aria-label` and the read-back. */
+const WEEKDAY_SHORT = ['一', '二', '三', '四', '五', '六', '日'] as const;
+
+/**
+ * `↑↓` moves a field this far, and `⇧↑↓` moves it by an hour.
+ *
+ * The arrows are for the small correction (the meeting starts at 09:30, not
+ * 09:00) and for fixing a typo without selecting the text. Anything larger is
+ * faster typed, so there is no third step to remember.
+ */
+const STEP_MINUTES = 1;
+const STEP_MINUTES_COARSE = 60;
+
+/** Wraps inside the day, so a field can never be pushed out of `HH:mm`. */
+function stepHHmm(value: string, deltaMinutes: number): string {
+  const match = /^(\d{1,2}):(\d{1,2})$/.exec(value.trim());
+  const base = match ? Number(match[1]) * 60 + Number(match[2]) : 0;
+  const wrapped = (((base + deltaMinutes) % 1440) + 1440) % 1440;
+  const hour = String(Math.floor(wrapped / 60)).padStart(2, '0');
+  const minute = String(wrapped % 60).padStart(2, '0');
+  return `${hour}:${minute}`;
+}
+
+/**
+ * Whether the end time is behind the start, i.e. the window runs past midnight.
+ *
+ * Judged on the two strings rather than on minutes so a half-typed field never
+ * claims to wrap: only two complete `HH:mm` values can be compared, and an
+ * incomplete one is already covered by the save validation.
+ */
+function wrapsMidnight(window: PeakWindow): boolean {
+  if (!isValidHHmm(window.start) || !isValidHHmm(window.end)) return false;
+  return window.end <= window.start;
+}
+
+/**
+ * A draft row carries its own identity.
+ *
+ * The exit is component state (`is-leaving`), so an index-keyed list passes a
+ * leaving row's state to whichever window slides up into its slot: with
+ * `key={index}`, removing the first of two rows leaves the *second* wearing the
+ * first one's `is-leaving` — dimmed, disabled, and permanently stuck, because the
+ * exit timer belongs to the instance that already ran it. The id is draft-only:
+ * it never reaches the stored setting.
+ */
+interface PeakDraftRow extends PeakWindow {
+  id: number;
+}
+
+/** The custom schedule while it is being edited: the windows plus the zone they are judged in. */
+interface PeakDraft {
+  windows: PeakDraftRow[];
+  timezone: string;
+}
+
+/** Value equality for one schedule, so an adopted draft that changes nothing keeps its identity. */
+function sameSchedule(
+  left: { windows: readonly PeakWindow[]; timezone: string },
+  right: { windows: readonly PeakWindow[]; timezone: string }
+): boolean {
+  if (left.timezone !== right.timezone) return false;
+  if (left.windows.length !== right.windows.length) return false;
+  return left.windows.every((window, index) => {
+    const other = right.windows[index]!;
+    return (
+      window.start === other.start &&
+      window.end === other.end &&
+      [...window.weekdays].sort().join(',') === [...other.weekdays].sort().join(',')
+    );
+  });
+}
+
+/**
+ * The preview's clock.
+ *
+ * The settings window has no clock of its own — nothing on this chain passes a
+ * `now` down — so the section keeps one. Ten seconds is chosen against the
+ * preview's own resolution: it counts in minutes, so a stale read can move the
+ * text by at most one minute, and six renders a minute is not worth optimising.
+ * The interval only exists while a mode that has a schedule is selected.
+ */
+const PEAK_PREVIEW_TICK_MS = 10_000;
+
+function usePreviewClock(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), PEAK_PREVIEW_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/**
+ * How long a removed row takes to close and lift out of the list.
+ *
+ * Kept in step with the transitions on `.peak-window-card` (opacity/transform)
+ * and `.peak-window-item` (the collapse): dropping the row any earlier would cut
+ * its own exit short, and leaving it any later would keep a dead row in the
+ * document. Same contract as `PANEL_TOAST_EXIT_MS`.
+ */
+export const PEAK_ROW_EXIT_MS = 180;
+
+/**
+ * The timezone's current wall clock, for the row that names it.
+ *
+ * A zone name is the one field here that cannot be checked by reading it back:
+ * `Asia/Shanghai` looks right whether or not it is the zone the user meant. Its
+ * current time can be checked at a glance — and it is the number the schedule is
+ * judged against, so showing it is showing the thing that matters.
+ */
+function zonedClock(timezone: string, now: Date): string | undefined {
+  try {
+    return new Intl.DateTimeFormat('zh-CN', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    }).format(now);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * One window in the custom schedule: which days, and which hours.
+ *
+ * Two rows, one question each — the width here is 366 pixels, so a form that
+ * puts a label beside a control beside another control is what produced the
+ * cramped strip this replaces. The row reads `开始 [09:00] → 结束 [18:00]`,
+ * with the labels as dim prefixes: they keep the range on one line while still
+ * naming both ends, which the previous version left to `aria-label` alone.
+ *
+ * Removal is a state before it is an unmount (the message stack works the same
+ * way): the row marks itself `is-leaving`, CSS plays the exit, and only then
+ * does the parent drop it from the schedule.
+ */
+function PeakWindowCard(props: {
+  index: number;
+  window: PeakWindow;
+  busy: boolean;
+  onChange(patch: Partial<PeakWindow>): void;
+  onRemove(): void;
+}) {
+  const { index, window: slot } = props;
+  const [leaving, setLeaving] = useState(false);
+  /** The exit timer must not restart when the parent re-renders with a new closure. */
+  const removeRef = useRef(props.onRemove);
+  useEffect(() => {
+    removeRef.current = props.onRemove;
+  }, [props.onRemove]);
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(() => removeRef.current(), PEAK_ROW_EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [leaving]);
+
+  const toggleDay = (day: number) =>
+    props.onChange({
+      weekdays: slot.weekdays.includes(day)
+        ? slot.weekdays.filter((value) => value !== day)
+        : [...slot.weekdays, day]
+    });
+
+  /** Both fields share this: the arrows step, everything else is typing. */
+  const timeField = (field: 'start' | 'end', label: string, placeholder: string) => (
+    <label className="peak-time-field">
+      <span className="peak-time-label">{label}</span>
+      <input
+        type="text"
+        className="text-input peak-time"
+        inputMode="numeric"
+        autoComplete="off"
+        spellCheck={false}
+        maxLength={5}
+        placeholder={placeholder}
+        aria-label={`第 ${index + 1} 条时段${label}`}
+        value={slot[field]}
+        disabled={props.busy || leaving}
+        onChange={(event) => props.onChange({ [field]: event.target.value })}
+        onBlur={(event) => props.onChange({ [field]: normalizeHHmm(event.target.value) })}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+          // The browser would otherwise move the caret (and Shift would select).
+          event.preventDefault();
+          const step = event.shiftKey ? STEP_MINUTES_COARSE : STEP_MINUTES;
+          const delta = event.key === 'ArrowUp' ? step : -step;
+          props.onChange({ [field]: stepHHmm(slot[field], delta) });
+        }}
+      />
+    </label>
+  );
+
+  return (
+    <li className={`peak-window-item${leaving ? ' is-leaving' : ''}`}>
+      {/* The clip exists to collapse: `padding` and `border` are a border-box's
+          floor, so the card itself can never reach zero height. A zero-padding
+          box around it can, and it hides nothing while the row is at rest. */}
+      <div className="peak-window-clip">
+        <div className={`peak-window-card${wrapsMidnight(slot) ? ' is-overnight' : ''}`}>
+          <div className="peak-window-days">
+            <div className="segmented peak-weekdays" role="group" aria-label={`第 ${index + 1} 条时段的星期`}>
+              {WEEKDAY_SHORT.map((glyph, at) => {
+                const day = at + 1;
+                const on = slot.weekdays.includes(day);
+                return (
+                  <button
+                    key={glyph}
+                    type="button"
+                    className={`segmented-option${on ? ' is-active' : ''}`}
+                    aria-pressed={on}
+                    aria-label={WEEKDAY_LABELS[at]}
+                    disabled={props.busy || leaving}
+                    onClick={() => toggleDay(day)}
+                  >
+                    {glyph}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              className="peak-remove"
+              aria-label={`删除第 ${index + 1} 条时段`}
+              title="删除这条时段"
+              disabled={props.busy || leaving}
+              onClick={() => setLeaving(true)}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="peak-times">
+            {timeField('start', '开始', '09:00')}
+            <span className="peak-times-arrow" aria-hidden="true">
+              →
+            </span>
+            {timeField('end', '结束', '18:00')}
+            {/* Always rendered, revealed by `.is-overnight` on the card: it is
+                pushed left by `margin-left: auto`, so mounting it on demand would
+                shove the two time fields sideways instead of fading the marker in.
+                The previous version explained wrapping in a footnote at the bottom
+                of the block, three controls away from the fields it described. */}
+            <span
+              className="peak-overnight"
+              title="结束时间早于开始时间，这条时段跨过午夜，到次日结束"
+            >
+              跨天
+            </span>
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 function PeakSection(props: {
   provider: ProviderId;
   settings: PanelSettings;
@@ -467,46 +721,67 @@ function PeakSection(props: {
 }) {
   const builtin = BUILTIN_PEAK_DEFS[props.provider];
   const stored = props.settings.peakReminder?.[props.provider];
-  // The select is what the user is editing; a custom choice only lands with the
-  // save below, so the choice lives in state and the stored setting stays put
-  // until then. Default is 关闭 — the reminder never runs on an untouched
-  // provider, builtin table or not.
-  const [modeChoice, setModeChoice] = useState<PeakReminderMode>(() => stored?.mode ?? 'off');
-  const [draft, setDraft] = useState<{ windows: PeakWindow[]; timezone: string }>(() => ({
-    windows: stored?.windows ? stored.windows.map((window) => ({ ...window, weekdays: [...window.weekdays] })) : [],
-    timezone: stored?.timezone ?? props.settings.timezone
+  const settingsTimezone = props.settings.timezone;
+
+  /**
+   * The mode the user is editing, and the two flags that say whether they have
+   * touched it.
+   *
+   * Both the mode and the draft have to follow the settings *until the reader
+   * chooses*, because this window renders while its first read is still in
+   * flight: seeded once from `props`, they hold the parser's defaults for the
+   * rest of the session — which is how a saved schedule came to look like it had
+   * never existed (the mode read 关闭, and 自定义 opened an empty list). "The
+   * reader chose" is tracked explicitly rather than inferred from a comparison:
+   * once the settings land, a stale draft and a deliberate choice are the same
+   * value.
+   */
+  const storedMode = stored?.mode;
+  const [modeChoice, setModeChoice] = useState<PeakReminderMode | undefined>(storedMode);
+  const mode: PeakReminderMode = modeChoice ?? storedMode ?? 'off';
+  /** Draft-only identities, handed out in order and never reused. */
+  const nextRowId = useRef(0);
+  const asRow = (window: PeakWindow): PeakDraftRow => ({ ...window, weekdays: [...window.weekdays], id: nextRowId.current++ });
+  const [draft, setDraft] = useState<PeakDraft>(() => ({
+    windows: (stored?.windows ?? []).map((window) => ({ ...window, weekdays: [...window.weekdays], id: nextRowId.current++ })),
+    timezone: stored?.timezone ?? settingsTimezone
   }));
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; text: string } | undefined>();
+  const scheduleEdited = useRef(false);
+  const now = usePreviewClock();
+
   /**
-   * Adopt the settings' timezone until the reader chooses one.
-   *
-   * The settings arrive *after* this section mounts — the settings window renders
-   * while its first read is still in flight — and a draft seeded from `props` on that
-   * first render keeps the parser's default (`UTC`) for the rest of the session,
-   * silently saving it as the schedule's timezone. So the field follows the settings
-   * until the reader types in it, and "the reader typed" is tracked explicitly: a
-   * comparison against the settings value cannot tell the two apart once the settings
-   * land, because by then the stale draft just looks like a deliberate choice.
+   * Adopt the stored schedule until the reader edits it. The state is only
+   * replaced when the values actually differ — returning the same object makes
+   * React bail out, and without that every store notification (and every tick of
+   * the preview clock) would re-seed this form.
    */
-  const settingsTimezone = props.settings.timezone;
-  const timezoneEdited = useRef(false);
+  const storedWindows = stored?.windows;
+  const storedTimezone = stored?.timezone;
   useEffect(() => {
-    if (timezoneEdited.current) return;
-    setDraft((current) =>
-      current.timezone === settingsTimezone ? current : { ...current, timezone: settingsTimezone }
-    );
-  }, [settingsTimezone]);
+    if (scheduleEdited.current) return;
+    const next = {
+      windows: (storedWindows ?? []).map((window) => ({ ...window, weekdays: [...window.weekdays], id: nextRowId.current++ })),
+      timezone: storedTimezone ?? settingsTimezone
+    };
+    setDraft((current) => (sameSchedule(current, next) ? current : next));
+  }, [storedWindows, storedTimezone, settingsTimezone]);
+
+  useEffect(() => {
+    if (storedMode === undefined) return;
+    setModeChoice(storedMode);
+  }, [storedMode]);
 
   /** Builtin/off keep the stored windows so switching back restores them. */
-  const persistMode = async (mode: PeakReminderMode) => {
+  const persistMode = async (next: PeakReminderMode) => {
     setBusy(true);
     try {
       await props.onUpdateSettings({
         peakReminder: {
           ...props.settings.peakReminder,
           [props.provider]: {
-            mode,
+            mode: next,
             ...(stored?.windows?.length ? { windows: stored.windows } : {}),
             ...(stored?.timezone ? { timezone: stored.timezone } : {})
           }
@@ -524,20 +799,27 @@ function PeakSection(props: {
     if (next !== 'custom') void persistMode(next);
   };
 
+  /** Every edit invalidates the last verdict: the reason may no longer hold. */
+  const editDraft = (next: (current: PeakDraft) => PeakDraft) => {
+    scheduleEdited.current = true;
+    setFeedback(undefined);
+    setDraft(next);
+  };
+
   const addWindow = () =>
-    setDraft((current) => ({
+    editDraft((current) => ({
       ...current,
-      windows: [...current.windows, { weekdays: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' }]
+      windows: [...current.windows, asRow({ weekdays: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' })]
     }));
 
   const updateWindow = (index: number, patch: Partial<PeakWindow>) =>
-    setDraft((current) => ({
+    editDraft((current) => ({
       ...current,
       windows: current.windows.map((window, at) => (at === index ? { ...window, ...patch } : window))
     }));
 
   const removeWindow = (index: number) =>
-    setDraft((current) => ({ ...current, windows: current.windows.filter((_, at) => at !== index) }));
+    editDraft((current) => ({ ...current, windows: current.windows.filter((_, at) => at !== index) }));
 
   /** The spec's rule: an unusable schedule is blocked with a reason, not repaired. */
   const validateDraft = (): string | undefined => {
@@ -562,7 +844,13 @@ function PeakSection(props: {
       await props.onUpdateSettings({
         peakReminder: {
           ...props.settings.peakReminder,
-          [props.provider]: { mode: 'custom', windows: draft.windows, timezone: draft.timezone }
+          [props.provider]: {
+            mode: 'custom',
+            // The row ids are the editor's own; the stored window is the three
+            // fields the contract names.
+            windows: draft.windows.map(({ weekdays, start, end }) => ({ weekdays, start, end })),
+            timezone: draft.timezone
+          }
         }
       });
       setFeedback({ tone: 'success', text: '已保存自定义时段' });
@@ -570,6 +858,51 @@ function PeakSection(props: {
       setBusy(false);
     }
   };
+
+  /**
+   * Whether the editor holds anything the settings do not.
+   *
+   * Only shown in custom mode — the other two modes write on the click, so there
+   * is never a pending choice to report.
+   */
+  const dirty =
+    mode !== (storedMode ?? 'off') ||
+    !sameSchedule(draft, {
+      windows: storedWindows ?? [],
+      timezone: storedTimezone ?? settingsTimezone
+    });
+
+  /**
+   * The schedule the read-back judges.
+   *
+   * `undefined` when the mode has no definition at all, which is not the same as
+   * a definition that cannot be judged: the contract does not forbid a stored
+   * `builtin` choice on a provider that publishes no table (only the editor
+   * refuses to offer one), and there is nothing to say about a table that does
+   * not exist. The strip stays away in that case rather than announcing that a
+   * schedule it never had is incomplete.
+   */
+  const previewSource =
+    mode === 'custom'
+      ? { windows: draft.windows, timezone: draft.timezone }
+      : mode === 'builtin' && builtin
+        ? { windows: builtin.windows, timezone: builtin.timezone }
+        : undefined;
+  const preview = previewSource ? peakPreviewOf(previewSource.windows, previewSource.timezone, now) : undefined;
+  const timezoneValid = isValidTimezone(draft.timezone);
+  const localClock = timezoneValid ? zonedClock(draft.timezone, now) : undefined;
+
+  /**
+   * One message slot above the save button, so a failure is named beside the
+   * action that produced it rather than at the bottom of the block.
+   */
+  const status = feedback
+    ? { tone: feedback.tone, text: feedback.text }
+    : mode === 'custom' && dirty
+      ? { tone: 'progress' as const, text: '有未保存的改动' }
+      : mode === 'custom'
+        ? { tone: 'success' as const, text: '已保存' }
+        : undefined;
 
   return (
     <section className="config-block" data-testid={`peak-settings-${props.provider}`}>
@@ -585,21 +918,21 @@ function PeakSection(props: {
         <SegmentedGroup label="时段来源">
           {((builtin ? ['builtin'] : []) as PeakReminderMode[])
             .concat(['custom', 'off'])
-            .map((mode) => (
+            .map((choice) => (
               <button
-                key={mode}
+                key={choice}
                 type="button"
-                className={`segmented-option${modeChoice === mode ? ' is-active' : ''}`}
-                aria-pressed={modeChoice === mode}
+                className={`segmented-option${mode === choice ? ' is-active' : ''}`}
+                aria-pressed={mode === choice}
                 disabled={busy}
-                onClick={() => changeMode(mode)}
+                onClick={() => changeMode(choice)}
               >
-                {mode === 'builtin' ? '内置时段' : mode === 'custom' ? '自定义' : '关闭'}
+                {choice === 'builtin' ? '内置时段' : choice === 'custom' ? '自定义' : '关闭'}
               </button>
             ))}
         </SegmentedGroup>
       </div>
-      {builtin && modeChoice === 'builtin' ? (
+      {builtin && mode === 'builtin' ? (
         <div className="peak-builtin">
           {builtin.windows.map((window, index) => (
             <div key={`${window.start}-${window.end}-${index}`} className="peak-builtin-row">
@@ -612,90 +945,48 @@ function PeakSection(props: {
           <p className="field-hint">
             来源：{builtin.sourceLabel}
             {builtin.asOf ? ` · 核实于 ${builtin.asOf}` : null}
-            {builtin.offPeakNote ? ` · ${builtin.offPeakNote}` : ''}
+            {builtin.offPeakNote ? ` · ${builtin.offPeakNote}` : null}
           </p>
         </div>
       ) : null}
-      {modeChoice === 'custom' ? (
+      {mode === 'custom' ? (
         <div className="peak-editor">
-          {draft.windows.map((window, index) => (
-            <div key={index} className="peak-window-row">
-              <div className="segmented peak-weekdays" role="group" aria-label={`第 ${index + 1} 条时段的星期`}>
-                {WEEKDAY_LABELS.map((label, at) => {
-                  const day = at + 1;
-                  const on = window.weekdays.includes(day);
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      className={`segmented-option${on ? ' is-active' : ''}`}
-                      aria-pressed={on}
-                      aria-label={label}
-                      disabled={busy}
-                      onClick={() =>
-                        updateWindow(index, {
-                          weekdays: on ? window.weekdays.filter((day_) => day_ !== day) : [...window.weekdays, day]
-                        })
-                      }
-                    >
-                      {label.slice(1)}
-                    </button>
-                  );
-                })}
-              </div>
-              <input
-                type="text"
-                className="text-input peak-time"
-                inputMode="numeric"
-                autoComplete="off"
-                maxLength={5}
-                placeholder="09:00"
-                aria-label={`第 ${index + 1} 条时段开始`}
-                value={window.start}
-                disabled={busy}
-                onChange={(event) => updateWindow(index, { start: event.target.value })}
-                onBlur={(event) => updateWindow(index, { start: normalizeHHmm(event.target.value) })}
-              />
-              <span className="peak-dash">–</span>
-              <input
-                type="text"
-                className="text-input peak-time"
-                inputMode="numeric"
-                autoComplete="off"
-                maxLength={5}
-                placeholder="18:00"
-                aria-label={`第 ${index + 1} 条时段结束`}
-                value={window.end}
-                disabled={busy}
-                onChange={(event) => updateWindow(index, { end: event.target.value })}
-                onBlur={(event) => updateWindow(index, { end: normalizeHHmm(event.target.value) })}
-              />
-              <button
-                type="button"
-                className="peak-remove"
-                aria-label={`删除第 ${index + 1} 条时段`}
-                disabled={busy}
-                onClick={() => removeWindow(index)}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-          <div className="peak-editor-actions">
-            <button type="button" className="link-button" disabled={busy} onClick={addWindow}>
-              添加时段
+          {draft.windows.length === 0 ? (
+            <p className="peak-empty">还没有时段，至少添加一条才能保存</p>
+          ) : (
+            <ul className="peak-window-list">
+              {draft.windows.map((window, index) => (
+                <PeakWindowCard
+                  /* The draft's own id, not the index: `is-leaving` is component
+                     state, and an index key hands it to the row that takes the
+                     removed one's place (see `PeakDraftRow`). */
+                  key={window.id}
+                  index={index}
+                  window={window}
+                  busy={busy}
+                  onChange={(patch) => updateWindow(index, patch)}
+                  onRemove={() => removeWindow(index)}
+                />
+              ))}
+            </ul>
+          )}
+          <div className="peak-add-row">
+            <button type="button" className="peak-add" disabled={busy} onClick={addWindow}>
+              <span aria-hidden="true">＋</span> 添加时段
             </button>
-            <button type="button" className="primary-button" disabled={busy} onClick={() => void saveCustom()}>
-              {busy ? '正在保存…' : '保存'}
-            </button>
+            {/* Two steps are worth a line of text; a control that only answers to
+                the arrow keys is a control nobody knows about. */}
+            <span className="peak-keyhint">↑↓ 调分钟 · ⇧↑↓ 调小时</span>
           </div>
           <div className="setting-row peak-timezone-row">
             <span className="setting-text">
               <span className="setting-label">判定时区</span>
-              <span className="setting-desc">结束早于开始表示跨天</span>
+              <span className={`setting-desc${timezoneValid ? '' : ' is-invalid'}`}>
+                {timezoneValid ? `该时区现在 ${localClock}` : '无法解析，请填 IANA 名称'}
+              </span>
             </span>
             <input
-              className="text-input peak-timezone"
+              className={`text-input peak-timezone${timezoneValid ? '' : ' is-invalid'}`}
               type="text"
               autoComplete="off"
               spellCheck={false}
@@ -703,18 +994,63 @@ function PeakSection(props: {
               disabled={busy}
               placeholder="Asia/Shanghai"
               aria-label="判定时区"
-              onChange={(event) => {
-                timezoneEdited.current = true;
-                setDraft((current) => ({ ...current, timezone: event.target.value }));
-              }}
+              aria-invalid={timezoneValid ? undefined : true}
+              onChange={(event) => editDraft((current) => ({ ...current, timezone: event.target.value }))}
             />
           </div>
         </div>
       ) : null}
-      {feedback ? (
-        <span role={feedback.tone === 'error' ? 'alert' : 'status'} className={`credential-feedback feedback-${feedback.tone === 'error' ? 'error' : 'success'}`}>
-          {feedback.text}
-        </span>
+      {/*
+        The read-back: what the schedule in the editor means *now*, judged by the
+        same `peakStateAt` the overview cards use. Editing used to end at the save
+        button — the only way to learn what a schedule did was to save it, leave
+        for the overview and read the card.
+      */}
+      {previewSource ? (
+        <div
+          className={`peak-verdict${preview ? '' : ' is-unknown'}`}
+          {...(preview ? { 'data-period': preview.period } : {})}
+          data-testid={`peak-verdict-${props.provider}`}
+        >
+          <span className="peak-verdict-dot" aria-hidden="true" />
+          <span className="peak-verdict-text">
+            {preview ? (
+              <>
+                现在{' '}
+                <strong className="peak-verdict-period">
+                  {preview.period === 'peak' ? '高峰' : '错峰'}
+                </strong>
+                {preview.gap ? ` · 距${preview.period === 'peak' ? '错峰' : '高峰'} ${preview.gap}` : ''}
+              </>
+            ) : (
+              '时段不完整，无法判定'
+            )}
+          </span>
+        </div>
+      ) : null}
+      {mode === 'custom' || status ? (
+        <div className="peak-save-row">
+          <span
+            role={feedback?.tone === 'error' ? 'alert' : 'status'}
+            className={`credential-feedback feedback-${status?.tone ?? 'success'}${
+              status ? '' : ' is-empty'
+            }`}
+          >
+            {status?.text ?? ''}
+          </span>
+          {/* The button only exists in custom mode; the other two write on the
+              click, so the row is just the message there. */}
+          {mode === 'custom' ? (
+            <button
+              type="button"
+              className="primary-button"
+              disabled={busy || !dirty}
+              onClick={() => void saveCustom()}
+            >
+              {busy ? '正在保存…' : '保存'}
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

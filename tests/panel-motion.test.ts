@@ -373,6 +373,49 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
     selector: '.settings-nav-badge',
     properties: ['background-color', 'color']
   },
+  {
+    // One custom peak window. It mounts already lowered and transparent, so the
+    // travel is the `animation` registered below; what travels here is its exit,
+    // which is a state (`is-leaving`) rather than an unmount — see the item below.
+    what: 'a removed peak window fades and lifts out of the schedule',
+    selector: '.peak-window-card',
+    properties: ['opacity', 'transform']
+  },
+  {
+    // The list closes with the row instead of snapping when React drops it. The
+    // collapse is the item's own track and margin, because a container `gap` is
+    // not part of any element and could not be animated away.
+    what: 'the schedule list closes as a removed window leaves',
+    selector: '.peak-window-item',
+    properties: ['grid-template-rows', 'margin-bottom']
+  },
+  {
+    // Always in the box, revealed on the row that wraps: mounting it on demand
+    // would shove the two time fields sideways rather than fade the marker in.
+    what: 'the 跨天 marker fades in on a window that passes midnight',
+    selector: '.peak-overnight',
+    properties: ['opacity', 'transform', 'visibility']
+  },
+  {
+    what: 'the add-window button responds to hover and disabled',
+    selector: '.peak-add',
+    properties: ['border-color', 'background-color', 'color', 'opacity']
+  },
+  {
+    what: 'the remove-window button responds to hover and disabled',
+    selector: '.peak-remove',
+    properties: ['border-color', 'background-color', 'color', 'opacity']
+  },
+  {
+    what: 'the peak preview strip takes the warning tone as the period flips',
+    selector: '.peak-verdict',
+    properties: ['border-color', 'color']
+  },
+  {
+    what: 'the peak preview dot lights with the period',
+    selector: '.peak-verdict-dot',
+    properties: ['background-color']
+  },
 ];
 
 /**
@@ -401,6 +444,14 @@ const ANIMATION_SWITCHES: AnimationSwitch[] = [
     what: 'credential feedback takes its own row under the stored state',
     selectors: ['.credential-feedback'],
     animation: 'credential-feedback-in'
+  },
+  {
+    // Both arrive with the element already in its final state, so both travel on
+    // an animation: a new schedule window, and the placeholder that takes the
+    // list's place once the last one has left.
+    what: 'a new peak window — or the empty-schedule placeholder — arrives',
+    selectors: ['.peak-window-card', '.peak-empty'],
+    animation: 'peak-window-in'
   },
   { what: 'the loading spinner turns', selectors: ['.spinner'], animation: 'panel-spin' }
 ];

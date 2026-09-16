@@ -17,7 +17,7 @@
 
 import type { ProviderId } from '../shared/contracts';
 import type { PanelSettings, PeakReminderSetting, PeakWindow } from '../shared/desktop-contract';
-import { isValidPeakWindow } from '../shared/desktop-contract';
+import { isValidPeakWindow, isValidTimezone } from '../shared/desktop-contract';
 
 /** The panel's name for the two halves of a provider's pricing day. */
 export type PeakPeriod = 'peak' | 'offpeak';
@@ -260,6 +260,62 @@ export function peakStateAt(def: PeakWindowDef, now: Date): PeakState {
       ? { nextBoundaryAt: best.at, nextPeriod: best.enters }
       : {})
   };
+}
+
+// ---------------------------------------------------------------------------
+// The editor's read-back. The schedule editor shows what the draft *means*
+// before it is saved, and that read-back has to be the card's own judgement —
+// two answers on one fact would be worse than no preview at all. So the
+// preview is `peakStateAt` plus a wording, and it lives here rather than in the
+// component because it is pure: a fixed clock pins every branch without a DOM.
+// ---------------------------------------------------------------------------
+
+/** How long until the period flips, in the units the editor's preview reads them in. */
+export function formatPeakGap(nextBoundaryAt: Date | undefined, now: Date): string | undefined {
+  if (!nextBoundaryAt) return undefined;
+  const remainingMs = nextBoundaryAt.getTime() - now.getTime();
+  // A boundary that has already passed is not a countdown: the caller has a
+  // stale read, and the judgement that produced it is about to change.
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return undefined;
+  const totalMinutes = Math.floor(remainingMs / 60_000);
+  if (totalMinutes === 0) return '不到 1 分钟';
+  const hours = Math.floor(totalMinutes / 60);
+  if (hours === 0) return `${totalMinutes} 分钟`;
+  // Past a day the minutes stop meaning anything: a weekly schedule seen from
+  // the far side of the week should read `2 天 5 小时`, not `53 小时 12 分钟`.
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days} 天 ${hours % 24} 小时`;
+  return `${hours} 小时 ${totalMinutes % 60} 分钟`;
+}
+
+/** What the draft schedule means right now. */
+export interface PeakPreview {
+  period: PeakPeriod;
+  /** Time until the next boundary; absent when the schedule has none ahead. */
+  gap?: string;
+}
+
+/**
+ * The period a draft schedule puts `now` in, or `undefined` when the draft cannot
+ * answer at all.
+ *
+ * `undefined` is the honest answer for a half-typed schedule (no weekday picked,
+ * an unparseable zone, a start equal to its end): the editor says it cannot tell
+ * rather than judging against the part that happens to be valid. It is the same
+ * rule the save button follows — an unusable schedule is blocked with a reason,
+ * never repaired into a plausible one.
+ */
+export function peakPreviewOf(
+  windows: readonly PeakWindow[] | undefined,
+  timezone: string | undefined,
+  now: Date
+): PeakPreview | undefined {
+  const usable = (windows ?? []).filter(isValidPeakWindow);
+  if (usable.length === 0) return undefined;
+  if (!timezone || !isValidTimezone(timezone)) return undefined;
+  const state = peakStateAt({ timezone, windows: [...usable] }, now);
+  const gap = formatPeakGap(state.nextBoundaryAt, now);
+  return { period: state.period, ...(gap === undefined ? {} : { gap }) };
 }
 
 // ---------------------------------------------------------------------------

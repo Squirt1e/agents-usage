@@ -8,7 +8,9 @@ import {
   DEEPSEEK_PEAK_DEF,
   collectPeakTransitions,
   effectivePeakDef,
+  formatPeakGap,
   instantForWallTime,
+  peakPreviewOf,
   peakStateAt,
   type PeakWindowDef
 } from '../src/desktop/peak-windows';
@@ -192,5 +194,71 @@ describe('collectPeakTransitions', () => {
     const { next, transitions } = collectPeakTransitions(['deepseek'], off, now, { deepseek: 'peak' });
     expect(next).toEqual({});
     expect(transitions).toEqual([]);
+  });
+});
+
+// The editor's read-back (refine-peak-window-editor): the schedule it shows
+// before saving is judged by `peakStateAt`, the same call the cards use, so the
+// preview can never disagree with the panel. Pure, so every branch is pinned
+// with a fixed clock.
+describe('the editor preview', () => {
+  const now = new Date('2026-09-10T01:30:00.000Z'); // 09:30 in Shanghai, inside the morning window
+
+  it('reads the draft in the draft\u2019s own timezone', () => {
+    const preview = peakPreviewOf([{ weekdays: [4], start: '09:00', end: '12:00' }], 'Asia/Shanghai', now);
+    expect(preview?.period).toBe('peak');
+    // 09:30 → 12:00 is two and a half hours.
+    expect(preview?.gap).toBe('2 小时 30 分钟');
+  });
+
+  it('judges a wrapped window from the day it started on', () => {
+    // Thursday 22:00 – 02:00: 09:30 is outside it, and the next boundary is
+    // tonight's start.
+    const preview = peakPreviewOf([{ weekdays: [4], start: '22:00', end: '02:00' }], 'Asia/Shanghai', now);
+    expect(preview?.period).toBe('offpeak');
+    expect(preview?.gap).toBe('12 小时 30 分钟');
+  });
+
+  it('refuses to judge a draft that cannot be used', () => {
+    expect(peakPreviewOf([], 'Asia/Shanghai', now)).toBeUndefined();
+    expect(peakPreviewOf(undefined, 'Asia/Shanghai', now)).toBeUndefined();
+    expect(peakPreviewOf([{ weekdays: [], start: '09:00', end: '12:00' }], 'Asia/Shanghai', now)).toBeUndefined();
+    expect(peakPreviewOf([{ weekdays: [4], start: '09:00', end: '09:00' }], 'Asia/Shanghai', now)).toBeUndefined();
+    expect(peakPreviewOf([{ weekdays: [4], start: '09:00', end: '12:00' }], 'Not/AZone', now)).toBeUndefined();
+    expect(peakPreviewOf([{ weekdays: [4], start: '09:00', end: '12:00' }], undefined, now)).toBeUndefined();
+  });
+
+  it('ignores the unusable entries of a partly valid draft', () => {
+    const preview = peakPreviewOf(
+      [
+        { weekdays: [4], start: '09:00', end: '09:00' }, // start === end: dropped
+        { weekdays: [4], start: '09:00', end: '12:00' }
+      ],
+      'Asia/Shanghai',
+      now
+    );
+    expect(preview?.period).toBe('peak');
+  });
+});
+
+describe('the gap to the next boundary', () => {
+  const from = new Date('2026-09-10T01:30:00.000Z');
+
+  it('counts in minutes under an hour, and rounds down', () => {
+    expect(formatPeakGap(new Date(from.getTime() + 30_000), from)).toBe('不到 1 分钟');
+    expect(formatPeakGap(new Date(from.getTime() + 60_000), from)).toBe('1 分钟');
+    expect(formatPeakGap(new Date(from.getTime() + 59 * 60_000), from)).toBe('59 分钟');
+  });
+
+  it('counts hours and minutes past that', () => {
+    expect(formatPeakGap(new Date(from.getTime() + 60 * 60_000), from)).toBe('1 小时 0 分钟');
+    expect(formatPeakGap(new Date(from.getTime() + (2 * 60 + 5) * 60_000), from)).toBe('2 小时 5 分钟');
+    expect(formatPeakGap(new Date(from.getTime() + 26 * 60 * 60_000), from)).toBe('1 天 2 小时');
+  });
+
+  it('has no answer for a boundary that is absent or already behind', () => {
+    expect(formatPeakGap(undefined, from)).toBeUndefined();
+    expect(formatPeakGap(new Date(from.getTime()), from)).toBeUndefined();
+    expect(formatPeakGap(new Date(from.getTime() - 60_000), from)).toBeUndefined();
   });
 });
