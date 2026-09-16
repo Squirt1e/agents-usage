@@ -16,9 +16,8 @@ src-tauri/                      Tauri 宿主：菜单栏、窗口生命周期、
 src/shared/                     面板与服务共享的契约与脱敏（TypeScript）
 src/desktop/                    两个窗口的前端：HTML 入口与样式留在根上，代码按窗口分目录
                                 （panel/ 面板、settings/ 设置窗口，共用组件与逻辑在 components/、lib/）
-tools/cargo.sh                  cargo 包装脚本（见「环境注意事项」）
-tools/tauri.sh                  Tauri CLI 包装脚本
-scripts/desktop/                面板前端构建/开发入口
+tools/                           cargo 与 tauri 的包装脚本：绑定仓库内缓存（.dsh、target）后转发原命令
+scripts/                         Node 脚本：前端构建/开发入口与提交信息校验
 docs/desktop/                   环境基线、依赖锁定、语义对照、验收记录
 ```
 
