@@ -23,6 +23,7 @@
  * | `panel_set_height`        | `{ height }`     | applied (clamped) height      |
  * | `panel_open_settings`     | `{ section? }`   | —                             |
  * | `panel_settings_ready`    | —                | —                             |
+ * | `panel_settings_section`  | —                | current settings section      |
  *
  * Events emitted towards the panel: `panel://snapshot` (`PanelSnapshot`),
  * `panel://provider` (`{ provider, state }`), `panel://settings`
@@ -84,7 +85,9 @@ export const DESKTOP_COMMANDS = {
   /** Open the settings window, or bring it forward on the given section. */
   openSettings: 'panel_open_settings',
   /** Settings window -> host: the first render is on screen, show the window. */
-  settingsReady: 'panel_settings_ready'
+  settingsReady: 'panel_settings_ready',
+  /** Settings window -> host: which section should be showing. */
+  settingsSection: 'panel_settings_section'
 } as const;
 
 export const DESKTOP_EVENTS = {
@@ -464,7 +467,7 @@ export function createDesktopHostControls(bridge: DesktopCommandBridge | null = 
  * The settings window's own host controls.
  *
  * A separate surface from `PanelHostControls` on purpose: the settings window never
- * hides itself, never pins and never sizes itself — the host fixes it at 560x380.
+ * hides itself, never pins and never sizes itself — the host fixes it at 600x400.
  * What it needs instead is to name the section it was opened on and to say when its
  * first render is on screen, and both of those exist only under Tauri; in a browser
  * this returns `null` and the settings surface renders as a sheet instead.
@@ -476,6 +479,16 @@ export interface SettingsWindowHostControls {
   initialSection(): string | undefined;
   /** Subscribe to later "show this section" requests. */
   subscribeSection(listener: (section: string | undefined) => void): () => void;
+  /**
+   * Ask the host which section should be showing.
+   *
+   * The durable half of the handoff, and the reason it exists: `panel://settings-section`
+   * is emitted into the webview, so a request that arrives before this window's listener
+   * is registered is lost. The host remembers the request instead, and the window reads
+   * it once it is mounted — which is what makes "click a card's gear, land on that
+   * platform" hold however the timing falls.
+   */
+  readSection(): Promise<string | undefined>;
 }
 
 export function createSettingsWindowHost(
@@ -497,6 +510,10 @@ export function createSettingsWindowHost(
         const record = (typeof payload === 'object' && payload !== null ? payload : {}) as Record<string, unknown>;
         listener(typeof record.section === 'string' ? record.section : undefined);
       });
+    },
+    async readSection() {
+      const value = await invoke<unknown>(DESKTOP_COMMANDS.settingsSection).catch(() => undefined);
+      return typeof value === 'string' && value !== '' ? value : undefined;
     }
   };
 }

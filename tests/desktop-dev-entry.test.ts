@@ -80,7 +80,9 @@ describe('desktop development entry', () => {
     expect(html).not.toContain('id="panel-root"');
     // The module the document asks for has to exist: the panel's entry was renamed to
     // `.tsx` when it grew JSX, and the settings entry was born that way.
-    const script = /src="\.\/([\w.-]+)"/.exec(html)?.[1];
+    // Vite appends a cache-busting query after a hot update. The document still asks
+    // for the same module; the query is transport metadata, not part of its filename.
+    const script = /src="\.\/([\w.-]+)(?:\?[^"\s]*)?"/.exec(html)?.[1];
     expect(script, 'settings.html must name its entry module').toBe('settings-main.tsx');
     expect(existsSync(new URL(`../src/desktop/${script}`, import.meta.url)), `${script} is missing`).toBe(true);
   }, 10_000);
@@ -90,7 +92,7 @@ describe('desktop development entry', () => {
     // `main.ts` became `main.tsx` in this change, and a stale `src` attribute would
     // have produced an empty panel window with no error anywhere obvious.
     const html = await fetchWhenReady(DEV_URL);
-    const script = /src="\.\/([\w.-]+)"/.exec(html)?.[1];
+    const script = /src="\.\/([\w.-]+)(?:\?[^"\s]*)?"/.exec(html)?.[1];
     expect(script, 'index.html must name its entry module').toBe('main.tsx');
     expect(existsSync(new URL(`../src/desktop/${script}`, import.meta.url)), `${script} is missing`).toBe(true);
   }, 10_000);

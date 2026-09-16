@@ -54,6 +54,8 @@ export interface SettingsHarnessOptions {
   section?: SettingsSection;
   /** A host request channel, when the test drives "show this section". */
   onSelectSectionRequest?: (listener: (section: SettingsSection) => void) => () => void;
+  /** The host's remembered section, when the test drives the mount-time read. */
+  readSection?: () => Promise<SettingsSection | undefined>;
   onReady?: () => void;
 }
 
@@ -63,6 +65,7 @@ export function SettingsWindowHarness(props: SettingsHarnessOptions) {
     client: props.client!,
     ...(props.section ? { initialSection: props.section } : {}),
     ...(props.onSelectSectionRequest ? { onSelectSectionRequest: props.onSelectSectionRequest } : {}),
+    ...(props.readSection ? { readSection: props.readSection } : {}),
     ...(props.onReady ? { onReady: props.onReady } : {})
   });
   // Both entry points do this (see `settings-main.tsx` and `main.tsx`): the theme is

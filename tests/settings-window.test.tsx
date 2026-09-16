@@ -158,6 +158,40 @@ describe('the settings window and its sections', () => {
     expect(await screen.findByTestId('settings-pane-glm')).toBeInTheDocument();
   });
 
+  it('lands on the section the host remembered, not on its own default', async () => {
+    // The event (`panel://settings-section`) only reaches a window that is already
+    // listening, so a request made while this window was still booting would be lost and
+    // the window would sit on 平台管理. The host records the request and the window reads
+    // it here — this is what makes "click a card's gear, land on that platform" hold.
+    renderSettings({ client: clientWith(), readSection: async () => 'glm' });
+
+    expect(await screen.findByTestId('settings-pane-glm')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'GLM' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('lets a later host request move the section, and does not fight it afterwards', async () => {
+    // The fast path still works for a window that is up: the event moves the section,
+    // and the mount-time read must not drag it back once the reader has navigated by hand.
+    let ask: ((section: never) => void) | undefined;
+    renderSettings({
+      client: clientWith(),
+      readSection: async () => 'platforms',
+      onSelectSectionRequest: (listener) => {
+        ask = listener as (section: never) => void;
+        return () => undefined;
+      }
+    });
+    await screen.findByTestId('settings-pane-platforms');
+
+    ask!('deepseek' as never);
+    expect(await screen.findByTestId('settings-pane-deepseek')).toBeInTheDocument();
+
+    // Hand navigation is respected: nothing re-reads the host's remembered section.
+    fireEvent.click(screen.getByRole('tab', { name: '外观' }));
+    expect(await screen.findByTestId('settings-pane-appearance')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '外观' })).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('says nothing to the host until its first render has settled', async () => {
     // The host holds the window hidden until this lands, so an empty first frame is
     // never what the user sees.

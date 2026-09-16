@@ -16,7 +16,7 @@
  *
  * Every settings entry point asks the host to open the settings window
  * (`panel_open_settings`). Outside Tauri there is no second window to open, so this
- * file mounts the very same surface as a 560x380 sheet over this document: the
+ * file mounts the very same surface as a 600x400 sheet over this document: the
  * component, its sections and its behaviour are identical, only the shell differs
  * (see `SettingsPanel` and `settings-window.ts`).
  */

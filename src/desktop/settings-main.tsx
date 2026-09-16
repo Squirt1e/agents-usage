@@ -51,13 +51,23 @@ function mount(): void {
         host.subscribeSection((raw) => listener(parseSettingsSection(raw)))
     : undefined;
   const injected = host?.initialSection();
+  // The durable half of the section handoff: the host remembers which section the last
+  // entry point asked for, so a request that arrived while this window was still booting
+  // is not lost (see `readSection` in desktop-client.ts).
+  const readSection = host
+    ? async () => {
+        const raw = await host.readSection();
+        return raw === undefined ? undefined : parseSettingsSection(raw);
+      }
+    : undefined;
 
   root.render(
     createElement(SettingsApp, {
       client,
       ...(injected ? { initialSection: parseSettingsSection(injected) } : {}),
       ...(onReady ? { onReady } : {}),
-      ...(onSelectSectionRequest ? { onSelectSectionRequest } : {})
+      ...(onSelectSectionRequest ? { onSelectSectionRequest } : {}),
+      ...(readSection ? { readSection } : {})
     })
   );
 }

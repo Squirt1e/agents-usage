@@ -24,12 +24,20 @@ export interface SettingsWindowOptions {
   initialSection?: SettingsSection;
   /** Subscribe to the host's later "show this section" requests. */
   onSelectSectionRequest?: (listener: (section: SettingsSection) => void) => () => void;
+  /**
+   * Ask the host which section should be showing, once, on mount.
+   *
+   * The event above only reaches a window that is already listening. A request made
+   * while the window was still booting would be lost, so the host records it and the
+   * window reads it back here — see `readSection` in `desktop-client.ts`.
+   */
+  readSection?: () => Promise<SettingsSection | undefined>;
   /** Called once the first render is on screen (the host reveals the window then). */
   onReady?: () => void;
 }
 
 export function useSettingsWindow(options: SettingsWindowOptions): SettingsPanelProps {
-  const { client, initialSection, onSelectSectionRequest, onReady } = options;
+  const { client, initialSection, onSelectSectionRequest, readSection, onReady } = options;
   /**
    * The same store the panel uses, for the same reason: this window must show what
    * the panel writes, the panel must show what this window writes, and neither may
@@ -105,6 +113,28 @@ export function useSettingsWindow(options: SettingsWindowOptions): SettingsPanel
     if (!onSelectSectionRequest) return;
     return onSelectSectionRequest((next) => setSection(next));
   }, [onSelectSectionRequest]);
+
+  /**
+   * Read the section the host is holding, once.
+   *
+   * Deliberately not dependent on `readSection`'s identity: an inline arrow from the
+   * entry point would re-run this on every render, and re-reading would fight the
+   * reader the moment they clicked a different section by hand.
+   */
+  const readSectionRef = useRef(readSection);
+  readSectionRef.current = readSection;
+  useEffect(() => {
+    let active = true;
+    void readSectionRef
+      .current?.()
+      .then((wanted) => {
+        if (active && wanted) setSection(wanted);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   /**
    * Write a patch.

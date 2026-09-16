@@ -112,6 +112,14 @@ struct PanelState {
     /// the delayed hide task only fires when the generation it captured is
     /// still the current one. Same model as [`VisibilityState`].
     header_generation: Mutex<u64>,
+    /// Which settings section the window should be showing.
+    ///
+    /// The host keeps it rather than relying only on the event it emits, because the
+    /// webview can miss that event: a fresh window has not registered its listener
+    /// during its first frames, and a request that arrives then would be lost with
+    /// the window left on the wrong section. The event is still the fast path, and
+    /// this is what the window reads when it comes up — see `panel_settings_section`.
+    settings_section: Mutex<&'static str>,
 }
 
 impl PanelState {
@@ -754,6 +762,24 @@ fn panel_open_settings(app: AppHandle, section: Option<String>) -> Result<(), St
 #[tauri::command]
 fn panel_settings_ready(app: AppHandle) {
     reveal_settings_window(&app);
+}
+
+/// Settings window -> host: which section should be showing.
+///
+/// The durable half of the section handoff. `panel://settings-section` is the fast path
+/// while the window is up and listening, but a webview that has only just been created
+/// has no listener yet: a request that arrives in those first frames would be lost, and
+/// the window would open on whatever the window was built with. The host records the
+/// request instead and the window asks for it once it is mounted, so the section is
+/// right whichever way the timing falls.
+#[tauri::command]
+fn panel_settings_section(app: AppHandle) -> String {
+    let state = app.state::<PanelState>();
+    let current = state
+        .settings_section
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    (*current).to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -1504,8 +1530,15 @@ const SETTINGS_SECTIONS: [&str; 5] = ["platforms", "appearance", "codex", "glm",
 /// Fixed on purpose: the window is a settings *sheet* for a 350px-wide panel, and a
 /// size the user could change would make every layout inside it a responsive
 /// problem for no benefit. The content area scrolls instead.
-const SETTINGS_WINDOW_WIDTH: f64 = 560.0;
-const SETTINGS_WINDOW_HEIGHT: f64 = 380.0;
+const SETTINGS_WINDOW_WIDTH: f64 = 600.0;
+const SETTINGS_WINDOW_HEIGHT: f64 = 400.0;
+
+/// How far above the display's vertical centre the settings window sits.
+///
+/// Centred vertically it reads as slightly low, because the window has a title bar
+/// the eye does not count as part of the content. Lifting it puts the content area —
+/// the part that matters — on the centre line.
+const SETTINGS_WINDOW_RISE: f64 = 50.0;
 
 /// Normalise a requested section. `None` (or an unknown name) means "the default".
 fn settings_section(requested: Option<&str>) -> &'static str {
@@ -1519,58 +1552,46 @@ fn settings_section(requested: Option<&str>) -> &'static str {
     }
 }
 
-/// Where the settings window goes, given the panel's frame and the display's work
-/// area, all in points.
+/// Where the settings window goes, given the display's work area, all in points.
 ///
-/// Beside the panel rather than centred: the two windows are meant to be read
-/// together — a change in the settings window shows up in the panel immediately —
-/// and a settings sheet that covers the panel would hide the very thing that makes
-/// the change worth watching. On the left when the panel is on the right half of the
-/// display, on the right otherwise, clamped to the work area so it is never partly
-/// off-screen.
+/// Centred horizontally on the display, and `SETTINGS_WINDOW_RISE` above its vertical
+/// centre. Not beside the panel: the panel is anchored under the menu-bar icon, which
+/// can be anywhere along the top edge, so "next to the panel" put the settings window
+/// wherever the icon happened to be — a placement the reader has to hunt for and that
+/// changes with the icon's position. The centre of the display is the one place that is
+/// predictable, and it is what a settings sheet normally does.
 ///
 /// Split out from the move itself so the placement is testable without a window
 /// server, which is the same reason `boundary_clamp_target` is.
-fn settings_window_origin(
-    panel: (f64, f64, f64, f64),
-    work: (f64, f64, f64, f64),
-) -> (f64, f64) {
-    let (panel_x, panel_y, panel_width, _panel_height) = panel;
+fn settings_window_origin(work: (f64, f64, f64, f64)) -> (f64, f64) {
     let (work_x, work_y, work_width, work_height) = work;
-    let work_right = work_x + work_width;
-    let work_bottom = work_y + work_height;
 
-    let gap = PANEL_MARGIN;
-    let room_on_right = work_right - (panel_x + panel_width) >= SETTINGS_WINDOW_WIDTH + gap * 2.0;
-    let x = if room_on_right {
-        panel_x + panel_width + gap
-    } else {
-        let left = panel_x - gap - SETTINGS_WINDOW_WIDTH;
-        // Fall back to the panel's own left edge when there is no room on either
-        // side (a narrow display): overlapping the panel is better than a window
-        // the user has to hunt for.
-        if left < work_x + gap {
-            panel_x
-        } else {
-            left
+    /// Where to put a `size`-long axis inside a `start`..`start + span` work area:
+    /// centred, then kept `gap` clear of each edge — or pinned to the start when the
+    /// span is too tight to allow both margins.
+    ///
+    /// The two branches are not interchangeable: centring and then clamping with
+    /// `clamp(lo, hi)` panics when `hi < lo`, which is exactly what a display barely
+    /// taller than the window produces.
+    fn axis(start: f64, span: f64, size: f64, gap: f64) -> f64 {
+        if size + gap * 2.0 >= span {
+            return start;
         }
-    };
-    // Top-aligned with the panel, which is where the reader's eye already is.
-    let y = panel_y;
-    let max_x = (work_right - SETTINGS_WINDOW_WIDTH - gap).max(work_x);
-    let max_y = (work_bottom - SETTINGS_WINDOW_HEIGHT - gap).max(work_y);
-    // Keep the window's whole frame inside the work area, from whichever edge binds
-    // first. It is not resizable, so this is the only chance to place it.
-    let x = if SETTINGS_WINDOW_WIDTH + gap * 2.0 >= work_width {
-        work_x
-    } else {
-        x.clamp(work_x + gap, max_x)
-    };
-    let y = if SETTINGS_WINDOW_HEIGHT + gap * 2.0 >= work_height {
-        work_y
-    } else {
-        y.clamp(work_y + gap, max_y)
-    };
+        let lo = start + gap;
+        let hi = start + span - size - gap;
+        if hi <= lo {
+            return start;
+        }
+        (start + (span - size) / 2.0).clamp(lo, hi)
+    }
+
+    let x = axis(work_x, work_width, SETTINGS_WINDOW_WIDTH, PANEL_MARGIN);
+    let y = axis(work_y, work_height, SETTINGS_WINDOW_HEIGHT, PANEL_MARGIN);
+    // The vertical placement is deliberately lifted off the centre: the title bar makes a
+    // pure centre read low. Only applied when there is room for it, so a short display
+    // does not push the window up against the menu bar.
+    let lifted = y - SETTINGS_WINDOW_RISE;
+    let y = if lifted >= work_y + PANEL_MARGIN { lifted } else { y };
     (x, y)
 }
 
@@ -1579,41 +1600,26 @@ fn position_settings_window(app: &AppHandle) {
     let Some(settings) = app.get_webview_window(SETTINGS_WINDOW_LABEL) else {
         return;
     };
-    // The panel's live frame, when it exists: the two windows belong to one display,
-    // and the panel is the one the user just interacted with.
-    let panel = app.get_webview_window("panel");
-    let monitor = panel
-        .as_ref()
-        .and_then(|window| window.current_monitor().ok().flatten())
-        .or_else(|| settings.current_monitor().ok().flatten());
+    // The display the *settings window* is on, falling back to the panel's. The panel's
+    // monitor would be the tempting choice (it is the window the user just clicked), but
+    // the panel is anchored under the menu-bar icon and can be on a different display
+    // from the one the reader is looking at; the settings window's own monitor is where
+    // it will actually be drawn.
+    let monitor = settings
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| {
+            app.get_webview_window("panel")
+                .and_then(|window| window.current_monitor().ok().flatten())
+        });
     let Some(monitor) = monitor else {
-        // No display to reason about is not permission to move the window: leaving
-        // it where the window server put it beats moving it somewhere arbitrary.
+        // No display to reason about is not permission to move the window: leaving it
+        // where the window server put it beats moving it somewhere arbitrary.
         return;
     };
     let work = work_area_points(&monitor);
-    let work_tuple = (work.x, work.y, work.width, work.height);
-    let panel_frame = panel.and_then(|window| {
-        let origin = window.outer_position().ok()?;
-        let size = window.outer_size().ok()?;
-        let scale = window.scale_factor().unwrap_or(1.0);
-        let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
-        Some((
-            origin.x as f64 / scale,
-            origin.y as f64 / scale,
-            size.width as f64 / scale,
-            size.height as f64 / scale,
-        ))
-    });
-    // Without a panel frame (the tray item can open settings on its own) the sheet
-    // goes to the work area's right edge, where the panel would have been.
-    let panel_frame = panel_frame.unwrap_or((
-        work.right() - PANEL_WIDTH,
-        work.y + PANEL_MARGIN,
-        PANEL_WIDTH,
-        SETTINGS_WINDOW_HEIGHT,
-    ));
-    let (x, y) = settings_window_origin(panel_frame, work_tuple);
+    let (x, y) = settings_window_origin((work.x, work.y, work.width, work.height));
     diag_log(&format!("position_settings_window target=({x},{y})"));
     let _ = settings.set_position(LogicalPosition::new(x, y));
 }
@@ -1657,7 +1663,6 @@ fn build_settings_window(app: &AppHandle, section: Option<&str>) -> tauri::Resul
     .build()?;
 
     let _ = window.eval(format!("window.__AGENTS_USAGE__ = {injected};"));
-
     // Deliberately no focus handler: the settings window keeps its place when the
     // user clicks back into the panel, which is what makes "change it here, watch it
     // there" possible. The panel's own focus-hide rule lives on the panel window
@@ -1690,6 +1695,17 @@ fn settings_window_url() -> WebviewUrl {
 fn open_settings(app: &AppHandle, section: Option<&str>) -> Result<(), String> {
     let section = settings_section(section);
     diag_log(&format!("open_settings section={section}"));
+    // Recorded before anything is shown, so a window that is still booting (or whose
+    // listener has not been registered yet) can read it back rather than miss the
+    // event — see `panel_settings_section`.
+    {
+        let state = app.state::<PanelState>();
+        let mut current = state
+            .settings_section
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *current = section;
+    }
     if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
         position_settings_window(app);
         let _ = window.show();
@@ -1781,6 +1797,7 @@ pub fn build(context: tauri::Context) -> tauri::App {
                 last_focus_hide: Mutex::new(Instant::now()),
                 visibility: Mutex::new(VisibilityState::default()),
                 header_generation: Mutex::new(0),
+                settings_section: Mutex::new(SETTINGS_DEFAULT_SECTION),
             });
 
             // The window has to agree with that first state instead of waiting
@@ -1883,7 +1900,8 @@ pub fn build(context: tauri::Context) -> tauri::App {
             panel_set_height,
             panel_open_web_version,
             panel_open_settings,
-            panel_settings_ready
+            panel_settings_ready,
+            panel_settings_section
         ])
         .build(context)
         .expect("failed to build the agents-usage desktop host")
@@ -1918,43 +1936,96 @@ pub fn runtime_kind() -> &'static str {
 mod tests {
     use super::*;
 
-    /// A 1440x900 display, work area inset by the menu bar, in points.
-    const WORK: (f64, f64, f64, f64) = (0.0, 25.0, 1440.0, 850.0);
-
     #[test]
-    fn the_settings_window_sits_beside_the_panel_not_on_it() {
-        // Panel on the left half of the display: the settings sheet goes to its
-        // right, top-aligned, with the panel's margin as the gap.
-        let panel = (20.0, 35.0, PANEL_WIDTH, 560.0);
-        let (x, y) = settings_window_origin(panel, WORK);
-        assert_eq!(x, 20.0 + PANEL_WIDTH + PANEL_MARGIN);
-        assert_eq!(y, 35.0);
+    fn the_settings_window_is_centred_and_lifted() {
+        // Independent acceptance values keep the test from passing just because the
+        // constants and implementation drift together.
+        let work = (0.0, 25.0, 1440.0, 875.0);
+        let (x, y) = settings_window_origin(work);
+        assert_eq!(x, 420.0);
+        assert_eq!(y, 212.5);
+        // Lifted, not dropped: the content area lands closer to the centre line than a
+        // pure centre would put it.
+        let pure_centre = 25.0 + (875.0 - SETTINGS_WINDOW_HEIGHT) / 2.0;
+        assert!(y < pure_centre);
 
-        // Panel against the right edge: no room to the right, so it goes to the
-        // left rather than off-screen.
-        let panel = (1440.0 - PANEL_MARGIN - PANEL_WIDTH, 35.0, PANEL_WIDTH, 560.0);
-        let (x, _) = settings_window_origin(panel, WORK);
-        assert!(
-            x + SETTINGS_WINDOW_WIDTH <= WORK.0 + WORK.2,
-            "the sheet must stay inside the work area"
-        );
-        assert!(x < panel.0, "it should prefer the panel's other side");
+        // A display offset to the right of another one: the centring is relative to that
+        // display's own work area, not to the global origin.
+        let right_display = (1792.0, 0.0, 2560.0, 1400.0);
+        let (x, _) = settings_window_origin(right_display);
+        assert_eq!(x, 2772.0);
     }
 
     #[test]
     fn the_settings_window_stays_inside_a_work_area_it_does_not_fit() {
-        // A display narrower and shorter than the sheet: the window cannot fit, and
-        // the honest answer is the work area's own origin rather than a negative
-        // coordinate the window server would clamp in some other way.
+        // A display smaller than the sheet: it is anchored at the work area's origin
+        // rather than centred off the top-left corner into negative coordinates.
         let tiny = (0.0, 0.0, 400.0, 300.0);
-        assert_eq!(settings_window_origin((0.0, 0.0, PANEL_WIDTH, 200.0), tiny), (0.0, 0.0));
+        assert_eq!(settings_window_origin(tiny), (0.0, 0.0));
 
-        // A display that fits the sheet, with the panel low and right: the target is
-        // clamped back inside rather than hanging past the bottom edge.
-        let panel = (1000.0, 800.0, PANEL_WIDTH, 120.0);
-        let (x, y) = settings_window_origin(panel, WORK);
-        assert!(x + SETTINGS_WINDOW_WIDTH <= 1440.0);
-        assert!(y + SETTINGS_WINDOW_HEIGHT <= WORK.1 + WORK.3);
+        // Taller than the window but without room for both margins (420 against a
+        // 400pt window): it is anchored at the work area's top edge instead of being
+        // clamped into an inverted range, which would panic.
+        let tight = (0.0, 0.0, 1440.0, 420.0);
+        let (x, y) = settings_window_origin(tight);
+        assert_eq!(y, 0.0);
+        assert!(x >= PANEL_MARGIN && x + SETTINGS_WINDOW_WIDTH <= 1440.0 - PANEL_MARGIN);
+
+        // A display with room to spare *and* room for the margins: the window is centred
+        // and the rise is applied without leaving the work area.
+        let roomy = (0.0, 0.0, 1440.0, 875.0);
+        let (x, y) = settings_window_origin(roomy);
+        assert!(x >= PANEL_MARGIN && x + SETTINGS_WINDOW_WIDTH <= 1440.0 - PANEL_MARGIN);
+        assert!(y >= PANEL_MARGIN && y + SETTINGS_WINDOW_HEIGHT <= 875.0 - PANEL_MARGIN);
+    }
+
+    #[test]
+    fn a_section_request_survives_a_window_that_is_not_listening_yet() {
+        // The event is the fast path; this is the durable half. The host records the
+        // request, and the window reads it back — otherwise a request that lands while
+        // the webview is still booting is lost and the window opens on the wrong section.
+        let source = include_str!("lib.rs");
+        let record = source
+            .split("fn open_settings")
+            .nth(1)
+            .expect("open_settings")
+            .split("fn reveal_settings_window")
+            .next()
+            .expect("end of open_settings");
+        assert!(
+            record.contains("settings_section"),
+            "open_settings must record the requested section, not only emit it"
+        );
+        assert!(
+            record.contains("SETTINGS_SECTION_EVENT"),
+            "the event stays: it is what moves a window that is already listening"
+        );
+        // And the command really reads a non-empty section name.
+        assert!(source.contains("fn panel_settings_section"));
+        assert!(SETTINGS_SECTIONS.contains(&SETTINGS_DEFAULT_SECTION));
+    }
+
+    #[test]
+    fn settings_sheet_matches_the_host_window_size() {
+        // The browser fallback renders the same settings surface as a sheet over the panel
+        // document, so it must be the same shape as the host's window. The two live in
+        // different languages and cannot share a constant, so the pair is checked here.
+        let css = include_str!("../../src/desktop/settings.css");
+        let sheet = css
+            .split(".settings-sheet {")
+            .nth(1)
+            .expect("the fallback sheet rule")
+            .split('}')
+            .next()
+            .expect("end of the sheet rule");
+        assert!(
+            sheet.contains(&format!("width: {SETTINGS_WINDOW_WIDTH:.0}px")),
+            "the fallback sheet must be as wide as the settings window"
+        );
+        assert!(
+            sheet.contains(&format!("height: {SETTINGS_WINDOW_HEIGHT:.0}px")),
+            "the fallback sheet must be as tall as the settings window"
+        );
     }
 
     #[test]
@@ -2068,7 +2139,8 @@ mod tests {
     }
 
     #[test]
-    fn a_section_request_lands_on_a_real_section() {        for known in SETTINGS_SECTIONS {
+    fn a_section_request_lands_on_a_real_section() {
+        for known in SETTINGS_SECTIONS {
             assert_eq!(settings_section(Some(known)), known);
         }
         // Every entry point that names nothing, and every typo, lands on 平台管理:
