@@ -48,7 +48,12 @@
 3. 已有 `rust-toolchain.toml` 曾尝试固定 `1.98.0`，会导致 `rustup` 在仓库内触发工具链
    下载（本环境写 `~/.rustup/tmp` 被拒绝）。因为项目不使用 nightly 特性，改为只保留
    `Cargo.toml` 的 `rust-version = "1.98"` 约束。
-4. `tauri icon` 会生成 iOS/Android 资源；本变更只交付 macOS，生成后已删除
-   `src-tauri/icons/{ios,android}`。
+4. `tauri icon` 会同时生成 Windows、iOS、Android 与散装 PNG；本项目只交付 macOS，应用包图标是
+   `src-tauri/icons/icon.icns`；另保留 `src-tauri/icons/icon.png` 供 Tauri 的 Unix 运行时默认窗口
+   图标生成宏读取。二者的源图固定为
+   `assets/brand/agents-usage-gauge-v1.png`。生成后删除 `src-tauri/icons/{ios,android}`、
+   `Square*Logo.png`、`StoreLogo.png`、`icon.ico` 与除 `icon.png` 外未配置的散装 PNG，避免旧图混入安装包。
+   菜单栏的 `tray-template.png` / `tray-template@2x.png` 不从彩色应用图标缩放，而由
+   `node scripts/desktop/generate-tray-icon.mjs` 直接画成黑色＋透明 Alpha 的模板资源。
 5. 只配置了本机架构。交付范围是「当前 Mac 可运行的应用」，因此未添加
    `aarch64-apple-darwin` 交叉构建与通用二进制打包。

@@ -67,33 +67,65 @@ function encodePng(size, pixels) {
   ]);
 }
 
-// Draw a circular gauge: an open ring (about 270 degrees) with a needle pointing
-// to ~65% of the arc. Returns [r, g, b, a] for pixel (y, x).
+function distanceToSegment(x, y, startX, startY, endX, endY) {
+  const lineX = endX - startX;
+  const lineY = endY - startY;
+  const lengthSquared = lineX * lineX + lineY * lineY;
+  const projection = Math.max(
+    0,
+    Math.min(1, ((x - startX) * lineX + (y - startY) * lineY) / lengthSquared),
+  );
+  return Math.hypot(x - (startX + projection * lineX), y - (startY + projection * lineY));
+}
+
+function angleBetween(angle, start, end) {
+  const full = Math.PI * 2;
+  const normalized = ((angle % full) + full) % full;
+  return normalized >= start && normalized <= end;
+}
+
+// The 18px asset is the file embedded in the binary. Sampling each output pixel
+// on a 4×4 grid keeps the two-ring gauge legible instead of turning its diagonal
+// needle and tiny markers into staircase-shaped blobs on a Retina menu bar.
 function gaugePixels(size) {
-  const center = (size - 1) / 2;
-  const outer = size * 0.46;
-  const inner = size * 0.34;
-  const startAngle = Math.PI * 0.75; // 135 degrees
-  const sweep = Math.PI * 1.5; // 270 degrees
-  const needle = startAngle + sweep * 0.65;
-  const needleLength = outer * 0.72;
+  const samples = 4;
+  const stroke = 0.07;
+  const upperStart = (Math.PI * 13) / 12;
+  const upperEnd = (Math.PI * 23) / 12;
+  const lowerStart = Math.PI / 12;
+  const lowerEnd = (Math.PI * 11) / 12;
+
+  function covers(x, y) {
+    const distance = Math.hypot(x, y);
+    const angle = Math.atan2(y, x);
+    const onArc = [0.68, 0.83].some(
+      (radius) =>
+        Math.abs(distance - radius) <= stroke / 2 &&
+        (angleBetween(angle, upperStart, upperEnd) || angleBetween(angle, lowerStart, lowerEnd)),
+    );
+
+    const pivotX = 0;
+    const pivotY = 0.06;
+    const onPivot = Math.abs(Math.hypot(x - pivotX, y - pivotY) - 0.12) <= stroke / 2;
+    const onNeedle =
+      distanceToSegment(x, y, 0.08, 0.02, 0.53, -0.48) <= stroke / 2 ||
+      distanceToSegment(x, y, 0.16, 0.11, 0.53, -0.48) <= stroke / 2;
+    const onMarker = [-0.39, 0.39].some(
+      (markerX) => Math.abs(Math.hypot(x - markerX, y - 0.48) - 0.075) <= stroke / 2,
+    );
+    return onArc || onPivot || onNeedle || onMarker;
+  }
 
   return (y, x) => {
-    const dx = x - center;
-    const dy = y - center;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    let angle = Math.atan2(dy, dx);
-    // Normalize to [startAngle, startAngle + 2pi)
-    let rel = (angle - startAngle) % (Math.PI * 2);
-    if (rel < 0) rel += Math.PI * 2;
-
-    const onRing = dist >= inner && dist <= outer && rel <= sweep;
-    const needleDist = dist <= needleLength;
-    const needleAngle = Math.abs((rel - needle) % (Math.PI * 2));
-    const onNeedle = needleDist && (needleAngle < 0.08 || needleAngle > Math.PI * 2 - 0.08);
-
-    if (onRing || onNeedle) return [0, 0, 0, 255];
-    return [0, 0, 0, 0];
+    let covered = 0;
+    for (let sampleY = 0; sampleY < samples; sampleY += 1) {
+      for (let sampleX = 0; sampleX < samples; sampleX += 1) {
+        const normalizedX = ((x + (sampleX + 0.5) / samples) / size - 0.5) * 2;
+        const normalizedY = ((y + (sampleY + 0.5) / samples) / size - 0.5) * 2;
+        if (covers(normalizedX, normalizedY)) covered += 1;
+      }
+    }
+    return [0, 0, 0, Math.round((covered / (samples * samples)) * 255)];
   };
 }
 

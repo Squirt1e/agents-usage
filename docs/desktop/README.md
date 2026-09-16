@@ -149,8 +149,14 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
 3. **工具链**：仓库不提供 `rust-toolchain.toml`，因为固定精确版本会迫使 `rustup` 在每次
    全新检出时联网下载工具链，而本项目没有使用 nightly 特性。要求由
    `Cargo.toml` 的 `rust-version` 与状态说明描述。
-4. **图标**：应用图标由品牌图生成（`bash tools/tauri.sh icon …`），生成结果已裁剪掉
-   与 macOS 无关的平台目录。
+4. **图标**：应用图标的唯一源图是
+   `assets/brand/agents-usage-gauge-v1.png`（1024×1024、全出血方形画布）。运行
+   `./node_modules/.bin/tauri icon assets/brand/agents-usage-gauge-v1.png --output src-tauri/icons`
+   生成各平台资源；本仓库是 macOS-only，配置引用 `src-tauri/icons/icon.icns`（应用包）和
+   `src-tauri/icons/icon.png`（Tauri 的 Unix 运行时默认窗口图标）。ICNS 容器包含 16、32、128、
+   256、512 点的 1×/2×表示，命令额外生成的 Windows、iOS、Android 与其余散装 PNG 不入库。
+   菜单栏模板图由 `node scripts/desktop/generate-tray-icon.mjs` 可重复生成：18×18 与
+   36×36 PNG 只含黑色和透明度，宿主再通过 `icon_as_template(true)` 交给 macOS 自动着色。
 
 ## 当前实现进度
 
