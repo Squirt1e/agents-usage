@@ -33,7 +33,7 @@ jobs:
     # 在这里失败，不往下走。
     #
     # 修一个发出去了但有问题的版本：删掉它的 release 与 tag 再重跑本次 run
-    # （`gh release delete v1.2.0 --cleanup-tag --yes`），判断会重新变回「要打包」。
+    # （`gh release delete v1.2.1 --cleanup-tag --yes`），判断会重新变回「要打包」。
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
