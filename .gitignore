@@ -24,9 +24,12 @@ openspec/
 .agents/
 docs/superpowers/
 
-# 编辑器配置与临时预览页
+# 编辑器配置与临时预览页：用来在真实引擎里看一眼界面，本身不是交付物
 .idea/
 .theme-preview.html
+.peak-preview.html
+.settings-preview.html
+.preview-shots/
 
 # husky 运行时生成的钩子包装层
 .husky/_/
