@@ -65,25 +65,34 @@ npm run dev:desktop         # 热更新模式：构建 service 后交给宿主�
 
 ### 发布（交给 GitHub Actions）
 
-推 `main` 即发版，本地不再手工打包上传。`.github/workflows/release.yml` 做三件事：
+推 `main` 由 `.github/workflows/release.yml` 的三个作业接手，本地不再手工打包上传：
 
-1. `verify`（ubuntu）：`npm ci` + `typecheck` + `lint` + `test`，不过就不出包。Rust 侧的
-   `rust:check` / `rust:test` / `rust:clippy` **仍留在本地**：宿主依赖 macOS 专有框架，Linux
-   runner 跑不了，而放到 macOS 上等于为同一份 workspace 再编译一遍——`release` 作业本来就会
-   编译 release 二进制，编译错误在那里一定会暴露。
-2. `release`（macos-latest）：`npm run build:desktop -- --target universal-apple-darwin`。
-   runner 是 arm64，另一份架构由 `dtolnay/rust-toolchain` 装上；`build-service.mjs` 照
-   `TAURI_ENV_TARGET_TRIPLE` 同时编译两份 sidecar 并 `lipo` 合并。cargo 缓存落在工作区的
-   `.cargo-home`（覆盖 `tools/cargo.sh` 默认的 `.dsh/cargo-home`），`actions/cache` 按
-   `Cargo.lock` 缓存 registry 与 `target`——release 构建是 `lto` + `codegen-units = 1`，不缓存
-   就要整轮重编。
-3. 把 dmg 挂到 `v<package.json 的 version>`：该 release 已存在就 `--clobber` 替换资产（标题与
-   正文一个字都不动），不存在就建成 draft 并附一份自动变更列表。
+1. `plan`（ubuntu，几秒）：读 `package.json` 的版本号，判断 `v<version>` 是不是已经发过——
+   远端有同名 tag，或者 `gh release view` 找得到那个 release（**draft 也算发过**，所以草稿
+   还没发布时重复推送不会再打一次包）。没发过才把 `pack=true` 交给后面的作业；这个结论同时
+   写进 run summary，跳过时一眼看得出为什么没打包。
+2. `verify`（ubuntu）：`npm ci` + `typecheck` + `lint` + `test`，每次都跑——它是 main 的常规
+   门禁，与出不出包无关。Rust 侧的 `rust:check` / `rust:test` / `rust:clippy` **仍留在本地**：
+   宿主依赖 macOS 专有框架，Linux runner 跑不了，而放到 macOS 上等于为同一份 workspace 再编译
+   一遍——`release` 作业本来就会编译 release 二进制，编译错误在那里一定会暴露。
+3. `release`（macos-latest，`if: needs.plan.outputs.pack == 'true'`）：`npm run build:desktop --
+   --target universal-apple-darwin`。runner 是 arm64，另一份架构由 `dtolnay/rust-toolchain` 装上；
+   `build-service.mjs` 照 `TAURI_ENV_TARGET_TRIPLE` 同时编译两份 sidecar 并 `lipo` 合并。cargo
+   缓存落在工作区的 `.cargo-home`（覆盖 `tools/cargo.sh` 默认的 `.dsh/cargo-home`），
+   `actions/cache` 按 `Cargo.lock` 缓存 registry 与 `target`——release 构建是 `lto` +
+   `codegen-units = 1`，不缓存就要整轮重编。最后 `gh release create` 建 `v<version>` 的 draft
+   并把 dmg 挂上。
+
+**一个版本只出一次包**，所以 release 上的 dmg 与它 tag 指向的提交是同一份代码，手写正文也不会
+被后来的构建改掉。已存在的 release 一个字都不碰：真撞上同名 release（比如构建期间别人建了）
+就报错退出，绝不覆盖已经发出去的资产。要重发某个版本（包本身有问题）：
+`gh release delete v1.2.0 --cleanup-tag --yes` 删掉 release 与 tag，再重跑那次 run，`plan` 会
+重新判定为要打包。（GitHub 的 immutable releases 开关正是这条规矩的强制版，打开也不再冲突。）
 
 版本号只有 `package.json` 一处：`src-tauri/tauri.conf.json` 的 `version` 指向
 `../package.json`（Tauri 打包时现读，落到 `CFBundleShortVersionString`），`Cargo.toml` 的
-`[workspace.package] version` 必须跟着一致。`tests/release-pipeline.test.ts` 守住这三者与流水线
-的四条接线（触发时机、版本号来源、打包目标、发布方式）。
+`[workspace.package] version` 必须跟着一致。`tests/release-pipeline.test.ts` 守住这三者与流水线的
+五条接线（触发时机、版本号来源、打包目标、只打一次、已发出的资产不再变动）。
 
 ### 热更新（改样式/界面）
 

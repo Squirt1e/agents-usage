@@ -1,5 +1,5 @@
-# main 的每次推送都重新打包 macOS 通用 dmg，并把它挂到 package.json 里那个版本的
-# release 上——发版不再需要本地跑打包命令。
+# main 的每次推送先判断「这个版本是不是已经发过包」：没发过才打包，发过就只跑门禁。
+# 一个版本只出一次包，release 上的 dmg 与它 tag 指向的提交从此是对得上的同一份代码。
 #
 # 为什么只在 macOS 上跑：交付物只有 .app 与 .dmg，Tauri 只能在 macOS 上出这两种包。
 # 为什么是 universal：README 承诺的发布包是 Intel 与 Apple Silicon 通用的单一 dmg。
@@ -9,23 +9,62 @@
 #   `../package.json`，Tauri 打包时直接读它（落到 CFBundleShortVersionString）。因此这里
 #   不写第二份版本号，tag 与资产名都由读出来的那个值决定。
 #
-# release 正文由人维护：已存在的 release 只替换 dmg 资产，标题与正文一个字都不动；新版本
-# 建的是 draft（附自动变更列表），等补写完中文说明再发布。这样流水线既不会覆盖手写文案，
-# 也不会让一个没有正文的 release 直接对外。
+# release 正文由人维护：流水线只上传 dmg，新版本建成 draft 等人补写；已发出去的 release
+# 一个字都不碰。这与「版本没变就不打包」是同一件事的两半：资产一旦发出就不再变动，正文里
+# 写的校验和与体积才不会过期。
 name: release
 
 on:
   push:
     branches: [main]
 
-# 发布必须串行：两个并发 run 会同时替换同一个 release 的资产。
+# 发布必须串行：两个并发 run 会同时判断同一个版本，再同时去建同名 release。
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
+  plan:
+    # 读 package.json 的版本号，并决定这次推送要不要出包。
+    # 判据是这个版本有没有发过：`v<version>` 这个 tag 或被它标着的 release 已经存在，
+    # 就说明发过了。draft 也算发过（`gh release view` 看得见 draft），所以草稿还没发布时
+    # 重复推送不会再打一次包。
+    #
+    # 修一个发出去了但有问题的版本：删掉它的 release 与 tag 再重跑本次 run
+    # （`gh release delete v1.2.0 --cleanup-tag --yes`），判断会重新变回「要打包」。
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      pack: ${{ steps.read.outputs.pack }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: 读出版本号，判断这个版本是否已经发过包
+        id: read
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eo pipefail
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1 ||
+            git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "pack=false" >> "$GITHUB_OUTPUT"
+            echo "### \`$tag\` 已经存在：这个版本发过包了，这次推送不出包" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "pack=true" >> "$GITHUB_OUTPUT"
+            echo "### \`$tag\` 还不存在：这次推送会打包并建一个 draft release" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   verify:
-    # 发版门禁：类型、风格与测试全过才允许出包（AGENTS.md 要求的三条命令）。
+    # main 的常规门禁：类型、风格与测试全过才允许出包（AGENTS.md 要求的三条命令）。
+    # 出不出包与它无关，所以每次都跑。
     #
     # Rust 侧的检查（rust:check / rust:test / rust:clippy）仍留在本地：宿主依赖 macOS 专有
     # 框架，Linux runner 上跑不了；放到 macOS 上又要为同一份 workspace 再编译一遍，而下面的
@@ -44,11 +83,13 @@ jobs:
       - run: npm test
 
   release:
-    needs: verify
+    needs: [plan, verify]
+    # 版本没变就整段跳过：不重新打包，也不去碰已经发出去的 release。
+    if: needs.plan.outputs.pack == 'true'
     runs-on: macos-latest
     timeout-minutes: 90 # release 构建是 lto + codegen-units = 1，慢是正常的；挂了别占满默认的 6 小时
     permissions:
-      contents: write # 建 tag、建 release、替换资产
+      contents: write # 建 tag、建 draft release、挂 dmg
     env:
       # `tools/cargo.sh` 与 `tools/tauri.sh` 都把 CARGO_HOME 指到 `AGENTS_USAGE_CARGO_HOME`
       # （默认是仓库内的 .dsh/cargo-home）。流水线里所有 cargo 都从这两个包装脚本进，所以只覆盖
@@ -78,16 +119,13 @@ jobs:
           key: cargo-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-${{ runner.arch }}-
       - run: npm ci
-      - name: 读出 package.json 里的版本号
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - name: 打包通用 dmg
         run: npm run build:desktop -- --target universal-apple-darwin
-      - name: 更新对应版本的 release
+      - name: 建这个版本的 draft release
         # 这里刻意不写正文：正文由人维护，流水线只负责资产。
         run: |
           set -eo pipefail
-          tag="v${{ steps.version.outputs.version }}"
+          tag="v${{ needs.plan.outputs.version }}"
           shopt -s nullglob
           # Tauri 的出包名是 `<productName>_<version>_universal.dmg`，GitHub 上传时会把
           # 文件名里的空格写成点。多于一个 dmg 说明构建产出了预期之外的东西，直接失败。
@@ -96,10 +134,12 @@ jobs:
             echo "expected exactly one dmg, found ${#dmgs[@]}" >&2
             exit 1
           fi
+          # plan 已经确认过这个 tag 不存在；万一构建期间它冒出来了（别人建的 release、
+          # 或者同一版本被手工打过标签），宁可失败也不去覆盖那些已经发出去的资产。
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "${dmgs[0]}" --clobber
-          else
-            gh release create "$tag" --draft --title "$tag" --target "$GITHUB_SHA" \
-              --generate-notes "${dmgs[0]}"
+            echo "::error::$tag 已经存在，流水线不替换已发布版本的资产；要重新发版请升 package.json 的版本号" >&2
+            exit 1
           fi
-          echo "$tag now carries $(basename "${dmgs[0]}")"
+          gh release create "$tag" --draft --title "$tag" --target "$GITHUB_SHA" \
+            --generate-notes "${dmgs[0]}"
+          echo "created draft $tag with $(basename "${dmgs[0]}")"
