@@ -152,6 +152,22 @@ npm run build:desktop -- --target universal-apple-darwin
 两个架构并用 `lipo` 合并），最后由 Tauri 出包。发布包使用 ad-hoc 签名
 （`bundle.macOS.signingIdentity = "-"`），因此对方仍需过一次 Gatekeeper。
 
+### 发布由 GitHub Actions 完成
+
+本地不需要再手工打包上传。推到 `main` 就会触发
+[`.github/workflows/release.yml`](.github/workflows/release.yml)：先跑
+`typecheck` / `lint` / `test`，通过后用同一条 universal 命令打包，再把 dmg 挂到
+`v<package.json 里的 version>` 这个 release 上。
+
+- **版本号只有一处**：`src-tauri/tauri.conf.json` 的 `version` 指向 `../package.json`，打包时
+  Tauri 现读它。升版本要改两个文件——`package.json` 与 `Cargo.toml` 的
+  `[workspace.package] version`（后者与前者一致由 `tests/release-pipeline.test.ts` 守住）。
+- **同一个版本的重复推送**：dmg 会被最新构建替换（资产名不变，GitHub 会把文件名里的空格写成点）。
+- **新版本**：流水线建的是 **draft**，正文里只有一份自动生成的变更列表。中文说明（安装步骤、
+  运行要求、已知限制）补完再发布。
+- **正文由人维护**：流水线不写正文，所以**不要**把校验和或文件体积写进正文——它们会随每次
+  重建过期；资产页上的 SHA-256 是 GitHub 现算的，永远对得上。
+
 Rust 侧的检查与测试：
 
 ```bash

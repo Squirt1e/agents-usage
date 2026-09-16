@@ -63,6 +63,28 @@ npm run rust:clippy         # cargo clippy，警告视为错误
 npm run dev:desktop         # 热更新模式：构建 service 后交给宿主托管，Vite 由 beforeDevCommand 拉起
 ```
 
+### 发布（交给 GitHub Actions）
+
+推 `main` 即发版，本地不再手工打包上传。`.github/workflows/release.yml` 做三件事：
+
+1. `verify`（ubuntu）：`npm ci` + `typecheck` + `lint` + `test`，不过就不出包。Rust 侧的
+   `rust:check` / `rust:test` / `rust:clippy` **仍留在本地**：宿主依赖 macOS 专有框架，Linux
+   runner 跑不了，而放到 macOS 上等于为同一份 workspace 再编译一遍——`release` 作业本来就会
+   编译 release 二进制，编译错误在那里一定会暴露。
+2. `release`（macos-latest）：`npm run build:desktop -- --target universal-apple-darwin`。
+   runner 是 arm64，另一份架构由 `dtolnay/rust-toolchain` 装上；`build-service.mjs` 照
+   `TAURI_ENV_TARGET_TRIPLE` 同时编译两份 sidecar 并 `lipo` 合并。cargo 缓存落在工作区的
+   `.cargo-home`（覆盖 `tools/cargo.sh` 默认的 `.dsh/cargo-home`），`actions/cache` 按
+   `Cargo.lock` 缓存 registry 与 `target`——release 构建是 `lto` + `codegen-units = 1`，不缓存
+   就要整轮重编。
+3. 把 dmg 挂到 `v<package.json 的 version>`：该 release 已存在就 `--clobber` 替换资产（标题与
+   正文一个字都不动），不存在就建成 draft 并附一份自动变更列表。
+
+版本号只有 `package.json` 一处：`src-tauri/tauri.conf.json` 的 `version` 指向
+`../package.json`（Tauri 打包时现读，落到 `CFBundleShortVersionString`），`Cargo.toml` 的
+`[workspace.package] version` 必须跟着一致。`tests/release-pipeline.test.ts` 守住这三者与流水线
+的四条接线（触发时机、版本号来源、打包目标、发布方式）。
+
 ### 热更新（改样式/界面）
 
 `npm run dev:desktop` 即热更新模式，启动后面板自动弹出并保持钉住，直接改代码即可：
