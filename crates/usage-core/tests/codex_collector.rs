@@ -7,8 +7,9 @@
 //! - a scripted [`FakeTransport`] for the JSON-RPC layer,
 //! - a real [`StdioRpcTransport`] over `/bin/sh` when the process lifecycle
 //!   itself is under test,
-//! - the shared fixtures in `fixtures/contracts/` and `tests/fixtures/` for the
-//!   normalization expectations that the TypeScript runtime pins as well.
+//! - the shared fixtures in `fixtures/contracts/` for the normalization
+//!   expectations that the TypeScript runtime pins as well, plus the rate-limit
+//!   payloads in this crate's `tests/fixtures/` that only the Rust suite reads.
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -345,11 +346,10 @@ fn fixture(name: &str) -> Value {
     load_fixture(name)
 }
 
-/// The rate-limit payload used by the TypeScript suite (`tests/fixtures/...`).
-fn repository_fixture(name: &str) -> Value {
+/// Rate-limit payload snapshots kept next to this crate's integration tests;
+/// the TypeScript suite pins the shared corpus, not these files.
+fn crate_fixture(name: &str) -> Value {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
         .join("tests")
         .join("fixtures")
         .join(name);
@@ -1275,7 +1275,7 @@ fn the_codex_windows_fixture_matches_the_shared_expectations() {
 
 #[test]
 fn the_legacy_codex_fixture_still_normalizes() {
-    let legacy = repository_fixture("codex-rate-limits-legacy.json");
+    let legacy = crate_fixture("codex-rate-limits-legacy.json");
     let snapshot = normalize_codex_rate_limits(&legacy, &captured())
         .expect("the legacy payload must normalize");
     assert_eq!(
@@ -1311,7 +1311,7 @@ fn the_legacy_codex_fixture_still_normalizes() {
         Some(18_000)
     );
 
-    let current = repository_fixture("codex-rate-limits.json");
+    let current = crate_fixture("codex-rate-limits.json");
     let snapshot = normalize_codex_rate_limits(&current, &captured())
         .expect("the current payload must normalize");
     assert_eq!(

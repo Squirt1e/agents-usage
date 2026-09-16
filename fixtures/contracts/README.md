@@ -3,6 +3,13 @@
 这些 JSON 是 Rust 与 TypeScript 两个运行时的共同验收依据（任务 1.3 建立，任务 1.4 接入校验
 入口）。样例只包含人工构造或脱敏后的数据，不含真实账号、密钥、端点或会话。
 
+## 归属边界
+
+- **两个运行时都要消费**的样例进本目录，改动必须同时过下方两个校验入口。
+- 只被单一语言栈读取的测试私有无所谓进这里：Rust 侧放 `crates/usage-core/tests/fixtures/`
+  （如 Codex rate-limit 载荷），TypeScript 侧放 `tests/fixtures/`。不要把单语言数据放进本目录，
+  也不要把跨运行时样例沉到某一侧的测试目录里。
+
 ## 约定
 
 - 每个文件是一个对象，至少包含 `id`、`description`，以及 `input`/`cases` 等载荷与 `expect`
