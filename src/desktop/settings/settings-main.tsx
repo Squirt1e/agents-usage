@@ -16,12 +16,12 @@
 
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import './panel.css';
-import './settings.css';
-import { createDesktopUsageClient, createSettingsWindowHost } from './desktop-client';
+import '../panel.css';
+import '../settings.css';
+import { createDesktopUsageClient, createSettingsWindowHost } from '../lib/desktop-client';
 import { SettingsPanel, parseSettingsSection, type SettingsSection } from './SettingsPanel';
 import { useSettingsWindow, type SettingsWindowOptions } from './settings-window';
-import { usePanelTheme } from './theme';
+import { usePanelTheme } from '../lib/theme';
 
 export type SettingsAppProps = Omit<SettingsWindowOptions, 'client'> & {
   /** Fixed for the window's lifetime. */

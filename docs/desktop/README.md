@@ -14,7 +14,8 @@ crates/usage-core/              采集核心：契约、适配器、存储、凭
 crates/usage-service/           独立可执行服务：占用数据目录、回环 HTTP/SSE
 src-tauri/                      Tauri 宿主：菜单栏、窗口生命周期、受限命令/事件桥
 src/shared/                     面板与服务共享的契约与脱敏（TypeScript）
-src/desktop/                    两个窗口的前端：面板（index.html）与设置窗口（settings.html）
+src/desktop/                    两个窗口的前端：HTML 入口与样式留在根上，代码按窗口分目录
+                                （panel/ 面板、settings/ 设置窗口，共用组件与逻辑在 components/、lib/）
 tools/cargo.sh                  cargo 包装脚本（见「环境注意事项」）
 tools/tauri.sh                  Tauri CLI 包装脚本
 scripts/desktop/                面板前端构建/开发入口
@@ -160,7 +161,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   占位提示。
   凭据校验失败时表单显示服务给出的原因，而不是宿主命令名：Tauri 宿主把服务的应答包成
   `service returned HTTP <status>( <状态短语>): <body>`（Rust 的 `StatusCode` 会带 `Bad Request`
-  这类短语），面板（`src/desktop/desktop-client.ts` 的 `hostFailure`）解码后复用网页传输那套
+  这类短语），面板（`src/desktop/lib/desktop-client.ts` 的 `hostFailure`）解码后复用网页传输那套
   状态映射（`src/shared/usage-client.ts` 的 `serviceFailure`），传输层包装不进界面。原因可能是
   一整句，因此状态行允许换行：掩码/未配置与删除入口不收缩，反馈独占一行并在行内断行
   （`tests/panel-width.test.ts` 守住）。粘贴值自带的 `Bearer ` 前缀在服务端写入前被去掉，
@@ -209,7 +210,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   「额度数值」的「剩余 / 已用」选择，统一作用于 Codex 与 GLM，默认显示剩余量；缺少所选方向的指标时显示
   `—`，不从另一方向伪造。形态切换动画见
   [`fix-quota-shape-morph`](../../openspec/changes/archive/2026-09-15-fix-quota-shape-morph/proposal.md)：几何由
-  `src/desktop/quota-morph.ts` 的纯函数给出（断开解开 → 回直 → 下移三段），`QuotaDisplay`
+  `src/desktop/panel/quota-morph.ts` 的纯函数给出（断开解开 → 回直 → 下移三段），`QuotaDisplay`
   逐帧绘制（WebKit 没有可插值的 `d`），布局由 CSS 从 `--quota-drop` 推出，静态检查见
   `tests/panel-quota-morph.test.tsx`。
 - GLM 套餐的 5 小时与每周额度由接口的窗口单位和数量区分；两者即使共用 `TOKENS_LIMIT` 或
@@ -225,7 +226,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   见 [`fix-refresh-verdict-messages`](../../openspec/changes/archive/2026-09-15-fix-refresh-verdict-messages/proposal.md)。
 - 高峰/错峰时段提醒见
   [`add-peak-window-reminder`](../../openspec/changes/archive/2026-09-15-add-peak-window-reminder/proposal.md)：
-  判定是纯前端计算（`src/desktop/peak-windows.ts`，按定义自身时区取本地星期与时刻，支持跨午夜
+  判定是纯前端计算（`src/desktop/lib/peak-windows.ts`，按定义自身时区取本地星期与时刻，支持跨午夜
   回绕），内置官方时段表目前只有 DeepSeek（北京周一至五 09:00–12:00、14:00–18:00，带来源与
   核实日期），无内置定义的平台（GLM/Codex）不显示时段信息；仅高峰时显示卡片警示描边、阴影与
   边界标签，错峰保持普通外观且无文字。面板展开期间跨过任一时段边界仍经现有 toast 提示一次；设置在每平台配置的

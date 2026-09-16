@@ -6,10 +6,10 @@
  */
 
 import type { ReactNode } from 'react';
-import type { ProviderId } from '../shared/contracts';
-import { providerDisplayName } from '../shared/desktop-contract';
-import type { PeakPeriod } from './peak-windows';
-import { TuneIcon } from './icons';
+import type { ProviderId } from '../../shared/contracts';
+import { providerDisplayName } from '../../shared/desktop-contract';
+import type { PeakPeriod } from '../lib/peak-windows';
+import { TuneIcon } from '../components/icons';
 
 const MONOGRAMS: Record<ProviderId, string> = { codex: 'CX', glm: 'GL', deepseek: 'DS' };
 

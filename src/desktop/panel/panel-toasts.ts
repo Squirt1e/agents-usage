@@ -9,7 +9,7 @@
  * part that renders them and runs the clocks.
  */
 
-import type { StatusTone } from './StatusRow';
+import type { StatusTone } from '../components/StatusRow';
 
 /** A message before it enters the stack. */
 export interface PanelNotice {

@@ -24,7 +24,7 @@
 // checked here.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { PANEL_HEIGHT_ANIMATION_MS } from '../src/desktop/panel-height';
+import { PANEL_HEIGHT_ANIMATION_MS } from '../src/desktop/panel/panel-height';
 
 /** The sheets the guard reads, in the order the documents load them. */
 const SHEET_FILES = ['src/desktop/panel.css', 'src/desktop/settings.css'];
@@ -563,7 +563,7 @@ const EXCEPTIONS: Exception[] = [
     reason:
       'Both display forms are one stroke along one path, and WebKit has no interpolable CSS property for path data — there is no `d` to transition, so no transition or animation can draw the between frames. QuotaDisplay therefore walks the morph a frame at a time from one progress value, exactly as it walks the window height, and the three beats plus the speed profile live in quota-morph.ts. That one number also moves what its own rules cannot derive: the drop the bar travels, the slower fade of the label line, and the shift that carries the reset line from under the ring to the left edge of the item. `prefers-reduced-motion` skips the walk and draws the landing frame directly (pinned in tests/panel-quota-morph.test.tsx). It is motion, travelled by script rather than by the sheet, and it is the one switch allowed past the travel budget: the design asks for three beats — break and unwind, straighten, drop — and each has to be seen.',
     whileHolds: /quotaShape\(/,
-    where: 'src/desktop/QuotaDisplay.tsx'
+    where: 'src/desktop/panel/QuotaDisplay.tsx'
   },
   {
     what: 'the frosted cover over placeholder data',
@@ -571,7 +571,7 @@ const EXCEPTIONS: Exception[] = [
     reason:
       'The cover hides the placeholder values a card falls back to (28% / 16% and a ¥42.60 wallet). Any entrance — of the cover or of its text — spends its whole duration showing what it hides, and returning from a settings page remounts the card that carries it. It has to be complete on the first frame.',
     whileHolds: /PLACEHOLDER_(QUOTA|WALLET)/,
-    where: 'src/desktop/GlmCard.tsx'
+    where: 'src/desktop/panel/GlmCard.tsx'
   }
 ];
 

@@ -14,8 +14,8 @@
  */
 
 import type { ReactNode } from 'react';
-import type { CollectorError } from '../shared/contracts';
-import type { DesktopProviderState } from '../shared/desktop-contract';
+import type { CollectorError } from '../../shared/contracts';
+import type { DesktopProviderState } from '../../shared/desktop-contract';
 
 export type StatusTone = 'healthy' | 'warning' | 'danger' | 'neutral';
 

@@ -22,14 +22,14 @@
  */
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import './panel.css';
-import './settings.css';
+import '../panel.css';
+import '../settings.css';
 import { PanelApp, type PanelHostProps } from './PanelApp';
-import { SettingsPanel, type SettingsSection } from './SettingsPanel';
-import { useSettingsWindow } from './settings-window';
-import { usePanelTheme } from './theme';
-import { createBrowserFallbackHost, createDesktopHostControls, createDesktopUsageClient } from './desktop-client';
-import type { UsageClient } from '../shared/usage-client';
+import { SettingsPanel, type SettingsSection } from '../settings/SettingsPanel';
+import { useSettingsWindow } from '../settings/settings-window';
+import { usePanelTheme } from '../lib/theme';
+import { createBrowserFallbackHost, createDesktopHostControls, createDesktopUsageClient } from '../lib/desktop-client';
+import type { UsageClient } from '../../shared/usage-client';
 
 /**
  * The browser fallback's settings surface: the same panel, the same wiring, hosted

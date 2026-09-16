@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { QuotaDisplayMode, QuotaValueMode, ResetTimeFormat } from '../shared/desktop-contract';
-import { formatResetLabel, type QuotaWindowKind } from './metrics';
+import type { QuotaDisplayMode, QuotaValueMode, ResetTimeFormat } from '../../shared/desktop-contract';
+import { formatResetLabel, type QuotaWindowKind } from '../lib/metrics';
 import { PANEL_ANIMATING_ATTRIBUTE } from './panel-height';
 import { QUOTA_MORPH_MS, quotaShape, ringTextOpacity, type QuotaShape } from './quota-morph';
 import { ReplayNumber } from './ReplayNumber';

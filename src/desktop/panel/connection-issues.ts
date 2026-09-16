@@ -1,6 +1,6 @@
-import type { CollectorError, ProviderId } from '../shared/contracts';
-import { providerDisplayName, stateConnection, visibleProviders, type DesktopProviderState, type PanelSettings, type PanelSnapshot } from '../shared/desktop-contract';
-import { errorLabel } from './StatusRow';
+import type { CollectorError, ProviderId } from '../../shared/contracts';
+import { providerDisplayName, stateConnection, visibleProviders, type DesktopProviderState, type PanelSettings, type PanelSnapshot } from '../../shared/desktop-contract';
+import { errorLabel } from '../components/StatusRow';
 
 export interface ConnectionIssue {
   key: string;

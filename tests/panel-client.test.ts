@@ -22,7 +22,7 @@ import {
   DESKTOP_COMMANDS,
   DESKTOP_EVENTS,
   type DesktopCommandBridge
-} from '../src/desktop/desktop-client';
+} from '../src/desktop/lib/desktop-client';
 
 type Listener = (event: { data?: string }) => void;
 

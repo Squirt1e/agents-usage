@@ -22,7 +22,7 @@
  */
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import type { ProviderId } from '../shared/contracts';
+import type { ProviderId } from '../../shared/contracts';
 import {
   isValidHHmm,
   isValidTimezone,
@@ -32,10 +32,10 @@ import {
   type PanelSettingsPatch,
   type PeakReminderMode,
   type PeakWindow
-} from '../shared/desktop-contract';
-import type { ProviderView } from './metrics';
-import { BUILTIN_PEAK_DEFS, peakPreviewOf } from './peak-windows';
-import { ConfidenceTag, stateAdvice, statusFor, StatusRow } from './StatusRow';
+} from '../../shared/desktop-contract';
+import type { ProviderView } from '../lib/metrics';
+import { BUILTIN_PEAK_DEFS, peakPreviewOf } from '../lib/peak-windows';
+import { ConfidenceTag, stateAdvice, statusFor, StatusRow } from '../components/StatusRow';
 import { SegmentedGroup } from './SegmentedGroup';
 
 export interface ProviderSettingsProps {

@@ -11,7 +11,7 @@
 // story (a lost notification must not strand the window at a stale height), and that
 // invariant lives in `usePanelHeight` rather than in this arithmetic.
 import { describe, expect, it } from 'vitest';
-import { desiredPanelHeight } from '../src/desktop/panel-height';
+import { desiredPanelHeight } from '../src/desktop/panel/panel-height';
 
 /** Window border + header + footer, in logical pixels. */
 const CHROME = 100;

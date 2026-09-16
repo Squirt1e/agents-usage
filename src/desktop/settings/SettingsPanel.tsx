@@ -34,7 +34,7 @@
  */
 
 import { useCallback, useMemo, useRef } from 'react';
-import type { ProviderId } from '../shared/contracts';
+import type { ProviderId } from '../../shared/contracts';
 import {
   type CredentialStatus,
   type CredentialTarget,
@@ -42,10 +42,10 @@ import {
   type PanelSettings,
   type PanelSettingsPatch,
   type PanelSnapshot
-} from '../shared/desktop-contract';
+} from '../../shared/desktop-contract';
 import { AppSettings } from './AppSettings';
 import { ProviderSettings } from './ProviderSettings';
-import { providerView } from './metrics';
+import { providerView } from '../lib/metrics';
 
 /** The sections the settings window can show, in nav order. */
 export const SETTINGS_SECTIONS = ['platforms', 'appearance', 'codex', 'glm', 'deepseek'] as const;

@@ -47,7 +47,7 @@
  *    relative URLs is used, so the panel remains fully testable outside Tauri.
  */
 
-import type { ProviderId } from '../shared/contracts';
+import type { ProviderId } from '../../shared/contracts';
 import {
   parseCredentialStatus,
   parsePanelSettings,
@@ -57,7 +57,7 @@ import {
   type CredentialTarget,
   type PanelSettingsPatch,
   type PanelSnapshot
-} from '../shared/desktop-contract';
+} from '../../shared/desktop-contract';
 import {
   createHttpUsageClient,
   createRecovery,
@@ -67,7 +67,7 @@ import {
   type RefreshResult,
   type RefreshStatus,
   type UsageClient
-} from '../shared/usage-client';
+} from '../../shared/usage-client';
 
 /** Commands the host exposes. Kept in one place so the Rust side can mirror it. */
 export const DESKTOP_COMMANDS = {

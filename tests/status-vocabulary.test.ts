@@ -13,7 +13,7 @@
 //    contract fails here until it has a sentence.
 import { describe, expect, it } from 'vitest';
 import type { CollectorError } from '../src/shared/contracts';
-import { errorLabel, recoveryAdvice, statusFor } from '../src/desktop/StatusRow';
+import { errorLabel, recoveryAdvice, statusFor } from '../src/desktop/components/StatusRow';
 
 /** Every failure kind the contract defines, spelled out so a new one is caught. */
 const KINDS: Array<CollectorError['kind']> = [

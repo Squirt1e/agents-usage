@@ -53,7 +53,7 @@ describe('commit message convention', () => {
       'feat(panel): 新增卡片入场动画',
       '# 请为你的提交输入说明。以 # 开头的行会被忽略。',
       '# ------------------------ >8 ------------------------',
-      'diff --git a/src/desktop/Panel.tsx b/src/desktop/Panel.tsx'
+      'diff --git a/src/desktop/panel/Panel.tsx b/src/desktop/panel/Panel.tsx'
     ].join('\n');
 
     expect(run(message).status).toBe(0);

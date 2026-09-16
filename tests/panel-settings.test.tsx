@@ -8,7 +8,7 @@
 // the panel *wears* rather than edits (the theme, the visible platforms, the order).
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defaultPanelSettings } from '../src/desktop/fake-client';
+import { defaultPanelSettings } from '../src/desktop/lib/fake-client';
 import { renderPanel } from './helpers/windows';
 
 afterEach(() => {

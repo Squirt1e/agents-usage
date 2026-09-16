@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { ThemePreference } from '../shared/desktop-contract';
+import type { ThemePreference } from '../../shared/desktop-contract';
 
 /** Apply the saved preference to every panel view and native form control. */
 export function usePanelTheme(preference: ThemePreference): void {

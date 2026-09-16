@@ -5,10 +5,10 @@
  * without importing each other.
  */
 
-import type { ProviderId } from '../shared/contracts';
-import type { ResetTimeFormat } from '../shared/desktop-contract';
-import type { PeakPeriod } from './peak-windows';
-import type { MetricGateOptions, ProviderView } from './metrics';
+import type { ProviderId } from '../../shared/contracts';
+import type { ResetTimeFormat } from '../../shared/desktop-contract';
+import type { PeakPeriod } from '../lib/peak-windows';
+import type { MetricGateOptions, ProviderView } from '../lib/metrics';
 
 /** The provider's current period state, as the card frame presents it. */
 export interface PeakCardState {

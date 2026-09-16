@@ -15,8 +15,8 @@
 进度、倒计时归零）以及悬停、按下、禁用这类反馈。
 
 「切换」的定义是**同一块界面前后呈现不同状态**。只要用户能看到变化前后的两种样子，变化本身
-就必须是运动，而不是一次剪切。适用范围是面板前端 `src/desktop/`（`panel.css` 与 `*.tsx`），
-以及任何新加的桌面界面。
+就必须是运动，而不是一次剪切。适用范围是面板前端 `src/desktop/`（根上的 `panel.css`、
+`settings.css` 与 `panel/`、`settings/`、`components/`、`lib/` 各子目录），以及任何新加的桌面界面。
 
 ### 1.1 三条实现路径（按切换的形态选一条）
 
@@ -24,7 +24,7 @@
 | --- | --- | --- |
 | 同一个元素换状态 | 基础规则上的 `transition` | `.switch` 打开、按钮悬停、卡片状态色 |
 | 元素带着新状态挂载 | `animation` + `@keyframes` | 换页后新页面入场、消息出现、毛玻璃蒙层的文字出现 |
-| 宿主窗口的尺寸（CSS 动不了窗口） | 逐帧动画并上报宿主 | `src/desktop/panel-height.ts` 的高度过渡 |
+| 宿主窗口的尺寸（CSS 动不了窗口） | 逐帧动画并上报宿主 | `src/desktop/panel/panel-height.ts` 的高度过渡 |
 
 窗口尺寸是唯一由 JS 驱动的动效：宿主只能「设置」尺寸，所以高度按帧沿缓动曲线上报
 （`PANEL_HEIGHT_ANIMATION_MS`），并且同样要遵守 `prefers-reduced-motion`——偏好减弱动效时

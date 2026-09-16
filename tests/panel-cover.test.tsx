@@ -14,10 +14,10 @@
 //     rather than collapsing to a bare header.
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { DeepSeekCard } from '../src/desktop/DeepSeekCard';
-import { GlmCard } from '../src/desktop/GlmCard';
-import { failedStateOf, metricOf, providerStateOf, snapshotOf } from '../src/desktop/fake-client';
-import { providerView } from '../src/desktop/metrics';
+import { DeepSeekCard } from '../src/desktop/panel/DeepSeekCard';
+import { GlmCard } from '../src/desktop/panel/GlmCard';
+import { failedStateOf, metricOf, providerStateOf, snapshotOf } from '../src/desktop/lib/fake-client';
+import { providerView } from '../src/desktop/lib/metrics';
 import type { ProviderId } from '../src/shared/contracts';
 import { localDayIn, type PanelSnapshot } from '../src/shared/desktop-contract';
 

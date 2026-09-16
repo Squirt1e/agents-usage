@@ -20,7 +20,7 @@ import {
   PANEL_HEIGHT_SETTLE_MS,
   requestPanelHeightMeasure,
   usePanelHeight
-} from '../src/desktop/panel-height';
+} from '../src/desktop/panel/panel-height';
 
 /** The frame the hook reads: chrome = panel height minus the body's client height. */
 const frame = { panel: 400, body: 100 };

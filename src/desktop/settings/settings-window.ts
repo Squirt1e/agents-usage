@@ -12,9 +12,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ProviderId } from '../shared/contracts';
-import type { CredentialStatus, PanelSettings, PanelSnapshot } from '../shared/desktop-contract';
-import type { UsageClient } from '../shared/usage-client';
+import type { ProviderId } from '../../shared/contracts';
+import type { CredentialStatus, PanelSettings, PanelSnapshot } from '../../shared/desktop-contract';
+import type { UsageClient } from '../../shared/usage-client';
 import { createSettingsStore, type SettingsStore } from './settings-store';
 import type { SettingsPanelProps, SettingsSection } from './SettingsPanel';
 

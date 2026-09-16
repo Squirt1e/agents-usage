@@ -10,11 +10,11 @@
  */
 import { render } from '@testing-library/react';
 import { vi } from 'vitest';
-import { PanelApp, type PanelHostProps } from '../../src/desktop/PanelApp';
-import { createFakeUsageClient, type FakeUsageClient } from '../../src/desktop/fake-client';
-import { SettingsPanel, type SettingsSection } from '../../src/desktop/SettingsPanel';
-import { useSettingsWindow } from '../../src/desktop/settings-window';
-import { usePanelTheme } from '../../src/desktop/theme';
+import { PanelApp, type PanelHostProps } from '../../src/desktop/panel/PanelApp';
+import { createFakeUsageClient, type FakeUsageClient } from '../../src/desktop/lib/fake-client';
+import { SettingsPanel, type SettingsSection } from '../../src/desktop/settings/SettingsPanel';
+import { useSettingsWindow } from '../../src/desktop/settings/settings-window';
+import { usePanelTheme } from '../../src/desktop/lib/theme';
 import type { PanelSettings } from '../../src/shared/desktop-contract';
 
 export const NOW = new Date('2026-09-10T08:00:00.000Z');

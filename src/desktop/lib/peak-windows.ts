@@ -15,9 +15,9 @@
  *   shows nothing rather than inventing a period.
  */
 
-import type { ProviderId } from '../shared/contracts';
-import type { PanelSettings, PeakReminderSetting, PeakWindow } from '../shared/desktop-contract';
-import { isValidPeakWindow, isValidTimezone } from '../shared/desktop-contract';
+import type { ProviderId } from '../../shared/contracts';
+import type { PanelSettings, PeakReminderSetting, PeakWindow } from '../../shared/desktop-contract';
+import { isValidPeakWindow, isValidTimezone } from '../../shared/desktop-contract';
 
 /** The panel's name for the two halves of a provider's pricing day. */
 export type PeakPeriod = 'peak' | 'offpeak';

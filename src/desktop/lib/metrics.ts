@@ -15,7 +15,7 @@
  * - GLM quota and wallet are independent: one failing never hides the other.
  */
 
-import type { CollectorError, Confidence, MetricDirection, ProviderId } from '../shared/contracts';
+import type { CollectorError, Confidence, MetricDirection, ProviderId } from '../../shared/contracts';
 import {
   connectionKey,
   localDayIn,
@@ -25,7 +25,7 @@ import {
   type DesktopUsageMetric,
   type PanelSnapshot,
   type ResetTimeFormat
-} from '../shared/desktop-contract';
+} from '../../shared/desktop-contract';
 
 // ---------------------------------------------------------------------------
 // Rendering gate (task 6.6)

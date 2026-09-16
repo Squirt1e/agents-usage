@@ -15,7 +15,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parsePanelSettings, type PanelSettings } from '../src/shared/desktop-contract';
 import type { PanelEvent, UsageClient } from '../src/shared/usage-client';
-import { createSettingsStore } from '../src/desktop/settings-store';
+import { createSettingsStore } from '../src/desktop/settings/settings-store';
 
 /** A client whose settings can be driven by hand, as the host would drive them. */
 function fakeClient(initial: PanelSettings) {

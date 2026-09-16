@@ -20,8 +20,8 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { DesktopProviderState, PanelSettings } from '../shared/desktop-contract';
-import type { ProviderId } from '../shared/contracts';
+import type { DesktopProviderState, PanelSettings } from '../../shared/desktop-contract';
+import type { ProviderId } from '../../shared/contracts';
 import { PlatformSettings } from './PlatformSettings';
 import { SegmentedGroup } from './SegmentedGroup';
 

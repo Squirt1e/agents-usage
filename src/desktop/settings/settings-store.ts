@@ -29,8 +29,8 @@
  * whatever the store reports.
  */
 
-import { parsePanelSettings, type PanelSettings, type PanelSettingsPatch } from '../shared/desktop-contract';
-import type { UsageClient } from '../shared/usage-client';
+import { parsePanelSettings, type PanelSettings, type PanelSettingsPatch } from '../../shared/desktop-contract';
+import type { UsageClient } from '../../shared/usage-client';
 
 export interface SettingsStore {
   /** The settings as this window currently believes them. */

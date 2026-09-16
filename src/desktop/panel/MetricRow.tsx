@@ -7,7 +7,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { ConfidenceTag } from './StatusRow';
+import { ConfidenceTag } from '../components/StatusRow';
 import { ReplayNumber } from './ReplayNumber';
 
 export interface MetricRowProps {

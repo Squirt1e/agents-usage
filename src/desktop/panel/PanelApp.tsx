@@ -21,7 +21,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ProviderId } from '../shared/contracts';
+import type { ProviderId } from '../../shared/contracts';
 import {
   parsePanelSettings,
   providerDisplayName,
@@ -29,19 +29,19 @@ import {
   type PanelSettings,
   type PanelSettingsPatch,
   type PanelSnapshot
-} from '../shared/desktop-contract';
-import { UsageClientError, type UsageClient } from '../shared/usage-client';
-import { createSettingsStore, type SettingsStore } from './settings-store';
-import type { SettingsSection } from './SettingsPanel';
+} from '../../shared/desktop-contract';
+import { UsageClientError, type UsageClient } from '../../shared/usage-client';
+import { createSettingsStore, type SettingsStore } from '../settings/settings-store';
+import type { SettingsSection } from '../settings/SettingsPanel';
 import { OverviewView } from './OverviewView';
 import { Panel, PanelIconButton } from './Panel';
 import { usePanelHeight } from './panel-height';
-import { usePanelTheme } from './theme';
+import { usePanelTheme } from '../lib/theme';
 import { ServiceUnavailableState } from './MetricStates';
 import { PanelToasts } from './PanelToasts';
 import { ConnectionDetails } from './ConnectionDetails';
 import { connectionIssues } from './connection-issues';
-import { collectPeakTransitions, effectivePeakDef, type PeakPeriod } from './peak-windows';
+import { collectPeakTransitions, effectivePeakDef, type PeakPeriod } from '../lib/peak-windows';
 import {
   dropToast,
   dropToastsTagged,
@@ -49,9 +49,9 @@ import {
   type PanelNotice,
   type PanelToast
 } from './panel-toasts';
-import type { StatusTone } from './StatusRow';
-import { GearIcon, PinIcon, RefreshIcon } from './icons';
-import { formatClockTime, latestAttemptFailed, latestSync, providerView } from './metrics';
+import type { StatusTone } from '../components/StatusRow';
+import { GearIcon, PinIcon, RefreshIcon } from '../components/icons';
+import { formatClockTime, latestAttemptFailed, latestSync, providerView } from '../lib/metrics';
 
 /** Tag of the live-connection warning, so reopening the stream can take it back. */
 const CONNECTION_TAG = 'connection';

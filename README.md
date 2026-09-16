@@ -190,7 +190,8 @@ npm run rust:clippy    # 警告视为错误
 
 ```
 src-tauri/             Tauri 宿主：菜单栏、两个窗口的生命周期、受限命令/事件桥
-src/desktop/           前端（React + TS）：约 350 逻辑像素的总览面板与 600×400 的设置窗口
+src/desktop/           前端（React + TS）：panel/ 总览面板与 settings/ 设置窗口分目录，
+                       共用组件与纯逻辑在 components/ 与 lib/，HTML 入口与样式留在根上
 crates/usage-core/     采集核心：契约、脱敏、Keychain、SQLite 存储、各平台采集器
 crates/usage-service/  本地服务：回环 HTTP/SSE、连接级调度与健康记录，打包为 sidecar
 src/shared/            前端与服务共享的契约与脱敏（TypeScript）

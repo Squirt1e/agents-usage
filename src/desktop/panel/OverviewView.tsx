@@ -7,15 +7,15 @@
  * Codex → GLM → DeepSeek order.
  */
 
-import type { ProviderId } from '../shared/contracts';
-import { localDayIn, visibleProviders, type PanelSettings, type PanelSnapshot } from '../shared/desktop-contract';
+import type { ProviderId } from '../../shared/contracts';
+import { localDayIn, visibleProviders, type PanelSettings, type PanelSnapshot } from '../../shared/desktop-contract';
 import { CodexCard } from './CodexCard';
 import { DeepSeekCard } from './DeepSeekCard';
 import { EmptySelectionState, LoadingState } from './MetricStates';
-import { formatClockTime } from './metrics';
+import { formatClockTime } from '../lib/metrics';
 import { GlmCard } from './GlmCard';
-import { providerView, withoutConnection, type MetricGateOptions } from './metrics';
-import { effectivePeakDef, peakStateAt } from './peak-windows';
+import { providerView, withoutConnection, type MetricGateOptions } from '../lib/metrics';
+import { effectivePeakDef, peakStateAt } from '../lib/peak-windows';
 
 /**
  * The experimental connection a provider's own settings switch has turned off.

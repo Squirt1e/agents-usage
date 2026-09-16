@@ -9,7 +9,7 @@
  * assert that hiding a platform did not delete a credential.
  */
 
-import type { CollectorError, MetricDirection, ProviderId } from '../shared/contracts';
+import type { CollectorError, MetricDirection, ProviderId } from '../../shared/contracts';
 import {
   parsePanelSettings,
   parseUsageMetric,
@@ -23,8 +23,8 @@ import {
   type PanelSettings,
   type PanelSettingsPatch,
   type PanelSnapshot
-} from '../shared/desktop-contract';
-import { UsageClientError, type PanelEvent, type RefreshResult, type UsageClient } from '../shared/usage-client';
+} from '../../shared/desktop-contract';
+import { UsageClientError, type PanelEvent, type RefreshResult, type UsageClient } from '../../shared/usage-client';
 
 export type FakeUsageClientMethod = keyof UsageClient;
 

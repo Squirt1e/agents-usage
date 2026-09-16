@@ -22,7 +22,7 @@
  *   same pattern as the GLM wallet.
  */
 
-import { providerPlanLabel } from '../shared/desktop-contract';
+import { providerPlanLabel } from '../../shared/desktop-contract';
 import type { PlatformCardViewProps } from './card-props';
 import { FrostedHint } from './MetricStates';
 import { MetricRow } from './MetricRow';
@@ -36,7 +36,7 @@ import {
   metricNumber,
   shouldRenderMetric,
   totalBalances
-} from './metrics';
+} from '../lib/metrics';
 
 export interface DeepSeekCardProps extends PlatformCardViewProps {
   /** Whether a balance API key is stored (`credentials.deepseek.configured`).

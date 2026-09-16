@@ -5,7 +5,7 @@
 // (which each document resolves for itself, from the same store).
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createFakeUsageClient } from '../src/desktop/fake-client';
+import { createFakeUsageClient } from '../src/desktop/lib/fake-client';
 import { parsePanelSettings } from '../src/shared/desktop-contract';
 import { renderSettings } from './helpers/windows';
 

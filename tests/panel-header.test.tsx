@@ -15,10 +15,10 @@ import { createElement, type ReactElement } from 'react';
 import {
   HEADER_COLLAPSE_SLACK_MS,
   headerTravelHeight
-} from '../src/desktop/panel-header';
-import { PANEL_ANIMATING_ATTRIBUTE, PANEL_HEIGHT_ANIMATION_MS } from '../src/desktop/panel-height';
-import { PanelApp, type PanelHostProps } from '../src/desktop/PanelApp';
-import { createFakeUsageClient } from '../src/desktop/fake-client';
+} from '../src/desktop/panel/panel-header';
+import { PANEL_ANIMATING_ATTRIBUTE, PANEL_HEIGHT_ANIMATION_MS } from '../src/desktop/panel/panel-height';
+import { PanelApp, type PanelHostProps } from '../src/desktop/panel/PanelApp';
+import { createFakeUsageClient } from '../src/desktop/lib/fake-client';
 
 const CSS = readFileSync('src/desktop/panel.css', 'utf8');
 const clean = CSS.replace(/\/\*[\s\S]*?\*\//g, '');

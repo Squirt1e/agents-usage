@@ -34,14 +34,14 @@ import {
   type QuotaDisplayMode,
   type QuotaValueMode,
   type ResetTimeFormat
-} from '../shared/desktop-contract';
+} from '../../shared/desktop-contract';
 import type { PlatformCardViewProps } from './card-props';
 import { FrostedHint } from './MetricStates';
 import { MetricRow } from './MetricRow';
 import { PlatformCard } from './PlatformCard';
 import { QuotaDisplay } from './QuotaDisplay';
 import { ReplayNumber } from './ReplayNumber';
-import { ConfidenceTag } from './StatusRow';
+import { ConfidenceTag } from '../components/StatusRow';
 import {
   formatMoney,
   glmQuotaWindows,
@@ -51,7 +51,7 @@ import {
   dailySpends,
   type QuotaBar,
   type QuotaWindowKind
-} from './metrics';
+} from '../lib/metrics';
 
 /**
  * Placeholder quota values for a module without data, mirroring the confirmed

@@ -42,10 +42,10 @@ import {
   PROVIDER_IDS,
   type DesktopProviderState,
   type PanelSettings
-} from '../shared/desktop-contract';
-import type { ProviderId } from '../shared/contracts';
-import { GripIcon } from './icons';
-import { statusFor } from './StatusRow';
+} from '../../shared/desktop-contract';
+import type { ProviderId } from '../../shared/contracts';
+import { GripIcon } from '../components/icons';
+import { statusFor } from '../components/StatusRow';
 
 const MONOGRAMS: Record<ProviderId, string> = { codex: 'CX', glm: 'GL', deepseek: 'DS' };
 

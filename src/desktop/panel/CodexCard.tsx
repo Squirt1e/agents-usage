@@ -14,8 +14,8 @@
  *   the entire row instead of showing a placeholder.
  */
 
-import { localDayIn, providerPlanLabel } from '../shared/desktop-contract';
-import type { QuotaDisplayMode, QuotaValueMode, ResetTimeFormat } from '../shared/desktop-contract';
+import { localDayIn, providerPlanLabel } from '../../shared/desktop-contract';
+import type { QuotaDisplayMode, QuotaValueMode, ResetTimeFormat } from '../../shared/desktop-contract';
 import type { PlatformCardViewProps } from './card-props';
 import { MetricRow } from './MetricRow';
 import { PlatformCard } from './PlatformCard';
@@ -27,7 +27,7 @@ import {
   formatTokens,
   metricNumber,
   shouldRenderMetric
-} from './metrics';
+} from '../lib/metrics';
 
 export interface CodexCardProps extends PlatformCardViewProps {
   quotaDisplayMode: QuotaDisplayMode;
