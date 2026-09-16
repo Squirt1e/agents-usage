@@ -19,6 +19,7 @@ import {
   snapshotOf
 } from '../src/desktop/fake-client';
 import { render } from '@testing-library/react';
+import type { CollectorError } from '../src/shared/contracts';
 import type { PanelSettings, PanelSnapshot } from '../src/shared/desktop-contract';
 import type { ProviderId } from '../src/shared/contracts';
 import { renderBothWindows, renderSettings } from './helpers/windows';
@@ -82,6 +83,21 @@ describe('the settings window and its sections', () => {
     expect(nav.closest('.settings-content')).toBeNull();
   });
 
+  it('uses the same provider badges as the overview cards', async () => {
+    renderSettings();
+    const nav = await screen.findByRole('tablist', { name: '设置分类' });
+
+    for (const [name, provider] of [
+      ['Codex', 'codex'],
+      ['GLM', 'glm'],
+      ['DeepSeek', 'deepseek']
+    ] as const) {
+      const badge = within(nav).getByRole('tab', { name }).firstElementChild;
+      expect(badge).toHaveClass('brand-badge', `brand-${provider}`);
+      expect(badge).not.toHaveClass('settings-nav-badge');
+    }
+  });
+
   it('opens on 平台管理, which is the setting users reach for most', async () => {
     renderSettings();
     expect(await screen.findByTestId('settings-pane-platforms')).toBeInTheDocument();
@@ -91,11 +107,11 @@ describe('the settings window and its sections', () => {
   it('shows only one section at a time, and never two platforms together', async () => {
     renderSettings({ client: clientWith(), section: 'glm' });
     const view = await screen.findByTestId('settings-glm');
-    expect(within(view).getByLabelText('GLM Coding Plan API Key')).toBeInTheDocument();
+    expect(within(view).getByLabelText('GLM Coding Plan 密钥')).toBeInTheDocument();
 
     expect(screen.queryByTestId('settings-codex')).not.toBeInTheDocument();
     expect(screen.queryByTestId('settings-deepseek')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('DeepSeek API Key')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('DeepSeek 密钥')).not.toBeInTheDocument();
     // The platform manager is a section of its own and never mixes in credentials.
     expect(screen.queryByRole('checkbox', { name: '显示 Codex' })).not.toBeInTheDocument();
   });
@@ -104,8 +120,8 @@ describe('the settings window and its sections', () => {
     renderSettings({ client: clientWith(), section: 'platforms' });
     await screen.findByRole('checkbox', { name: '显示 Codex' });
 
-    expect(screen.queryByLabelText('GLM Coding Plan API Key')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('DeepSeek API Key')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('GLM Coding Plan 密钥')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('DeepSeek 密钥')).not.toBeInTheDocument();
     expect(screen.queryByText('CLI 路径')).not.toBeInTheDocument();
   });
 
@@ -164,7 +180,7 @@ describe('per-platform configuration', () => {
 
     expect(within(view).getByRole('heading', { name: '账号连接' })).toBeInTheDocument();
     expect(within(view).queryByLabelText(/API Key/)).not.toBeInTheDocument();
-    expect(within(view).getByLabelText('Codex CLI 绝对路径')).toBeInTheDocument();
+    expect(within(view).getByLabelText('可执行文件路径')).toBeInTheDocument();
   });
 
   it('saves an absolute Codex CLI path for Finder launches', async () => {
@@ -172,7 +188,7 @@ describe('per-platform configuration', () => {
     renderSettings({ client, section: 'codex' });
     await screen.findByTestId('settings-codex');
 
-    const path = screen.getByLabelText('Codex CLI 绝对路径') as HTMLInputElement;
+    const path = screen.getByLabelText('可执行文件路径') as HTMLInputElement;
     fireEvent.change(path, { target: { value: '/opt/homebrew/bin/codex' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
@@ -180,6 +196,26 @@ describe('per-platform configuration', () => {
       expect(client.methodCalls('updateSettings')).toEqual([[{ codexCliPath: '/opt/homebrew/bin/codex' }]])
     );
     expect(await screen.findByText('已保存 CLI 路径：/opt/homebrew/bin/codex')).toBeInTheDocument();
+  });
+
+  it('reads a stored CLI path back into the field, and cannot clear it by accident', async () => {
+    // Opening this pane straight onto Codex (the nav, or a card's gear) mounts the
+    // form while the first settings read is still in flight. Seeded once from
+    // `props`, the field was born empty and stayed empty: the stored path was
+    // invisible, the row beneath it invited 留空保存可清除路径, and one press of 保存
+    // erased a value the reader never touched.
+    const client = clientWith({ codexCliPath: '/opt/homebrew/bin/codex' });
+    renderSettings({ client, section: 'codex' });
+    await screen.findByTestId('settings-codex');
+
+    const path = screen.getByLabelText('可执行文件路径') as HTMLInputElement;
+    await waitFor(() => expect(path).toHaveValue('/opt/homebrew/bin/codex'));
+
+    // Nothing has been chosen, so there is nothing to write.
+    const save = screen.getByRole('button', { name: '保存' });
+    expect(save).toBeDisabled();
+    fireEvent.click(save);
+    expect(client.methodCalls('updateSettings')).toEqual([]);
   });
 
   it('persists the GLM region without touching credentials', async () => {
@@ -201,7 +237,7 @@ describe('per-platform configuration', () => {
     });
     renderSettings({ client, section: 'deepseek' });
 
-    const input = (await screen.findByLabelText('DeepSeek API Key')) as HTMLInputElement;
+    const input = (await screen.findByLabelText('DeepSeek 密钥')) as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'sk-live-7788' } });
     fireEvent.click(screen.getByRole('button', { name: '验证并保存' }));
 
@@ -217,15 +253,43 @@ describe('per-platform configuration', () => {
     expect(client.methodCalls('refresh')).toEqual([]);
   });
 
-  it('deletes a platform credential from its own form', async () => {
+  it('deletes a platform credential from its own form, behind a confirmation', async () => {
     const client = clientWith();
     renderSettings({ client, section: 'deepseek' });
     await screen.findByTestId('settings-deepseek');
 
-    fireEvent.click(screen.getByRole('button', { name: '删除 DeepSeek API Key' }));
+    // The first press opens the confirmation and writes nothing: what is deleted is
+    // a secret the reader has to fetch from the provider again, and there is no undo.
+    fireEvent.click(screen.getByRole('button', { name: '删除 DeepSeek 密钥' }));
+    expect(client.methodCalls('deleteCredential')).toEqual([]);
+    const prompt = await screen.findByText(/删除后需重新向平台获取密钥/);
+    expect(prompt).toBeInTheDocument();
+
+    // Backing out leaves the credential alone and puts focus back on the link.
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(client.methodCalls('deleteCredential')).toEqual([]);
+    const link = screen.getByRole('button', { name: '删除 DeepSeek 密钥' });
+    expect(document.activeElement).toBe(link);
+
+    fireEvent.click(link);
+    fireEvent.click(await screen.findByRole('button', { name: '确认删除' }));
     await waitFor(() => expect(client.methodCalls('deleteCredential')).toEqual([['deepseek']]));
     expect(await screen.findByText(/已删除该平台账号凭据/)).toBeInTheDocument();
     expect(client.methodCalls('refresh')).toEqual([]);
+  });
+
+  it('cancels the delete confirmation with Escape', async () => {
+    const client = clientWith();
+    renderSettings({ client, section: 'deepseek' });
+    await screen.findByTestId('settings-deepseek');
+
+    fireEvent.click(screen.getByRole('button', { name: '删除 DeepSeek 密钥' }));
+    const confirmButton = await screen.findByRole('button', { name: '确认删除' });
+    // Focus starts on the safe action, so a stray Enter cancels rather than deletes.
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '取消' }));
+    fireEvent.keyDown(confirmButton, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('button', { name: '确认删除' })).toBeNull());
+    expect(client.methodCalls('deleteCredential')).toEqual([]);
   });
 
   it('keeps the previous DeepSeek key when a replacement fails to validate', async () => {
@@ -235,7 +299,7 @@ describe('per-platform configuration', () => {
     });
     renderSettings({ client, section: 'deepseek' });
 
-    const input = (await screen.findByLabelText('DeepSeek API Key')) as HTMLInputElement;
+    const input = (await screen.findByLabelText('DeepSeek 密钥')) as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'sk-wrong' } });
     fireEvent.click(screen.getByRole('button', { name: '验证并替换' }));
 
@@ -251,7 +315,7 @@ describe('per-platform configuration', () => {
     });
     renderSettings({ client, section: 'deepseek' });
 
-    const input = (await screen.findByLabelText('DeepSeek API Key')) as HTMLInputElement;
+    const input = (await screen.findByLabelText('DeepSeek 密钥')) as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'sk-wrong' } });
     fireEvent.click(screen.getByRole('button', { name: '验证并替换' }));
     await screen.findByRole('alert');
@@ -272,9 +336,10 @@ describe('per-platform configuration', () => {
     await screen.findByTestId('settings-glm');
 
     fireEvent.click(screen.getByRole('button', { name: '删除 GLM 钱包账号凭据' }));
+    fireEvent.click(await screen.findByRole('button', { name: '确认删除' }));
     await waitFor(() => expect(client.methodCalls('deleteCredential')).toEqual([['glm-wallet']]));
     // The plan connection is untouched: one credential, one deletion.
-    expect(screen.getByLabelText('GLM Coding Plan API Key')).toBeInTheDocument();
+    expect(screen.getByLabelText('GLM Coding Plan 密钥')).toBeInTheDocument();
   });
 
   it('keeps the wallet credential when the experimental connection is switched off', async () => {
@@ -313,7 +378,7 @@ describe('per-platform configuration', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Codex' }));
     await screen.findByTestId('settings-codex');
-    const path = screen.getByLabelText('Codex CLI 绝对路径') as HTMLInputElement;
+    const path = screen.getByLabelText('可执行文件路径') as HTMLInputElement;
     fireEvent.change(path, { target: { value: '/opt/homebrew/bin/codex' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
@@ -595,10 +660,19 @@ describe('platform settings ordering', () => {
     expect(positions.some((write) => write.order.join(',') === 'codex,deepseek,glm')).toBe(true);
   });
 
-  it('reorders with the keyboard from the same handle', async () => {
+  it('reorders by pointer only, and does not advertise otherwise', async () => {
+    // The arrow-key path was removed on purpose. This pins the decision rather than
+    // the mechanics: the handle answers to no key, and no tooltip or line under the
+    // list claims otherwise. (A pointer-only reorder is a deliberate trade — see the
+    // `polish-settings-window` change's spec delta for what it costs.)
     const onReorder = renderOrdering();
-    fireEvent.keyDown(screen.getByRole('button', { name: '拖动排序 GLM' }), { key: 'ArrowDown' });
-    await waitFor(() => expect(onReorder).toHaveBeenCalledWith(['codex', 'deepseek', 'glm']));
+    const handle = screen.getByRole('button', { name: '拖动排序 GLM' });
+    fireEvent.keyDown(handle, { key: 'ArrowDown' });
+    fireEvent.keyDown(handle, { key: 'ArrowUp' });
+    fireEvent.keyDown(handle, { key: ' ' });
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(handle.getAttribute('title')).not.toMatch(/方向键|↑|↓/);
+    expect(screen.queryByText(/↑↓/)).toBeNull();
   });
 });
 
@@ -619,8 +693,11 @@ describe('DeepSeek experimental web usage connection', () => {
     const view = await screen.findByTestId('settings-deepseek');
     const webBlock = within(view).getByRole('heading', { name: '网页用量连接' }).closest('section')!;
 
+    // Two different facts, two different sentences: the connection has no data
+    // (尚未连接) and this field holds no secret (未保存凭据). They used to be
+    // 尚未连接 / 尚未配置 one row apart, which read as the same fact stated twice.
     expect(within(webBlock).getByText('尚未连接')).toBeInTheDocument();
-    expect(within(webBlock).getByText('尚未配置')).toBeInTheDocument();
+    expect(within(webBlock).getByText('未保存凭据')).toBeInTheDocument();
     expect(within(webBlock).getByLabelText('DeepSeek 网页登录 Token')).toHaveAttribute(
       'placeholder',
       '粘贴 Authorization Token'
@@ -734,3 +811,206 @@ describe('DeepSeek experimental web usage connection', () => {
   });
 });
 
+// The status vocabulary is a system, not a per-pane decision
+// (refine-peak-window-editor's review): one rendering per fact, one recovery
+// sentence per failure, and a control that shows its own write.
+describe('how a connection reports itself', () => {
+  /** A client whose connections failed in the given ways. */
+  function failingClient(states: Array<[ProviderId, CollectorError['kind']]>, settings: Partial<PanelSettings> = {}) {
+    return createFakeUsageClient({
+      snapshot: snapshotOf(states.map(([provider, kind]) => failedStateOf(provider, { kind, message: kind, at: '2026-09-10T08:00:00.000Z' }))),
+      settings
+    });
+  }
+
+  it('states a connection once, in the same place in every block', async () => {
+    // GLM used to say it twice in one pane: a pill beside the Coding Plan title and
+    // a dotted row in the wallet block. Both are rows now, and the row has a fixed
+    // position: first in the body for a connection that is always on, immediately
+    // after the switch for one the switch governs (a status above its own switch
+    // reads as "this switch does not work").
+    const client = clientWith({ glmWalletEnabled: true, deepseekWebEnabled: true });
+    renderSettings({ client, section: 'glm' });
+    const glm = await screen.findByTestId('settings-glm');
+    const codingPlan = [...glm.querySelectorAll('section.config-block')].find(
+      (block) => block.querySelector('h3')?.textContent === 'Coding Plan'
+    )!;
+    // First body row, right under the title.
+    expect(codingPlan.querySelector('.block-head')!.nextElementSibling!.className).toContain('status-row');
+    // Never tucked back into the title row.
+    expect(codingPlan.querySelector('.block-head .status-row')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'DeepSeek' }));
+    const deepseek = await screen.findByTestId('settings-deepseek');
+    const web = [...deepseek.querySelectorAll('section.config-block')].find(
+      (block) => block.querySelector('h3')?.textContent === '网页用量连接'
+    )!;
+    const title = web.querySelector('.block-head')!;
+    expect(title.nextElementSibling!.tagName).toBe('DIV'); // the switch row
+    expect(title.nextElementSibling!.nextElementSibling!.className).toContain('status-row');
+
+    // No second rendering of the same fact anywhere in the window.
+    expect(document.querySelector('.status-chip')).toBeNull();
+  });
+
+  it('shows the busiest case of all — a first run — with a way out', async () => {
+    // missing_config is what an unconfigured connection reports, so it is the first
+    // status most readers ever see. It had no advice, on the theory that the form
+    // below is self-evidently the answer.
+    const client = failingClient([['glm', 'missing_config']]);
+    renderSettings({ client, section: 'glm' });
+    expect(await screen.findByText('需要配置')).toBeInTheDocument();
+    expect(screen.getByText('在下方填入凭据后即可开始采集。')).toBeInTheDocument();
+  });
+
+  it('gives every failure a way out, in the shared vocabulary', async () => {
+    const client = failingClient([
+      ['glm', 'authentication'],
+      ['deepseek', 'rate_limit']
+    ]);
+    renderSettings({ client, section: 'glm' });
+    // The connection's own wording wins where it has something more useful to say.
+    expect(await screen.findByText('请在 GLM 平台重新生成密钥后替换。')).toBeInTheDocument();
+    expect(screen.getByText('认证失败')).toBeInTheDocument();
+  });
+
+  it('falls back to the same sentence for a failure the connection has no wording for', async () => {
+    const client = failingClient([['glm', 'network']]);
+    renderSettings({ client, section: 'glm' });
+    // A bare 网络异常 with nothing after it was the old behaviour; the point of the
+    // shared table is that a reader is never left without a next step.
+    expect(await screen.findByText('网络请求失败，检查网络或代理后重试。')).toBeInTheDocument();
+  });
+
+  it('shows each switch its own write', async () => {
+    const client = clientWith({ glmWalletEnabled: true, deepseekWebEnabled: true });
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const write = client.updateSettings.bind(client);
+    vi.spyOn(client, 'updateSettings').mockImplementation(async (patch) => {
+      await held;
+      return write(patch);
+    });
+    renderSettings({ client, section: 'glm' });
+    await screen.findByTestId('settings-glm');
+
+    const wallet = screen.getByRole('checkbox', { name: '启用实验钱包连接' });
+    expect(wallet).not.toBeDisabled();
+    fireEvent.click(wallet);
+    // The track is disabled for the length of its own write: previously it sat
+    // unchanged until the settings echo landed, and a second click sent a second
+    // write.
+    await waitFor(() => expect(wallet).toBeDisabled());
+    release!();
+    await waitFor(() => expect(wallet).not.toBeDisabled());
+  });
+
+  it('never leaves an appearance click silently ignored', async () => {
+    const client = clientWith();
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const write = client.updateSettings.bind(client);
+    vi.spyOn(client, 'updateSettings').mockImplementation(async (patch) => {
+      await held;
+      return write(patch);
+    });
+    renderSettings({ client, section: 'appearance' });
+    const group = await screen.findByRole('group', { name: '主题' });
+    fireEvent.click(within(group).getByRole('button', { name: '浅色' }));
+
+    // Both groups are unavailable while one write is in flight, and *visibly* so:
+    // a disabled sliding group deliberately keeps its option text at full opacity
+    // (the pill must not dim), so the track is what carries "busy". Asserting only
+    // `toBeDisabled()` would pass while the group looked exactly like an enabled one
+    // — which is how a click could still be dropped with nothing on screen saying so.
+    const quota = await screen.findByRole('group', { name: '额度数值' });
+    await waitFor(() => expect(within(quota).getByRole('button', { name: '已用' })).toBeDisabled());
+    expect(quota.getAttribute('aria-disabled')).toBeNull();
+    expect(quota.className).toContain('segmented');
+    // The style rule that makes it visible is pinned in the motion guard; here we
+    // assert the element the rule targets exists.
+    expect(quota.matches('.segmented:has(.segmented-option:disabled)')).toBe(true);
+    release!();
+    await waitFor(() => expect(within(quota).getByRole('button', { name: '已用' })).not.toBeDisabled());
+  });
+
+  it('names a pane once', async () => {
+    renderSettings({ section: 'appearance' });
+    const pane = await screen.findByTestId('settings-pane-appearance');
+    // 外观 used to appear three times in ninety pixels: the nav row, the pane title
+    // and a card heading repeating the title verbatim.
+    expect(within(pane).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['外观']);
+  });
+});
+
+describe('the platform manager says what each row does', () => {
+  it('names the switch and marks a hidden platform in words', async () => {
+    const client = clientWith({ platformVisibility: { glm: false } });
+    renderSettings({ client, section: 'platforms' });
+    const view = await screen.findByTestId('platform-settings');
+
+    // The switch's meaning was previously only in an aria-label: the row's text
+    // named the platform and its connection, never what the switch does.
+    expect(view.querySelectorAll('.manage-switch-label')).toHaveLength(3);
+    expect(within(view).getAllByText('显示')).toHaveLength(3);
+
+    // A hidden platform used to look exactly like a visible one apart from the
+    // switch's position. Now the row says so, and its name drops a level with it.
+    const hidden = within(view).getByTestId('manage-row-glm');
+    expect(hidden).toHaveAttribute('data-hidden', 'true');
+    expect(within(hidden).getByText('已隐藏')).toBeInTheDocument();
+    expect(within(view).getByTestId('manage-row-codex')).not.toHaveAttribute('data-hidden');
+  });
+
+});
+
+describe('the section column is a tablist, wired both ways', () => {
+  it('points each tab at its panel and each panel back at its tab', async () => {
+    renderSettings({ section: 'glm' });
+    const tab = await screen.findByRole('tab', { name: 'GLM' });
+    const panel = await screen.findByTestId('settings-pane-glm');
+
+    expect(tab).toHaveAttribute('aria-controls', panel.id);
+    expect(panel).toHaveAttribute('aria-labelledby', tab.id);
+    // The panel is the tab's labelled region, so focus can land on it directly.
+    expect(panel).toHaveAttribute('role', 'tabpanel');
+  });
+});
+
+describe('the delete confirmation does not outlive its subject', () => {
+  it('closes once the deletion has happened, leaving the result in its place', async () => {
+    const client = clientWith();
+    renderSettings({ client, section: 'deepseek' });
+    await screen.findByTestId('settings-deepseek');
+
+    fireEvent.click(screen.getByRole('button', { name: '删除 DeepSeek 密钥' }));
+    fireEvent.click(await screen.findByRole('button', { name: '确认删除' }));
+
+    // The row becomes the outcome: leaving the prompt open would keep asking
+    // "确定删除？" over a credential that is already gone.
+    await waitFor(() => expect(screen.queryByRole('button', { name: '确认删除' })).toBeNull());
+    expect(screen.queryByText(/删除后需重新向平台获取密钥/)).toBeNull();
+    expect(await screen.findByText(/已删除该平台账号凭据/)).toBeInTheDocument();
+  });
+
+  it('closes when the reader chooses to replace instead', async () => {
+    const client = clientWith();
+    renderSettings({ client, section: 'deepseek' });
+    await screen.findByTestId('settings-deepseek');
+
+    fireEvent.click(screen.getByRole('button', { name: '删除 DeepSeek 密钥' }));
+    await screen.findByRole('button', { name: '确认删除' });
+
+    // A confirmation is about the old secret; a replacement makes it meaningless.
+    const input = screen.getByLabelText('DeepSeek 密钥');
+    fireEvent.change(input, { target: { value: 'sk-new' } });
+    fireEvent.click(screen.getByRole('button', { name: '验证并替换' }));
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: '确认删除' })).toBeNull());
+    expect(client.methodCalls('deleteCredential')).toEqual([]);
+  });
+});

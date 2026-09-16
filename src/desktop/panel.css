@@ -73,7 +73,6 @@
   --control-hover-text: #d8e6f6;
   --active-border: #39695f;
   --active-bg: #17423c;
-  --healthy-border: #39695f;
   --card-border: #2b3a4c;
   --card-shadow: rgba(0, 0, 0, 0);
   --card-hover-shadow: rgba(0, 0, 0, 0.34);
@@ -96,6 +95,20 @@
   --input-border: #2d3d50;
   --input-bg: #080d14;
   --placeholder: #55657a;
+  /* A control that cannot be used right now. This is a surface, not a fade: the
+     disabled state used to be `opacity: 0.5` on the whole control, which on the
+     light theme left a white label on a half-opacity blue (2.5:1) — a primary
+     action whose word you cannot read. The fill carries "unavailable" and the
+     label stays legible, because a disabled control still has to say what it
+     would do if it could be pressed.
+     The distinction that matters: a *lasting* unavailable state (an empty
+     field's submit, a schedule with nothing to save) wears these tokens, while a
+     pure re-entrancy block for the length of one write (a segmented group
+     mid-save) keeps its old dimming — that one must not read as "this control is
+     off". */
+  --disabled-bg: rgba(255, 255, 255, 0.03);
+  --disabled-border: #2a3846;
+  --disabled-text: #7b8ca1;
   --overlay-bg: rgba(4, 7, 11, 0.86);
   --dialog-top: #131d2a;
   --dialog-bottom: #0c1219;
@@ -144,7 +157,10 @@
   --line-soft: rgba(60, 60, 67, 0.12);
   --text: #1c1c1e;
   --text-dim: #54545a;
-  --text-faint: #6e6e73;
+  /* `#6e6e73` measured 4.04:1 on the light page at 9.5–10.5px, under the 4.5:1
+     floor for body text. The dark palette's faint tone is already at 5.4:1, so
+     only the light one moves — one step darker, same relationship to `--text-dim`. */
+  --text-faint: #62626a;
   --action: #0066cc;
   --mint: #0b7f75;
   --lime: #438034;
@@ -160,7 +176,6 @@
   --control-hover-text: #1c1c1e;
   --active-border: #a8caeb;
   --active-bg: #e8f2fb;
-  --healthy-border: #9fcfc8;
   --card-border: #dcdce1;
   --card-shadow: rgba(28, 28, 30, 0);
   --card-hover-shadow: rgba(28, 28, 30, 0.16);
@@ -181,6 +196,12 @@
   --input-border: #cfcfd4;
   --input-bg: #ffffff;
   --placeholder: #77777c;
+  /* See the dark palette: a grey surface plus legible text, never a fade. Both
+     keep the label at 4.5:1 or better, so "why can't I press this" is answered by
+     reading the button rather than by guessing at a ghost. */
+  --disabled-bg: #f2f2f7;
+  --disabled-border: #dcdce1;
+  --disabled-text: #6e6e73;
   --overlay-bg: rgba(229, 229, 234, 0.9);
   --dialog-top: #ffffff;
   --dialog-bottom: #f7f7fa;
@@ -233,7 +254,14 @@ body {
      see-through for the rounded corners to look right. */
   background: transparent;
   color: var(--text);
-  font: 400 12.5px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+  /* Longhands rather than the `font` shorthand: a shorthand cannot take a
+     `var()` for one of its parts without the whole declaration becoming
+     invalid when that token changes, and this is the document base every
+     other size is relative to. */
+  font-weight: 400;
+  font-size: var(--text-md);
+  line-height: 1.45;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -270,27 +298,40 @@ button {
   cursor: pointer;
 }
 
+/* The focus ring is the outline and nothing else. A `border-radius` used to sit in
+   this rule, which made keyboard focus restyle the element it landed on: today it
+   is overridden by every control that sets its own radius later in the sheet, so
+   the only thing it can do is surprise the next element that does not. */
 :focus-visible {
   outline: 2px solid var(--action);
   outline-offset: 2px;
-  border-radius: 6px;
 }
 
 /* ------------------------------------------------------------------ shell */
 
 /*
- * Scrollbars are hidden, not disabled. `.panel-body` keeps `overflow-y: auto`, so
- * the wheel, the two-finger pan, keyboard scrolling and `scrollIntoView` all keep
- * working — only the bar's painting is suppressed, which is what a 350px panel
- * wants. The two spellings cover the two WebKit generations: `scrollbar-width`
- * for current WebKit (which then ignores the pseudo-element, harmlessly, since it
- * asks for the same result) and `::-webkit-scrollbar` for the older one.
+ * Scrollbars are hidden, not disabled, in the *panel*.
+ *
+ * `.panel-body` keeps `overflow-y: auto`, so the wheel, the two-finger pan,
+ * keyboard scrolling and `scrollIntoView` all keep working — only the bar's
+ * painting is suppressed, which is what a 350px menubar panel wants. The two
+ * spellings cover the two WebKit generations: `scrollbar-width` for current WebKit
+ * (which then ignores the pseudo-element, harmlessly, since it asks for the same
+ * result) and `::-webkit-scrollbar` for the older one.
+ *
+ * **The suppression is scoped to the panel document.** It used to be a bare `*`,
+ * and the settings window loads this same sheet — so a window whose panes really do
+ * overflow (GLM by ~240px, DeepSeek by ~100px) had no scrollbar, no scroll shadow
+ * and no other sign that anything continued below the fold. The settings window
+ * now gets the system's own overlay scrollbars, which is the affordance macOS
+ * users already read. `tests/panel-type-scale.test.ts`'s sibling guard
+ * `panel-width.test.ts` pins the scope.
  */
-* {
+:root:has(#panel-root) * {
   scrollbar-width: none;
 }
 
-::-webkit-scrollbar {
+:root:has(#panel-root) ::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
@@ -406,7 +447,7 @@ button {
 
 .panel-title {
   margin: 0;
-  font-size: 13.5px;
+  font-size: var(--text-lg);
   font-weight: 600;
   letter-spacing: 0.2px;
 }
@@ -560,26 +601,42 @@ button {
 }
 
 .link-button {
+  position: relative;
   border: 0;
   padding: 0;
   background: none;
   color: var(--action);
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   white-space: nowrap;
+  transition: color 150ms ease;
 }
 
-.link-button:hover {
+/* The hit area of a bare word is the word, which made this the smallest target in
+   the window (21×16) for the most destructive action in it. The pseudo-element
+   grows the clickable box to ~33×26 without touching layout: padding here would
+   push the status row taller and change the rhythm of a form that is mostly this
+   row. Its neighbours are a line of text and empty space, so the extra area takes
+   nothing away from another control. */
+.link-button::after {
+  content: "";
+  position: absolute;
+  inset: -5px -6px;
+}
+
+.link-button:hover:not(:disabled) {
   text-decoration: underline;
+}
+
+/* Disabled while a credential is being validated, and until now it looked exactly
+   like the enabled link: same colour, same `cursor: pointer`. */
+.link-button:disabled {
+  color: var(--disabled-text);
+  cursor: default;
 }
 
 /* --------------------------------------------------------- page transition */
 
 /* ---------------------------------------------------------------- overview */
-
-.overview {
-  display: grid;
-  gap: 9px;
-}
 
 .provider-card {
   border: 1px solid var(--card-border);
@@ -616,7 +673,7 @@ button {
   width: 22px;
   height: 22px;
   border-radius: 7px;
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.2px;
   background: var(--badge-bg);
@@ -642,7 +699,7 @@ button {
   align-items: center;
   height: 24px;
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--text-md);
   font-weight: 600;
   line-height: 1;
 }
@@ -654,7 +711,7 @@ button {
   padding: 0 6px;
   border: 1px solid var(--detail-border);
   border-radius: 999px;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   color: var(--text-dim);
   line-height: 1;
   white-space: nowrap;
@@ -720,13 +777,13 @@ button {
 }
 
 .quota-label {
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
 .quota-value {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -743,7 +800,7 @@ button {
   justify-self: start;
   margin-top: 5px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--text);
   font-variant-numeric: tabular-nums;
   text-align: left;
@@ -828,7 +885,7 @@ button {
 
 .wallet-spend-value {
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: var(--text-xl);
   font-weight: 600;
   letter-spacing: -0.3px;
   font-variant-numeric: tabular-nums;
@@ -861,33 +918,33 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
 .metric-value {
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: var(--text-md);
   font-variant-numeric: tabular-nums;
 }
 
 .metric-row-strong .metric-value {
-  font-size: 19px;
+  font-size: var(--text-display);
   font-weight: 600;
   letter-spacing: -0.5px;
 }
 
 .metric-note {
   margin: 0;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   color: var(--text-faint);
 }
 
 .tag {
   padding: 1px 5px;
   border-radius: 999px;
-  font-size: 8.5px;
+  font-size: var(--text-2xs);
   white-space: nowrap;
   /* 估算 / 已过期 swap the badge between tones on the same element. */
   transition:
@@ -913,7 +970,7 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
 }
 
 .status-dot {
@@ -979,38 +1036,6 @@ button {
 
 .status-actions {
   margin-left: auto;
-}
-
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 9px;
-  line-height: 1;
-  border: 1px solid var(--status-border);
-  color: var(--text-dim);
-  /* Source tags (平台数据 / 估算 / 已过期) change tone in place. */
-  transition:
-    border-color 150ms ease,
-    color 150ms ease;
-}
-
-.status-chip-healthy {
-  border-color: var(--healthy-border);
-  color: var(--mint);
-}
-
-.status-chip-warning {
-  border-color: var(--warning-border);
-  color: var(--warning);
-}
-
-.status-chip-danger {
-  border-color: var(--danger-border);
-  color: var(--danger);
 }
 
 /* ------------------------------------------------------------- peak period */
@@ -1511,7 +1536,7 @@ button {
 }
 
 .frost-hint-label {
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
@@ -1520,7 +1545,7 @@ button {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   color: var(--text-faint);
 }
 
@@ -1580,7 +1605,7 @@ button {
 }
 
 .connection-details-title {
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 700;
   margin-bottom: 6px;
 }
@@ -1601,7 +1626,7 @@ button {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 .connection-detail-head span {
@@ -1612,7 +1637,7 @@ button {
 .connection-detail p {
   margin: 4px 0 0;
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--text-xs);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -1651,7 +1676,7 @@ button {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 8px 20px var(--toast-shadow);
-  font-size: 11px;
+  font-size: var(--text-sm);
   line-height: 1.35;
   /* Neutral: the message names what happened, and the tone is left to the dwell
      time and the ARIA role rather than to a colour. */
@@ -1699,13 +1724,13 @@ button {
   padding: 14px 11px;
   border: 1px dashed var(--card-border);
   border-radius: var(--radius);
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
 }
 
 .state-block strong {
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .state-block p {
@@ -1735,28 +1760,28 @@ button {
 }
 
 .state-hint {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   color: var(--text-faint);
 }
 
 /* ---------------------------------------------------------------- controls */
 
 .ghost-button,
-.primary-button {
+.primary-button,
+.danger-button {
   border-radius: 8px;
   padding: 4px 9px;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   border: 1px solid var(--control-border);
   background: var(--control-bg);
   color: var(--button-text);
   /* Button labels stay on one line; a tight row shrinks elsewhere. */
   white-space: nowrap;
-  /* Hover, the primary tone and the disabled fade all land on this element. */
+  /* Hover, the primary/danger tone and the disabled surface all land here. */
   transition:
     border-color 150ms ease,
     background-color 150ms ease,
-    color 150ms ease,
-    opacity 150ms ease;
+    color 150ms ease;
 }
 
 .ghost-button:hover:not(:disabled) {
@@ -1769,9 +1794,31 @@ button {
   color: var(--primary-text);
 }
 
+/* The one destructive button in the window: the confirmation step for deleting a
+   stored credential. Danger wears its own tone as a *surface*, like the primary
+   button wears the action tone — a link that happens to be red would read as
+   navigation. */
+.danger-button {
+  border-color: var(--danger-border);
+  background: var(--soft-button-bg);
+  color: var(--danger);
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--badge-bg);
+}
+
+/* A disabled control is a control with a grey surface, not a faded one: at
+   `opacity: 0.5` the light theme's white-on-blue submit landed at 2.5:1, so the
+   button said nothing about what it would do. These three tokens keep the label
+   readable (≥4.5:1 in both palettes) and let the fill carry the state. */
 .primary-button:disabled,
-.ghost-button:disabled {
-  opacity: 0.5;
+.ghost-button:disabled,
+.danger-button:disabled {
+  border-color: var(--disabled-border);
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
   cursor: default;
 }
 
@@ -1784,7 +1831,34 @@ button {
   background: var(--input-bg);
   color: var(--text);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--text-sm);
+  /* Declared on the resting rule rather than on the failure state: a transition
+     is read from the style being *left*, so on the state class alone the border
+     would travel in and cut back out. `color` belongs to the same switch — the
+     disabled state changes the label's tone as well as the field's surface, and
+     leaving it out made a field snap its text while its border faded. */
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+/* A field whose content cannot be used. Only the timezone wears it: a typo in a
+   zone name is the one mistake in this form that reading the field back cannot
+   reveal. */
+.text-input.is-invalid {
+  border-color: var(--danger-border);
+}
+
+/* A locked field has to look locked. The author rule above sets `color` for every
+   state, which defeats the user agent's own grey — so a field disabled for the
+   length of a write looked exactly like an editable one and swallowed typing. */
+.text-input:disabled,
+.select-input:disabled {
+  border-color: var(--disabled-border);
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
+  cursor: default;
 }
 
 .text-input::placeholder {
@@ -1818,6 +1892,10 @@ button {
   border: 1px solid var(--control-border);
   border-radius: 9px;
   background: var(--control-bg);
+  /* The track takes the disabled surface while the group is busy (see below). */
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
 }
 
 .segmented-slider {
@@ -1844,7 +1922,7 @@ button {
   border-radius: 7px;
   background: transparent;
   color: var(--text-dim);
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   white-space: nowrap;
   cursor: pointer;
   /* Weekday choices still light their own fill and ring; single-choice text
@@ -1882,6 +1960,16 @@ button {
   opacity: 1;
 }
 
+/* So the group says "busy" with its track instead. Without this a disabled sliding
+   group was pixel-identical to an enabled one — the appearance controls could not be
+   pressed during their own save and nothing on screen said so, which is the silent
+   no-op the segmented options were disabled to avoid. The track is the right carrier:
+   it is the part of the control that is not the label. */
+.segmented:has(.segmented-option:disabled) {
+  border-color: var(--disabled-border);
+  background: var(--disabled-bg);
+}
+
 /* ----------------------------------------------------------------- overlays */
 
 /* A dialog covers everything, the floating message included. Named rather than
@@ -1916,13 +2004,13 @@ button {
 }
 
 .dialog-title {
-  font-size: 12.5px;
+  font-size: var(--text-md);
   font-weight: 600;
 }
 
 .dialog-note {
   margin: 0;
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
@@ -1980,6 +2068,7 @@ button {
 
 /* The grip is the drag source; clicking it does nothing else. */
 .drag-handle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1991,6 +2080,16 @@ button {
   /* Pointer-driven drag: never let the webview turn the gesture into a scroll. */
   touch-action: none;
   transition: color 150ms ease;
+}
+
+/* 18px wide is a narrow thing to aim at for a gesture that has no keyboard
+   equivalent most readers know about. The grab area is widened to 26px without
+   moving the grip or the row: the pseudo-element is part of the handle, so a
+   pointerdown anywhere inside it starts the same drag. */
+.drag-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0 -4px;
 }
 
 .drag-handle svg {
@@ -2021,13 +2120,73 @@ button {
 }
 
 .manage-text strong {
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
 .manage-desc {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   color: var(--text-faint);
+}
+
+/* A hidden platform says so in words as well as in tone: the row's whole subject is
+   whether it shows up on the overview, and "hidden" was previously readable only
+   from the switch's position. The name drops a level too, so a list of three reads
+   as a list of three at a glance. */
+.manage-text strong {
+  transition: color 150ms ease;
+}
+
+.manage-row[data-hidden] .manage-text strong {
+  color: var(--text-dim);
+}
+
+/* Revealed, not mounted: the marker keeps its box so the name cannot jump, and
+   `visibility` steps at the end of the fade so a hidden row's marker leaves the
+   accessibility tree with it. */
+.manage-hidden-tag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-3px);
+  transition:
+    opacity 150ms ease,
+    transform 160ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    visibility 0s linear 150ms;
+}
+
+.manage-row[data-hidden] .manage-hidden-tag {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 150ms ease,
+    transform 160ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    visibility 0s linear 0s;
+}
+
+/* The switch's visible name. The input keeps the full accessible name ("显示
+   Codex"); this is the same word for a reader who never sees an aria-label — the
+   control otherwise had no on-screen label at all, and the row's text names the
+   platform and its *connection*, not what the switch does. */
+.manage-switch-label {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: var(--text-2xs);
+}
+
+/* The label is what the auto margin pushes right; the track follows it directly.
+   Two auto margins on one line would split the free space and strand the word in
+   the middle of the row. */
+.manage-row .switch {
+  margin-left: 6px;
 }
 
 .switch {
@@ -2047,6 +2206,15 @@ button {
     background-color 150ms ease,
     border-color 150ms ease,
     opacity 150ms ease;
+}
+
+/* The track is 32×18 — a small switch, and the whole row around it is dead space
+   that a reader will try to click. The pseudo-element makes that space part of the
+   control (32×26) without changing how the switch looks or where it sits. */
+.switch::before {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
 }
 
 .switch::after {
@@ -2113,7 +2281,7 @@ button {
 
 .config-block h3 {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
@@ -2123,26 +2291,32 @@ button {
 }
 
 .field-label {
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
 .field-hint {
   margin: 0;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   color: var(--text-faint);
 }
 
 .credential-status {
   display: flex;
   align-items: center;
+  /* The confirmation's two buttons are taller than a line of text, so opening it
+     grows this row. `min-height` is what travels: reserving the taller box at rest
+     would add ~10px of dead space under every credential field (four of them on the
+     Codex/DeepSeek panes), and letting it jump moves every block below the row. */
+  min-height: 16px;
+  transition: min-height 150ms ease;
   /* A failure reason can be a full sentence. Without wrapping it competed with
      the stored state for the same row and squeezed it to one character per line
      ("尚未配置" stacked vertically); with it, the reason takes its own line below
      and the state keeps the row. */
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
@@ -2156,6 +2330,48 @@ button {
 
 .credential-status .link-button {
   margin-left: auto;
+}
+
+/* The deletion confirmation lives in the status row it replaces, rather than in a
+   dialog: the house rule is that an ordinary settings page is not a modal, and the
+   row is the one place that already names what is being deleted.
+ *
+ * The prompt states the consequence instead of asking "are you sure" — the cost of
+ * this action is that the secret has to be obtained from the provider again, and
+ * that is the sentence a reader needs before deciding. Both buttons mount with the
+ * prompt, so their arrival is an animation; the row keeps its height, so nothing
+ * jumps. */
+/* The row grows with the confirmation; both ends are written here so the height
+   has somewhere to travel between. */
+.credential-status:has(.credential-confirm) {
+  min-height: 26px;
+}
+
+.credential-confirm-prompt {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  animation: credential-confirm-in 150ms ease-out;
+}
+
+.credential-confirm {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  animation: credential-confirm-in 150ms ease-out;
+}
+
+@keyframes credential-confirm-in {
+  from {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Feedback claims its own row, so a sentence-length reason wraps at the panel's
@@ -2210,11 +2426,11 @@ button {
 }
 
 .setting-label {
-  font-size: 10.5px;
+  font-size: var(--text-xs);
 }
 
 .setting-desc {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   color: var(--text-faint);
 }
 
@@ -2410,7 +2626,7 @@ button {
   width: 100%;
   color: var(--text);
   font-family: var(--mono);
-  font-size: 19px;
+  font-size: var(--text-display);
   font-weight: 600;
   letter-spacing: -0.5px;
   line-height: 22px;
@@ -2420,7 +2636,7 @@ button {
 
 .quota-ring-replay .replay-number-percent {
   color: var(--text-dim);
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 .quota-item:nth-child(2) .quota-shape-fill {
@@ -2435,18 +2651,18 @@ button {
 
 .quota-item-ringtext .quota-value {
   font-family: var(--mono);
-  font-size: 19px;
+  font-size: var(--text-display);
   font-weight: 600;
   letter-spacing: -0.5px;
 }
 
 .quota-item-ringtext .pct {
-  font-size: 10px;
+  font-size: var(--text-xs);
   fill: var(--text-dim);
 }
 
 .quota-item-ringtext .quota-label {
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   fill: var(--text-faint);
 }
 

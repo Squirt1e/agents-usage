@@ -408,32 +408,25 @@ export function PlatformSettings(props: PlatformSettingsProps) {
     state.frame = requestAnimationFrame(runFrame);
   };
 
-  const onHandleKeyDown = (event: React.KeyboardEvent, provider: ProviderId) => {
-    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-    event.preventDefault();
-    const index = order.indexOf(provider);
-    const target = order[index + (event.key === 'ArrowUp' ? -1 : 1)];
-    if (target === undefined) return;
-    applyOrder(reorderPlatforms(order, provider, target), provider, target);
-  };
-
   return (
     <section className="config-block" data-testid="platform-settings">
-      <header className="block-head">
-        <h3>平台管理</h3>
-      </header>
-      <p className="field-hint">
-        拖动排序；隐藏仍保留配置并继续采集。
-      </p>
+      {/* No heading and no second explanation line here. The pane already titles
+          this section 平台管理 and explains it, and the block used to repeat both:
+          an h3 with the same three words as the pane title, plus a hint whose
+          sentence ("隐藏仍保留配置并继续采集") restated the note's. What the hint
+          did add — that the grip is the way to reorder — moved up into the note,
+          where it is read once instead of three times in 90 pixels. */}
       <div className={`manage-list${dragging ? ' is-sorting' : ''}`}>
         {order.map((provider) => {
           const name = providerDisplayName(provider);
           const presentation = statusFor(props.states[provider]);
+          const visible = platformVisible(props.settings, provider);
           return (
             <div
               className={`manage-row${dragging === provider ? ' is-dragging' : ''}`}
               key={provider}
               data-provider={provider}
+              data-hidden={visible ? undefined : 'true'}
               data-testid={`manage-row-${provider}`}
               ref={(node) => {
                 if (node) rowRefs.current.set(provider, node);
@@ -445,12 +438,11 @@ export function PlatformSettings(props: PlatformSettingsProps) {
                 role="button"
                 tabIndex={0}
                 aria-label={`拖动排序 ${name}`}
-                title="拖动排序（也可用上下方向键）"
+                title="拖动排序"
                 onPointerDown={(event) => onHandlePointerDown(event, provider)}
                 onPointerMove={onHandlePointerMove}
                 onPointerUp={(event) => endDrag(event.pointerId)}
                 onPointerCancel={(event) => endDrag(event.pointerId)}
-                onKeyDown={(event) => onHandleKeyDown(event, provider)}
               >
                 <GripIcon />
               </span>
@@ -463,11 +455,28 @@ export function PlatformSettings(props: PlatformSettingsProps) {
                   {presentation.label}
                 </span>
               </span>
+              {/* The row's whole subject is "does this show up", and a hidden row
+                  used to look exactly like a visible one — same weight, same status
+                  word, only the switch differed. Two signals now, because one of
+                  them is a colour: the word says it, the tone repeats it.
+                  The marker is always mounted and merely revealed, so its arrival
+                  travels (and reserves its width) instead of popping in and shoving
+                  the name sideways for 150ms. `aria-hidden` follows the same state,
+                  so a screen reader hears it only for a row it is true of. */}
+              <span className="manage-hidden-tag" aria-hidden={visible ? 'true' : undefined}>
+                已隐藏
+              </span>
+              {/* The visible half of the switch's name. The input keeps the full
+                  accessible name ("显示 Codex"); this is the same word for the
+                  reader who never sees an aria-label. */}
+              <span className="manage-switch-label" aria-hidden="true">
+                显示
+              </span>
               <input
                 type="checkbox"
                 className="switch"
                 aria-label={`显示 ${name}`}
-                checked={platformVisible(props.settings, provider)}
+                checked={visible}
                 disabled={props.toggling?.has(provider) ?? false}
                 onChange={(event) => props.onToggle(provider, event.target.checked)}
               />

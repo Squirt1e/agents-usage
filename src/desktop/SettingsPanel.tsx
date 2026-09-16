@@ -3,7 +3,7 @@
  *
  * ## Why this is one component and not two screens
  *
- * The window is a fixed 560x380 with a system title bar, so the split is fixed too:
+ * The window is a fixed 600x400 with a system title bar, so the split is fixed too:
  * the nav never scrolls away and the pane is the only scrolling area. Both host
  * paths render *this* component — the Tauri host loads it as its own document
  * (`settings.html`), and a plain browser mounts it as a sheet over the panel
@@ -33,7 +33,7 @@
  * disabled by its own write".
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import type { ProviderId } from '../shared/contracts';
 import {
   type CredentialStatus,
@@ -76,12 +76,21 @@ export const SECTION_TITLES: Record<SettingsSection, string> = {
   deepseek: 'DeepSeek'
 };
 
+/**
+ * What each section is for, in one or two lines.
+ *
+ * These carry the whole explanation for a pane now that the cards no longer repeat
+ * it as headings, so they have to name the section's *full* contents — including
+ * the peak reminder that shares every platform pane. A note that described only
+ * the connection half ("这里只调整采集方式") was wrong the moment the peak form
+ * moved in beside it.
+ */
 const SECTION_NOTES: Record<SettingsSection, string> = {
-  platforms: '选择总览展示哪些平台、以什么顺序展示。隐藏只影响显示，账号配置与采集都保留。',
+  platforms: '选择总览展示哪些平台、以什么顺序展示（拖住左侧把手排序）。隐藏只影响显示，账号配置与采集都保留。',
   appearance: '主题与额度数值的显示方式，两个窗口共用同一份偏好。',
-  codex: 'Codex 使用本机已有登录，这里只调整采集方式。',
-  glm: 'Coding Plan 与实验钱包连接各自独立，分别保存凭据。',
-  deepseek: '钱包与网页用量连接各自独立，网页用量需要单独粘贴 Token。'
+  codex: 'Codex 使用本机已有登录，这里调整可执行文件路径与高峰时段提醒。',
+  glm: 'Coding Plan 与钱包连接各自独立保存凭据，共用下面的高峰时段提醒。',
+  deepseek: '钱包与网页用量连接各自独立（网页用量需粘贴 Token），共用下面的高峰时段提醒。'
 };
 
 export interface SettingsPanelProps {
@@ -125,20 +134,18 @@ export function SettingsPanel(props: SettingsPanelProps) {
     return entries;
   }, [props.snapshot]);
 
-  /** The pane's own busy bookkeeping for a platform section's writes: a count, so
-   * two overlapping writes (a switch and a region) do not clear each other early. */
-  const [pending, setPending] = useState(0);
-  const updateSettings = useCallback(
-    async (patch: PanelSettingsPatch) => {
-      setPending((current) => current + 1);
-      try {
-        await props.onUpdateSettings(patch);
-      } finally {
-        setPending((current) => current - 1);
-      }
-    },
-    [props]
-  );
+  /**
+   * Writes go straight through.
+   *
+   * This used to wrap every platform write in a `pending` counter and hand the
+   * result down as a `busy` flag — but the only consumer was `AppSettings`, which
+   * is never mounted at the same time as the platform sections, so the flag was
+   * permanently false and the serialisation it advertised never happened. Each
+   * control now owns the one write it is waiting on (a switch dims itself, a
+   * credential form disables itself), which is the rule the specs actually pin:
+   * a switch is only disabled by its own write.
+   */
+  const updateSettings = props.onUpdateSettings;
 
   /**
    * Arrow keys move between sections, as on the platform manager's rows: a column
@@ -164,23 +171,31 @@ export function SettingsPanel(props: SettingsPanelProps) {
     [section, onSelectSection]
   );
 
-  const navRow = (id: SettingsSection) => (
-    <button
-      key={id}
-      type="button"
-      role="tab"
-      data-section={id}
-      aria-selected={section === id}
-      tabIndex={section === id ? 0 : -1}
-      className={`settings-nav-item${section === id ? ' is-active' : ''}`}
-      onClick={() => onSelectSection(id)}
-    >
-      <span className="settings-nav-badge" aria-hidden="true">
-        {SECTION_BADGES[id]}
-      </span>
-      <span className="settings-nav-label">{SECTION_TITLES[id]}</span>
-    </button>
-  );
+  const navRow = (id: SettingsSection) => {
+    const provider = id === 'codex' || id === 'glm' || id === 'deepseek' ? id : undefined;
+    return (
+      <button
+        key={id}
+        type="button"
+        role="tab"
+        data-section={id}
+        id={`settings-tab-${id}`}
+        aria-selected={section === id}
+        /* A tab that does not say which panel it controls leaves a screen reader to
+           work the pairing out from DOM order. Both directions are named: the tab
+           points at the panel, the panel points back at the tab. */
+        aria-controls={`settings-panel-${id}`}
+        tabIndex={section === id ? 0 : -1}
+        className={`settings-nav-item${section === id ? ' is-active' : ''}`}
+        onClick={() => onSelectSection(id)}
+      >
+        <span className={provider ? `brand-badge brand-${provider}` : 'settings-nav-badge'} aria-hidden="true">
+          {SECTION_BADGES[id]}
+        </span>
+        <span className="settings-nav-label">{SECTION_TITLES[id]}</span>
+      </button>
+    );
+  };
 
   return (
     <div className="settings-window" data-testid="settings-window">
@@ -199,7 +214,15 @@ export function SettingsPanel(props: SettingsPanelProps) {
         {PROVIDER_SECTIONS.map((provider) => navRow(provider))}
       </nav>
       <div className="settings-content">
-        <div className="settings-pane" key={section} role="tabpanel" data-testid={`settings-pane-${section}`}>
+        <div
+          className="settings-pane"
+          key={section}
+          role="tabpanel"
+          id={`settings-panel-${section}`}
+          aria-labelledby={`settings-tab-${section}`}
+          tabIndex={-1}
+          data-testid={`settings-pane-${section}`}
+        >
           <h2 className="settings-pane-title">{SECTION_TITLES[section]}</h2>
           <p className="settings-pane-note">{SECTION_NOTES[section]}</p>
           {section === 'platforms' || section === 'appearance' ? (
@@ -207,7 +230,6 @@ export function SettingsPanel(props: SettingsPanelProps) {
               part={section}
               settings={props.settings}
               states={states}
-              busy={pending > 0}
               togglingVisibility={props.togglingVisibility}
               onToggleVisibility={props.onToggleVisibility}
               onReorder={props.onReorder}

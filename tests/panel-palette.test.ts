@@ -92,7 +92,6 @@ describe('panel palette', () => {
 
   it('maps the new semantic roles to the existing dark palette', () => {
     expect(variable(dark, '--action')).toBe(variable(dark, '--mint'));
-    expect(variable(dark, '--healthy-border')).toBe(variable(dark, '--active-border'));
     expect(variable(dark, '--primary-bg')).toBe(variable(dark, '--active-bg'));
     expect(variable(dark, '--switch-on-border')).toBe(variable(dark, '--active-border'));
     expect(variable(dark, '--switch-on-bg')).toBe(variable(dark, '--active-bg'));

@@ -2,9 +2,16 @@
  * The panel-level settings, split into the two sections the settings window shows.
  *
  * `part` decides which half is rendered: the settings window gives 平台管理 and 外观
- * their own sections, while the overview's own entry points only ever need one of
- * them. Both halves stay in this one file because they share the busy bookkeeping
- * and the wording; only their placement differs.
+ * their own sections. It is always exactly one of them today — the "both" default is
+ * what the panel's own entry points used before the settings window existed, and the
+ * two halves stay in this file because they are the same surface's two sections
+ * rather than two features.
+ *
+ * Each half owns its own in-flight bookkeeping: 平台管理 dims only the row whose
+ * visibility is being written, 外观 disables its own two groups while either is
+ * saving. Nothing here waits on a flag from another section — a busy signal that
+ * only moves in the platform panes is a busy signal that is permanently false in
+ * this one, which is exactly the bug the appearance controls shipped with.
  *
  * Platform management is the first section of the settings window, because choosing
  * which platforms the overview shows — and in which order — is the setting users
@@ -34,7 +41,6 @@ export interface AppSettingsProps {
   part?: 'platforms' | 'appearance' | 'both';
   settings: PanelSettings;
   states: Partial<Record<ProviderId, DesktopProviderState | undefined>>;
-  busy?: boolean;
   /** Platforms with a visibility write in flight; only their own switch dims. */
   togglingVisibility: ReadonlySet<ProviderId>;
   onToggleVisibility(provider: ProviderId, visible: boolean): void;
@@ -45,6 +51,18 @@ export interface AppSettingsProps {
 
 export function AppSettings(props: AppSettingsProps) {
   const part = props.part ?? 'both';
+  /**
+   * Which appearance write is in flight, or null.
+   *
+   * This used to be gated on a `busy` prop the pane handed down from its own
+   * provider-write counter — a counter that only moves inside the platform
+   * sections, so in 平台管理 and 外观 it was permanently false. The result was a
+   * guard that never fired, a `disabled` that never applied, and `aria-disabled`
+   * on the wrong control; the one visible consequence was that choosing a theme
+   * produced no feedback at all, and a second click sent a second write. This
+   * state is the real one, and it disables both groups while either is saving:
+   * something visibly unavailable beats something silently ignored.
+   */
   const [savingAppearance, setSavingAppearance] = useState<'theme' | 'quota' | null>(null);
   /**
    * Whether this half is still on screen. The settings window unmounts a section
@@ -60,14 +78,18 @@ export function AppSettings(props: AppSettingsProps) {
     };
   }, []);
 
-  // Settings writes remain serialized; only the edited control is ever disabled
-  // — the group being saved here, the platform switch being toggled there — so
-  // an unrelated choice never blinks during a save.
   const saveAppearance = async (kind: 'theme' | 'quota', save: () => Promise<void>) => {
-    if (props.busy) return;
+    if (savingAppearance !== null) return;
     setSavingAppearance(kind);
     try {
       await save();
+    } catch {
+      // A failed appearance write is said where the message stack lives — the panel
+      // owns it, and this window's half of the contract is only "the selection does
+      // not take". Swallowing it here is the point: the store keeps the persisted
+      // value, so both controls stay on it, and what the reader sees is that nothing
+      // changed. Letting it escape would surface as an unhandled rejection in a
+      // window whose visible state is already correct.
     } finally {
       if (mounted.current) setSavingAppearance(null);
     }
@@ -85,8 +107,10 @@ export function AppSettings(props: AppSettingsProps) {
         />
       )}
       {part === 'platforms' ? null : (
-        <section className="config-block" aria-labelledby="appearance-heading">
-          <h3 id="appearance-heading">外观</h3>
+        /* No h3: the pane's own title is 外观 and its note already says what these
+           two rows are for. The heading used to repeat the title verbatim, three
+           lines apart. */
+        <section className="config-block" data-testid="appearance-settings">
           <div className="setting-row">
             <span className="setting-label">主题</span>
             <SegmentedGroup label="主题">
@@ -96,8 +120,7 @@ export function AppSettings(props: AppSettingsProps) {
                   type="button"
                   className={`segmented-option${props.settings.theme === option.value ? ' is-active' : ''}`}
                   aria-pressed={props.settings.theme === option.value}
-                  disabled={props.busy && savingAppearance === 'theme'}
-                  aria-disabled={props.busy && savingAppearance !== 'theme' ? true : undefined}
+                  disabled={savingAppearance !== null}
                   onClick={() => void saveAppearance('theme', () => props.onThemeChange(option.value))}
                 >
                   {option.label}
@@ -114,8 +137,7 @@ export function AppSettings(props: AppSettingsProps) {
                   type="button"
                   className={`segmented-option${props.settings.quotaValueMode === option.value ? ' is-active' : ''}`}
                   aria-pressed={props.settings.quotaValueMode === option.value}
-                  disabled={props.busy && savingAppearance === 'quota'}
-                  aria-disabled={props.busy && savingAppearance !== 'quota' ? true : undefined}
+                  disabled={savingAppearance !== null}
                   onClick={() => void saveAppearance('quota', () => props.onQuotaValueModeChange(option.value))}
                 >
                   {option.label}

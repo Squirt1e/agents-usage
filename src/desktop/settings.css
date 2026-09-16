@@ -1,5 +1,5 @@
 /*
- * The settings window: a 560x380 fixed window with a system title bar, a left
+ * The settings window: a 600x400 fixed window with a system title bar, a left
  * column of sections and one scrolling content area.
  *
  * ## Why it loads `panel.css` first, and what this file neutralises
@@ -58,10 +58,17 @@
  * The settings document's own box. `:has(#settings-root)` is what makes this
  * document-specific: the panel document has no `#settings-root`, so none of this
  * reaches it, whatever order the bundle concatenates the two sheets in.
+ *
+ * **Both the root and `body` have to be named.** `panel.css` sets `html, body { width:
+ * 350px }`, and overriding only `body` leaves the root element at 350 — which is the
+ * layout viewport for this document, so the whole settings layout was laid out in 350
+ * of the window's 600 points and the rest showed as empty band. The root selector is
+ * the first item itself, not `:root ... html`: the root cannot be its own descendant.
  */
+:root:has(#settings-root),
 :root:has(#settings-root) body {
   margin: 0;
-  /* The window's own box: the host fixes the window at 560x380, so the document
+  /* The window's own box: the host fixes the window at 600x400, so the document
      fills it and the content area does the scrolling. */
   width: 100%;
   height: 100%;
@@ -70,7 +77,10 @@
   /* Inherited from `panel.css`'s document rule in practice, but spelled out so this
      document does not depend on the order the two sheets happen to be read in — the
      window is a different surface from the panel and sizes its own text. */
-  font: 400 13px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+  font-weight: 400;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -107,7 +117,7 @@
 .settings-nav-group {
   padding: 10px 8px 4px;
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   letter-spacing: 0.4px;
 }
 
@@ -174,8 +184,9 @@
   white-space: nowrap;
 }
 
-/* The provider's monogram, matching the overview cards' badges so the same
-   platform reads the same in both windows. */
+/* Global sections use quiet glyphs. Provider sections reuse `.brand-badge` and
+   `.brand-*` from `panel.css` verbatim, so their platform marks cannot drift from
+   the overview cards. */
 .settings-nav-badge {
   flex: 0 0 auto;
   display: grid;
@@ -185,7 +196,7 @@
   border-radius: 5px;
   background: var(--badge-bg);
   color: var(--text-dim);
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   letter-spacing: 0.2px;
   transition:
@@ -202,6 +213,10 @@
 
 .settings-content {
   flex: 1 1 auto;
+  /* `width: 100%` under `flex: 1 1 auto`: the `auto` basis is the content's own width,
+     and a section whose widest child is narrow would otherwise let the column settle
+     at that width and leave a band of empty window to its right. */
+  width: 100%;
   min-width: 0;
   /* The one scrolling area of the window: the title bar belongs to the host and
      the nav is a fixed column, so a long form scrolls here and nothing else
@@ -218,6 +233,20 @@
  * The key carries the identity of the section, which is what re-runs it.
  */
 .settings-pane {
+  /*
+   * An explicit one-column grid, and `width: 100%` beside it.
+   *
+   * The forms inside (`.app-settings`, `.settings-view`) are `display: grid` with no
+   * template, so their cards stretch to whatever this box is — which means this box is
+   * the one that decides how wide the content area's contents get. Written as a plain
+   * block it took its width from the flex line and came out far narrower than the
+   * window (a card less than half the content width, with the rest of the window empty);
+   * as a single-column grid the pane fills its column and the column is the content
+   * area's width, which is what the screenshot shows it failing to do.
+   */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
   animation: settings-pane-in 180ms cubic-bezier(0.22, 0.8, 0.24, 1);
 }
 
@@ -234,14 +263,14 @@
 
 .settings-pane-title {
   margin: 0 0 2px;
-  font-size: 15px;
+  font-size: var(--text-xl);
   font-weight: 600;
 }
 
 .settings-pane-note {
   margin: 0 0 12px;
   color: var(--text-dim);
-  font-size: 11.5px;
+  font-size: var(--text-sm);
 }
 
 /* ------------------------------------------------------------ panel view */
@@ -261,8 +290,12 @@
 }
 
 .settings-sheet {
-  width: 560px;
-  height: 380px;
+  /* Kept equal to the host window's own size (SETTINGS_WINDOW_WIDTH/HEIGHT in
+     src-tauri/src/lib.rs): the fallback is the same surface, so it should not be a
+     different shape. A test cannot read a Rust constant, so the pair is checked by
+     `settings_sheet_matches_the_host_window_size` in lib.rs instead. */
+  width: 600px;
+  height: 400px;
   max-width: 100vw;
   max-height: 100vh;
   overflow: hidden;

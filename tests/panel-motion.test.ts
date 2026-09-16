@@ -299,7 +299,6 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
   { what: '估算 / 已过期 badge changes tone', selector: '.tag', properties: ['border-color', 'color'] },
   { what: 'connection dot changes tone', selector: '.status-dot', properties: ['background-color'] },
   { what: 'status word takes the tone of its row', selector: '.status-label', properties: ['color'] },
-  { what: 'source chip changes tone', selector: '.status-chip', properties: ['border-color', 'color'] },
   {
     what: 'the provider card warms as its provider crosses into peak',
     selector: '.provider-card',
@@ -323,12 +322,29 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
   {
     what: 'ghost button: hover and disabled',
     selector: '.ghost-button',
-    properties: ['border-color', 'background-color', 'color', 'opacity']
+    properties: ['border-color', 'background-color', 'color']
   },
   {
-    what: 'primary button: hover and disabled',
+    // The disabled state is a surface swap now, not a fade: the control used to
+    // drop to `opacity: 0.5`, which on the light theme left a white label on a
+    // half-opacity blue and said nothing about what the button would do.
+    what: 'primary button: hover and the disabled surface',
     selector: '.primary-button',
-    properties: ['border-color', 'background-color', 'color', 'opacity']
+    properties: ['border-color', 'background-color', 'color']
+  },
+  {
+    // The confirmation step for deleting a credential: it wears the danger tone as
+    // a surface, the way the primary button wears the action tone.
+    what: 'danger button: hover and the disabled surface',
+    selector: '.danger-button',
+    properties: ['border-color', 'background-color', 'color']
+  },
+  {
+    // Now takes the disabled tone while a credential is being validated, which it
+    // previously showed not at all (same colour, same `cursor: pointer`).
+    what: 'link button: hover and disabled',
+    selector: '.link-button',
+    properties: ['color']
   },
   {
     what: 'segmented option lights up for theme, global quota value, region and reminder switches',
@@ -416,6 +432,41 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
     selector: '.peak-verdict-dot',
     properties: ['background-color']
   },
+  {
+    // Declared on the resting rule so the tone travels both ways; a transition on
+    // the failure class alone would animate in and cut back out. `color` is part of
+    // the same switch: the disabled state changes the label's tone too, and leaving
+    // it out let a field snap its text while its border faded.
+    what: 'a text input takes the failure or disabled treatment and gives it back',
+    selector: '.text-input',
+    properties: ['border-color', 'background-color', 'color']
+  },
+  {
+    // A disabled sliding group must not dim the text under the moving pill, so the
+    // track carries the state instead — otherwise "busy" was invisible.
+    what: 'a busy segmented group shows it on its track',
+    selector: '.segmented',
+    properties: ['border-color', 'background-color']
+  },
+  {
+    // The confirmation's buttons are taller than a line of text: the row grows, and
+    // the growth travels rather than shifting every block below it.
+    what: 'the credential status row grows for the deletion confirmation',
+    selector: '.credential-status',
+    properties: ['min-height']
+  },
+  {
+    what: 'a hidden platform\'s name drops a level',
+    selector: '.manage-text strong',
+    properties: ['color']
+  },
+  {
+    // Revealed rather than mounted, so the marker reserves its width and the fade is
+    // what the reader sees — mounting it popped it in and shoved the name sideways.
+    what: 'the 已隐藏 marker fades in on a hidden platform',
+    selector: '.manage-hidden-tag',
+    properties: ['opacity', 'transform', 'visibility']
+  },
 ];
 
 /**
@@ -444,6 +495,13 @@ const ANIMATION_SWITCHES: AnimationSwitch[] = [
     what: 'credential feedback takes its own row under the stored state',
     selectors: ['.credential-feedback'],
     animation: 'credential-feedback-in'
+  },
+  {
+    // The deletion confirmation replaces the status line in place. Both the prompt
+    // and the two buttons mount with it, so they arrive on an animation.
+    what: 'the credential deletion confirmation arrives in the status row',
+    selectors: ['.credential-confirm-prompt', '.credential-confirm'],
+    animation: 'credential-confirm-in'
   },
   {
     // Both arrive with the element already in its final state, so both travel on

@@ -40,6 +40,60 @@ export function errorLabel(kind: CollectorError['kind']): StatusPresentation {
 }
 
 /**
+ * What to do about a failure, in one sentence.
+ *
+ * The settings panes used to answer this inconsistently: Codex's connection told
+ * the reader how to recover, GLM's and DeepSeek's said nothing, and the one place
+ * that did have an answer (the web-usage token) wrote a second, private mapping.
+ * A status that names a failure without naming a way out is a dead end, so the
+ * wording lives beside the vocabulary it belongs to and every connection asks the
+ * same function.
+ *
+ * **Every kind has a sentence**, including the two that look self-evident:
+ * `missing_config` is what a first-run connection reports (the collectors emit it
+ * for an empty credential), and the form below the row is only an answer if the
+ * reader is told to look there. `unknown` says to retry because that is genuinely
+ * all there is to do. `tests/status-vocabulary.test.ts` iterates the kinds, so a
+ * new one cannot arrive without wording.
+ *
+ * A connection with something more specific to say — "install Codex", "paste the
+ * token again" — passes it as an override.
+ */
+const DEFAULT_ADVICE: Record<CollectorError['kind'], string> = {
+  missing_config: '在下方填入凭据后即可开始采集。',
+  authentication: '凭据已失效，请重新获取后替换。',
+  rate_limit: '请求受限，稍后会自动重试。',
+  network: '网络请求失败，检查网络或代理后重试。',
+  compatibility: '接口可能已改版，请更新应用后重试。',
+  process: '采集进程未能启动，请检查安装。',
+  storage: '本地数据读写失败，重启应用后再试。',
+  unknown: '原因未知，请刷新一次后重试。'
+};
+
+export type RecoveryAdvice = Partial<Record<CollectorError['kind'], string>>;
+
+export function recoveryAdvice(
+  kind: CollectorError['kind'] | undefined,
+  overrides: RecoveryAdvice = {}
+): string | undefined {
+  if (!kind) return undefined;
+  return overrides[kind] ?? DEFAULT_ADVICE[kind];
+}
+
+/** The failure kind a connection state carries, error first and cached snapshot second. */
+export function failureKind(state: DesktopProviderState | undefined): CollectorError['kind'] | undefined {
+  return (state?.error ?? state?.snapshot?.error)?.kind;
+}
+
+/** Recovery advice for a connection state, with the connection's own wording on top. */
+export function stateAdvice(
+  state: DesktopProviderState | undefined,
+  overrides: RecoveryAdvice = {}
+): string | undefined {
+  return recoveryAdvice(failureKind(state), overrides);
+}
+
+/**
  * Presentation of one provider or connection state.
  *
  * A degraded (cached) snapshot is named after the failure that made it stale, so

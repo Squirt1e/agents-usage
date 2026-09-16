@@ -28,15 +28,14 @@ import {
   isValidTimezone,
   type CredentialStatus,
   type CredentialTarget,
-  type DesktopProviderState,
   type PanelSettings,
   type PanelSettingsPatch,
   type PeakReminderMode,
   type PeakWindow
 } from '../shared/desktop-contract';
 import type { ProviderView } from './metrics';
-import { ConfidenceTag, statusFor, StatusDot, StatusRow } from './StatusRow';
 import { BUILTIN_PEAK_DEFS, peakPreviewOf } from './peak-windows';
+import { ConfidenceTag, stateAdvice, statusFor, StatusRow } from './StatusRow';
 import { SegmentedGroup } from './SegmentedGroup';
 
 export interface ProviderSettingsProps {
@@ -50,9 +49,19 @@ export interface ProviderSettingsProps {
 
 type Feedback = { tone: 'progress' | 'success' | 'error'; text: string };
 
+/**
+ * What each credential field holds, in the app's own words.
+ *
+ * The interface is Chinese, so the field names are too, with the product's own
+ * term kept where it is a proper noun (Coding Plan) and the secret's kind named in
+ * Chinese rather than borrowed: 密钥 for a key, Token for a browser login. Before
+ * this the four fields used three different conventions — "API Key", "Token" and
+ * 凭据 — and the labels disagreed with their own placeholders ("输入新密钥以替换"
+ * under a field called API Key).
+ */
 const TARGET_LABELS: Record<CredentialTarget, string> = {
-  glm: 'GLM Coding Plan API Key',
-  deepseek: 'DeepSeek API Key',
+  glm: 'GLM Coding Plan 密钥',
+  deepseek: 'DeepSeek 密钥',
   'glm-wallet': 'GLM 钱包账号凭据',
   'deepseek-web': 'DeepSeek 网页登录 Token'
 };
@@ -70,11 +79,61 @@ function CredentialForm(props: {
   const [value, setValue] = useState('');
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | undefined>();
+  /**
+   * The delete link opens a confirmation in place; it never deletes on the first
+   * press.
+   *
+   * What is being deleted is a secret the reader has to obtain from the provider
+   * again — there is no undo and nothing on this machine can restore it. The
+   * confirmation is in the status row rather than a dialog because an ordinary
+   * settings page is not a modal (see the style guide), and because the row is
+   * already the place that names what would go.
+   */
+  const [confirming, setConfirming] = useState(false);
+  /** Focus lands on the safe action, and returns to the link that opened it. */
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const deleteRef = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  useEffect(() => {
+    if (confirming) cancelRef.current?.focus();
+    else if (restoreFocus.current) {
+      restoreFocus.current = false;
+      deleteRef.current?.focus();
+    }
+  }, [confirming]);
+
+  const cancelConfirm = () => {
+    restoreFocus.current = true;
+    setConfirming(false);
+  };
+
+  /**
+   * Escape cancels from anywhere in the form, not only from the two buttons.
+   *
+   * The handler used to sit on the confirmation's own wrapper, so it worked exactly
+   * as long as focus stayed on 取消 or 确认删除 — tab into the password field (which
+   * is the natural next move while deciding) and Escape did nothing at all. An open
+   * question about deleting a secret has to be dismissable from wherever the reader
+   * happens to be.
+   */
+  useEffect(() => {
+    if (!confirming) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      cancelConfirm();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [confirming]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const secret = value.trim();
     if (secret === '' || pending) return;
+    // Choosing to replace is choosing not to delete: an open confirmation is about
+    // the old secret and has no meaning once a new one is going in.
+    setConfirming(false);
     setPending(true);
     setFeedback({ tone: 'progress', text: '正在验证并保存…' });
     try {
@@ -96,6 +155,11 @@ function CredentialForm(props: {
   };
 
   const remove = async () => {
+    // The confirmation has done its job either way: a success turns the row into the
+    // result, and a failure turns it into the reason. Leaving it open would have kept
+    // asking "确定删除？" over a credential that is already gone.
+    restoreFocus.current = true;
+    setConfirming(false);
     setPending(true);
     try {
       await props.onDeleteCredential(props.target);
@@ -135,18 +199,41 @@ function CredentialForm(props: {
             delete button stays on the status line: the feedback element claims a
             full row of its own, so anything after it in this flex row would be
             pushed below the button instead of beside the state (see panel.css). */}
-        <span>{props.status.configured ? `已保存 ····${props.status.suffix}` : '尚未配置'}</span>
-        {props.status.configured ? (
-          <button
-            type="button"
-            className="link-button"
-            aria-label={`删除 ${props.label}`}
-            disabled={pending}
-            onClick={remove}
-          >
-            删除
-          </button>
-        ) : null}
+        {confirming ? (
+          <>
+            <span className="credential-confirm-prompt" role="status">
+              删除后需重新向平台获取密钥，确定删除？
+            </span>
+            <span className="credential-confirm">
+              <button type="button" className="ghost-button" ref={cancelRef} onClick={cancelConfirm}>
+                取消
+              </button>
+              <button type="button" className="danger-button" disabled={pending} onClick={remove}>
+                {pending ? '正在删除…' : '确认删除'}
+              </button>
+            </span>
+          </>
+        ) : (
+          <>
+            {/* The stored-secret fact, named as a secret: this line sits one row
+                under a connection status that says 尚未连接, and the two used to
+                read as variations of the same sentence. 未保存凭据 is about *this
+                field*; 尚未连接 is about the collector. */}
+            <span>{props.status.configured ? `已保存 ····${props.status.suffix}` : '未保存凭据'}</span>
+            {props.status.configured ? (
+              <button
+                type="button"
+                className="link-button"
+                ref={deleteRef}
+                aria-label={`删除 ${props.label}`}
+                disabled={pending}
+                onClick={() => setConfirming(true)}
+              >
+                删除
+              </button>
+            ) : null}
+          </>
+        )}
         {feedback ? (
           <span role={feedback.tone === 'error' ? 'alert' : 'status'} className={`credential-feedback feedback-${feedback.tone}`}>
             {feedback.text}
@@ -187,21 +274,40 @@ function Switch(props: {
 function CodexSection(props: { view: ProviderView; settings: PanelSettings; onUpdateSettings(p: PanelSettingsPatch): Promise<void> }) {
   const state = props.view.primary;
   const presentation = statusFor(state);
-  const kind = (state?.error ?? state?.snapshot?.error)?.kind;
-  const [path, setPath] = useState(props.settings.codexCliPath ?? '');
-  const [saved, setSaved] = useState<string | undefined>();
 
-  const guidance =
-    kind === 'authentication'
-      ? '请在 Codex 应用或 Codex CLI 中完成登录后重试。'
-      : kind === 'process' || kind === 'missing_config'
-        ? '请安装 Codex，或填写 CLI 绝对路径。'
-        : kind === 'compatibility'
-          ? '请更新 Codex 后重试。'
-          : undefined;
+  /**
+   * The path field follows the settings until the reader types in it.
+   *
+   * Seeding it once from `props` is what made this field dangerous: the settings
+   * window renders before its first read lands, so the field was born empty and
+   * stayed empty — a stored path was invisible, and the row underneath invites
+   * "留空保存可清除路径". Opening this pane and pressing 保存 therefore erased a
+   * path the reader never touched. The same rule now applies here as in the peak
+   * editor: adopt what is stored, stop adopting the moment the reader edits, and
+   * never write back a value nobody chose.
+   */
+  const storedCliPath = props.settings.codexCliPath ?? '';
+  const [path, setPath] = useState(storedCliPath);
+  const [saved, setSaved] = useState<string | undefined>();
+  const pathEdited = useRef(false);
+  useEffect(() => {
+    if (pathEdited.current) return;
+    setPath((current) => (current === storedCliPath ? current : storedCliPath));
+  }, [storedCliPath]);
+  const dirty = path.trim() !== storedCliPath;
+
+  /* Codex's own answers, which are more specific than the vocabulary's defaults:
+     its login is managed by the Codex app and its collector is a CLI binary. */
+  const advice = stateAdvice(state, {
+    authentication: '请在 Codex 应用或 Codex CLI 中完成登录后重试。',
+    process: '请安装 Codex，或填写 CLI 绝对路径。',
+    missing_config: '请安装 Codex，或填写 CLI 绝对路径。',
+    compatibility: '请更新 Codex 后重试。'
+  });
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!dirty) return;
     const next = path.trim();
     await props.onUpdateSettings({ codexCliPath: next === '' ? undefined : next });
     setSaved(next === '' ? '已清除 CLI 路径设置' : `已保存 CLI 路径：${next}`);
@@ -217,44 +323,53 @@ function CodexSection(props: { view: ProviderView; settings: PanelSettings; onUp
         {/* `detail` is advice only. The provider's own message is English plumbing
             ("… is not configured"), not something to read: a page that has advice
             gives it here, and a page that has none says nothing. */}
-        <StatusRow tone={presentation.tone} label={presentation.label} detail={guidance} />
+        <StatusRow tone={presentation.tone} label={presentation.label} detail={advice} />
       </section>
       <section className="config-block">
-        <h3>CLI 路径</h3>
+        <header className="block-head">
+          {/* The block holds one field, so the heading *is* the field's label: the
+              accessible name comes from here by `aria-labelledby`, and no second
+              label repeats it. It used to read "CLI 路径" over a field labelled
+              "Codex CLI 绝对路径" inside a pane already titled Codex — the same
+              thing named three times, twice with words the interface never uses
+              elsewhere. */}
+          <h3 id="codex-cli-path-label">可执行文件路径</h3>
+        </header>
         <form className="credential-form" onSubmit={submit}>
-          <label className="field-label" htmlFor="codex-cli-path">
-            Codex CLI 绝对路径
-          </label>
           <div className="input-row">
             <input
               id="codex-cli-path"
               className="text-input"
               type="text"
+              aria-labelledby="codex-cli-path-label"
               autoComplete="off"
               spellCheck={false}
               value={path}
               placeholder="/opt/homebrew/bin/codex"
-              onChange={(event) => setPath(event.target.value)}
+              onChange={(event) => {
+                pathEdited.current = true;
+                setSaved(undefined);
+                setPath(event.target.value);
+              }}
             />
-            <button type="submit" className="primary-button">
+            {/* Nothing to write is nothing to press: the same rule the peak
+                editor's save follows. Leaving the field untouched can no longer
+                clear the stored path by accident, and this is what makes that
+                visible instead of silent. */}
+            <button type="submit" className="primary-button" disabled={!dirty}>
               保存
             </button>
           </div>
-          <div className="credential-status">{saved ? <span role="status">{saved}</span> : <span>留空保存可清除路径</span>}</div>
+          <div className="credential-status">
+            {saved ? (
+              <span role="status">{saved}</span>
+            ) : (
+              <span>{dirty ? '尚未保存' : '留空保存可清除路径'}</span>
+            )}
+          </div>
         </form>
       </section>
     </>
-  );
-}
-
-/** Compact connection status shown beside a section title. */
-function ConnectionChip(props: { state: DesktopProviderState | undefined }) {
-  const presentation = statusFor(props.state);
-  return (
-    <span className={`status-chip status-chip-${presentation.tone}`} role="status">
-      <StatusDot tone={presentation.tone} />
-      {presentation.label}
-    </span>
   );
 }
 
@@ -266,9 +381,11 @@ function GlmSection(props: {
   onDeleteCredential(target: CredentialTarget): Promise<void>;
 }) {
   const quotaState = props.view.state('quota') ?? props.view.primary;
+  const quotaPresentation = statusFor(quotaState);
   const walletState = props.view.state('wallet');
   const walletPresentation = statusFor(walletState);
   const [regionBusy, setRegionBusy] = useState(false);
+  const [walletBusy, setWalletBusy] = useState(false);
 
   const setRegion = async (region: PanelSettings['glmRegion']) => {
     setRegionBusy(true);
@@ -286,7 +403,17 @@ function GlmSection(props: {
     // form below, never a side effect of the switch: the old behaviour threw the
     // pasted credential away, so turning the switch back on showed nothing and the
     // user had to paste it again.
-    await props.onUpdateSettings({ glmWalletEnabled: enabled });
+    //
+    // The switch now shows its own write: without this the track sat unchanged
+    // until the settings echo landed, and a second click in that window sent a
+    // second write. The visibility switches in 平台管理 have always dimmed their
+    // own row; these two were the ones that did not.
+    setWalletBusy(true);
+    try {
+      await props.onUpdateSettings({ glmWalletEnabled: enabled });
+    } finally {
+      setWalletBusy(false);
+    }
   };
 
   return (
@@ -294,8 +421,18 @@ function GlmSection(props: {
       <section className="config-block">
         <header className="block-head">
           <h3>Coding Plan</h3>
-          <ConnectionChip state={quotaState} />
         </header>
+        {/* Every connection states its health in one place — the first row of its
+            own block. This one used to put the same words in a pill beside the
+            title instead, so GLM showed two different renderings of one fact
+            within a single pane. */}
+        <StatusRow
+          tone={quotaPresentation.tone}
+          label={quotaPresentation.label}
+          detail={stateAdvice(quotaState, {
+            authentication: '请在 GLM 平台重新生成密钥后替换。'
+          })}
+        />
         <div className="setting-row">
           <span className="setting-text">
             <span className="setting-label">服务区域</span>
@@ -336,14 +473,17 @@ function GlmSection(props: {
           label="启用实验钱包连接"
           ariaLabel="启用实验钱包连接"
           checked={props.settings.glmWalletEnabled}
+          disabled={walletBusy}
           onChange={(checked) => void setWalletEnabled(checked)}
           description="开启即采集并在主面板展示，关闭即隐藏；凭据保留，删除用下方按钮"
         />
         {props.settings.glmWalletEnabled ? (
           <>
-            {/* No detail: the row names the state, and the provider's own message
-                is English plumbing the user cannot act on. */}
-            <StatusRow tone={walletPresentation.tone} label={walletPresentation.label} />
+            <StatusRow
+              tone={walletPresentation.tone}
+              label={walletPresentation.label}
+              detail={stateAdvice(walletState)}
+            />
             <CredentialForm
               target="glm-wallet"
               label={TARGET_LABELS['glm-wallet']}
@@ -367,17 +507,24 @@ function DeepSeekSection(props: {  view: ProviderView;
   const presentation = statusFor(props.view.primary);
   const webState = props.view.state('web');
   const webPresentation = statusFor(webState);
-  const webKind = (webState?.error ?? webState?.snapshot?.error)?.kind;
+  const [webBusy, setWebBusy] = useState(false);
   // A rejected login token — missing (40002) or invalid/expired (40003) — is the
-  // expected failure of this connection; say so instead of leaving a bare 认证失败
-  // the user cannot act on. Only a body the collector could not read at all is a
-  // redesign, which is the case the compatibility wording is for.
-  const webGuidance =
-    webKind === 'authentication'
-      ? '登录态无效或已过期，请重新粘贴 Token。'
-      : webKind === 'compatibility'
-        ? '接口可能已改版，网页用量暂不展示。'
-        : undefined;
+  // expected failure of this connection, and only this one can be fixed by pasting
+  // something again; a body the collector could not read at all is a redesign,
+  // which is what the compatibility wording is for. The other failures fall back to
+  // the shared vocabulary rather than saying nothing.
+  const webAdvice = stateAdvice(webState, {
+    authentication: '登录态无效或已过期，请重新粘贴 Token。',
+    compatibility: '接口可能已改版，网页用量暂不展示。'
+  });
+  const setWebEnabled = async (enabled: boolean) => {
+    setWebBusy(true);
+    try {
+      await props.onUpdateSettings({ deepseekWebEnabled: enabled });
+    } finally {
+      setWebBusy(false);
+    }
+  };
   return (
     <>
       <section className="config-block">
@@ -387,6 +534,7 @@ function DeepSeekSection(props: {  view: ProviderView;
         <StatusRow
           tone={presentation.tone}
           label={presentation.label}
+          detail={stateAdvice(props.view.primary)}
         />
         <CredentialForm
           target="deepseek"
@@ -404,14 +552,15 @@ function DeepSeekSection(props: {  view: ProviderView;
           label="启用网页用量连接"
           ariaLabel="启用网页用量连接"
           checked={props.settings.deepseekWebEnabled}
-          onChange={(checked) => void props.onUpdateSettings({ deepseekWebEnabled: checked })}
+          disabled={webBusy}
+          onChange={(checked) => void setWebEnabled(checked)}
         />
         {props.settings.deepseekWebEnabled ? (
           <>
             <StatusRow
               tone={webPresentation.tone}
               label={webPresentation.label}
-              detail={webGuidance}
+              detail={webAdvice}
             />
             <CredentialForm
               target="deepseek-web"
