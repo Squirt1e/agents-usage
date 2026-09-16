@@ -40,8 +40,9 @@ describe('panel width: nothing scrolls sideways', () => {
     expect(computed.justifyContent).toBe('space-between');
     expect(computed.alignItems).toBe('center');
     expect(computed.paddingLeft).toBe(computed.paddingRight);
-    expect(computed.paddingTop).toBe('2px');
+    expect(computed.paddingTop).toBe('0px');
     expect(computed.paddingBottom).toBe('4px');
+    expect(computed.overflow).toBe('hidden');
 
     const trigger = document.createElement('button');
     trigger.className = 'connection-trigger';
@@ -67,6 +68,7 @@ describe('panel width: nothing scrolls sideways', () => {
 
     expect(getComputedStyle(bottom).position).toBe('relative');
     expect(getComputedStyle(bottom).opacity).toBe('1');
+    expect(getComputedStyle(bottom).overflow).not.toBe('hidden');
 
     panel.dataset.headerHidden = '';
     const hidden = getComputedStyle(bottom);

@@ -542,7 +542,11 @@ button {
   /* No rule above it: the status line sits on the panel's own background, a
      little clear of the content instead of fenced off from it. The two status
      groups own opposite ends of the row and share one vertical centre. */
-  padding: 2px 12px 4px;
+  padding: 0 12px 4px;
+  /* Clip only the status row while it leaves with the header. `.panel-bottom`
+     stays unclipped because the toast stack and connection details deliberately
+     paint above this row. */
+  overflow: hidden;
   font-size: var(--text-2xs);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
