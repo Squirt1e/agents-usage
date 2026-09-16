@@ -140,10 +140,13 @@
   `package.json` 相同。判定标准是这两处接线不变、两个版本字符串相等，由
   `tests/release-pipeline.test.ts` 守住。
 - **打包与发布交给 GitHub**：`main` 的推送触发 `.github/workflows/release.yml`——先判断这个
-  版本发过没有（`v<version>` 的 tag 或 release 存在就算发过），没发过才打 universal dmg 并建
-  draft release，发过就只跑门禁；本地不再手工打包上传。**同一个版本只打一次包**，已发出的资产
-  不再替换，所以 dmg 与它 tag 指向的提交是同一份代码。判定标准是触发时机、版本号来源、打包目标、
-  只打一次、已发出的资产不再变动这五条接线，由 `tests/release-pipeline.test.ts` 守住。
-- **release 正文由人写**：流水线只上传 dmg，新版本建成 draft 等人补写，已存在的 release 一个字
-  都不碰；正文里不写校验和（资产页上的 SHA-256 由 GitHub 现算）。判定标准是工作流里既不出现写
-  正文的命令，也不出现替换资产的命令，由上面那条测试守住。
+  版本发过没有（`v<version>` 的 tag 或 release 存在就算发过），没发过才打 universal dmg 并用
+  仓库里那份已提交的正文建 release，发过就只跑门禁；本地不再手工打包上传。**同一个版本只打一次包**，
+  已发出的资产不再替换，所以 dmg 与它 tag 指向的提交是同一份代码。判定标准是触发时机、版本号来源、
+  打包目标、只打一次、已发出的资产不再变动这五条接线，由 `tests/release-pipeline.test.ts` 守住。
+- **release 正文随版本号提交在仓库里**：正文写成 `docs/release-notes/v<version>.md`，与该版本的
+  版本号在同一条提交里，骨架沿用 `docs/release-notes/TEMPLATE.md`；「这个版本里有什么」只写一句话，
+  从用户视角说这个版本与上一个版本的区别，不列提交。流水线只把这份已提交的正文贴上去并直接发布，
+  不生成正文、不留 draft、不碰已发出去的 release；正文里不写校验和（资产页上的 SHA-256 由
+  GitHub 现算）。判定标准是正文文件存在且骨架与模板一致、工作流里既不出现生成正文的命令
+  （`--generate-notes`）也不出现替换资产或改写已发 release 的命令，由上面那条测试守住。

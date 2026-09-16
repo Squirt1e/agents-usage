@@ -156,8 +156,9 @@ npm run build:desktop -- --target universal-apple-darwin
 
 本地不需要再手工打包上传。推到 `main` 会触发
 [`.github/workflows/release.yml`](.github/workflows/release.yml)，它先看 `package.json` 里的
-版本发过没有：没发过就用同一条 universal 命令打包，并建一个 `v<version>` 的 draft release 挂上
-dmg；发过就只跑门禁（`typecheck` / `lint` / `test`），既不出包也不碰那个 release。
+版本发过没有：没发过就用同一条 universal 命令打包，并用仓库里那份已提交的正文建一个公开的
+`v<version>` release 挂上 dmg；发过就只跑门禁（`typecheck` / `lint` / `test`），既不出包也不碰
+那个 release。
 
 - **一个版本只打一次包**：`v<version>` 这个 tag 或 release 已经存在就算发过，之后的推送只会跑
   门禁。所以 release 上的 dmg 与它 tag 指向的提交是同一份代码，正文里的说明也不会被后来的
@@ -165,10 +166,12 @@ dmg；发过就只跑门禁（`typecheck` / `lint` / `test`），既不出包也
 - **版本号只有一处**：`src-tauri/tauri.conf.json` 的 `version` 指向 `../package.json`，打包时
   Tauri 现读它。升版本要改两个文件——`package.json` 与 `Cargo.toml` 的
   `[workspace.package] version`（后者与前者一致由 `tests/release-pipeline.test.ts` 守住）。
-- **新版本**：流水线建的是 **draft**，正文里只有一份自动生成的变更列表。中文说明（安装步骤、
-  运行要求、已知限制）补完再发布。
-- **正文由人维护**：流水线不写正文。也不要写校验和——资产页上的 SHA-256 是 GitHub 现算的，
-  写进正文只会多一份会过期的副本。
+- **新版本要连正文一起提交**：正文写在 `docs/release-notes/v<version>.md`，与该版本的版本号在
+  同一条提交里，骨架见 [`TEMPLATE.md`](docs/release-notes/TEMPLATE.md)；「这个版本里有什么」只写
+  一句话，站在用户视角说这个版本与上一个版本的区别，不列提交。缺了这份文件，流水线在打包之前
+  就失败。
+- **正文由人写、流水线不写**：流水线只把仓库里那份贴上去，不生成变更列表、不留 draft。也不要写
+  校验和——资产页上的 SHA-256 是 GitHub 现算的，写进正文只会多一份会过期的副本。
 - **要重发某个版本**（包本身有问题）：`gh release delete v1.2.0 --cleanup-tag --yes` 删掉它的
   release 与 tag，再重跑那次 run，判断会重新变回“要打包”。
 
