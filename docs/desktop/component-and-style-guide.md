@@ -272,7 +272,7 @@ checkbox 语义；开关只在自己的写入进行中整体淡化（`opacity`�
 “暂时点不动”；分段选项使用 `aria-pressed`；进行中的写操作必须禁用重复提交并提供状态反馈。
 
 **禁用态分两档，判据是这个禁用会持续多久**（见
-[`polish-settings-window`](../../openspec/changes/polish-settings-window/design.md)）：
+[`polish-settings-window`](../../openspec/changes/archive/2026-09-16-polish-settings-window/design.md)）：
 
 | | 例子 | 画法 |
 | --- | --- | --- |

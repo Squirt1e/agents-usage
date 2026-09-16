@@ -1,7 +1,7 @@
 //! Read-only usage collection core.
 //!
 //! Module layout mirrors the responsibilities described in
-//! `openspec/changes/add-macos-menubar-usage-panel/design.md`:
+//! `openspec/changes/archive/2026-09-15-add-macos-menubar-usage-panel/design.md`:
 //!
 //! - [`contracts`]: serializable snapshot/metric/error contracts shared with the
 //!   TypeScript client.

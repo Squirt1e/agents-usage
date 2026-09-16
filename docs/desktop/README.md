@@ -1,7 +1,7 @@
 # 桌面版（macOS 菜单栏面板）开发说明
 
 本目录说明如何构建、运行与验证
-[`add-macos-menubar-usage-panel`](../../openspec/changes/add-macos-menubar-usage-panel/proposal.md)
+[`add-macos-menubar-usage-panel`](../../openspec/changes/archive/2026-09-15-add-macos-menubar-usage-panel/proposal.md)
 变更引入的桌面路径。规划依据是同一变更下的 `proposal.md`、`design.md`、`specs/` 与
 `tasks.md`；本文件只描述工程入口，不替代规格。
 
@@ -157,10 +157,10 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   （由 `tests/panel-palette.test.ts` 守住）。浅色采用 macOS 设置风格的系统灰背景、白色分组卡片、
   中性深灰文字与细分隔线；平台管理行之间使用直线分隔，不给分隔线附加行圆角。操作、焦点和选中使用系统蓝，开启状态使用系统绿，青绿／草绿／靛蓝
   保留给平台额度与标识，详见
-  [`refine-light-palette`](../../openspec/changes/refine-light-palette/proposal.md)。开关的关闭态由
+  [`refine-light-palette`](../../openspec/changes/archive/2026-09-15-refine-light-palette/proposal.md)。开关的关闭态由
   轨道表达，旋钮在关闭与开启两态都是同一个白色滑块（浅色下由 `--switch-thumb-shadow` 补出边界），
   禁用则整块淡化——关闭因此不会读作「点不动」，见
-  [`fix-light-switch-off-state`](../../openspec/changes/fix-light-switch-off-state/proposal.md)。
+  [`fix-light-switch-off-state`](../../openspec/changes/archive/2026-09-15-fix-light-switch-off-state/proposal.md)。
   界面动效按仓库规则「所有切换都要有过渡动画」
   实现（`AGENTS.md` §1）：分类选中、内容入场、窗口高度、状态切换、数值变化各自用
   transition / animation / 逐帧上报，`prefers-reduced-motion` 统一关闭，切换点登记在
@@ -169,7 +169,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   热区，重置时间行只有自身可点时例外；设置页没有形态开关）。全局设置的「外观」提供一个
   「额度数值」的「剩余 / 已用」选择，统一作用于 Codex 与 GLM，默认显示剩余量；缺少所选方向的指标时显示
   `—`，不从另一方向伪造。形态切换动画见
-  [`fix-quota-shape-morph`](../../openspec/changes/fix-quota-shape-morph/proposal.md)：几何由
+  [`fix-quota-shape-morph`](../../openspec/changes/archive/2026-09-15-fix-quota-shape-morph/proposal.md)：几何由
   `src/desktop/quota-morph.ts` 的纯函数给出（断开解开 → 回直 → 下移三段），`QuotaDisplay`
   逐帧绘制（WebKit 没有可插值的 `d`），布局由 CSS 从 `--quota-drop` 推出，静态检查见
   `tests/panel-quota-morph.test.tsx`。
@@ -183,16 +183,16 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   「已收到并执行」（`refresh-requested`），结果以该平台的新状态发布，因此客户端把它读成
   `RefreshStatus.requested`（不裁决），面板按卡片自身状态行所用的同一份事实判定。失败提示与成功重播只对
   结果到达时屏幕上确实存在的卡片执行——平台已被隐藏、已进入子页或面板还在加载态时不执行。
-  见 [`fix-refresh-verdict-messages`](../../openspec/changes/fix-refresh-verdict-messages/proposal.md)。
+  见 [`fix-refresh-verdict-messages`](../../openspec/changes/archive/2026-09-15-fix-refresh-verdict-messages/proposal.md)。
 - 高峰/错峰时段提醒见
-  [`add-peak-window-reminder`](../../openspec/changes/add-peak-window-reminder/proposal.md)：
+  [`add-peak-window-reminder`](../../openspec/changes/archive/2026-09-15-add-peak-window-reminder/proposal.md)：
   判定是纯前端计算（`src/desktop/peak-windows.ts`，按定义自身时区取本地星期与时刻，支持跨午夜
   回绕），内置官方时段表目前只有 DeepSeek（北京周一至五 09:00–12:00、14:00–18:00，带来源与
   核实日期），无内置定义的平台（GLM/Codex）不显示时段信息；仅高峰时显示卡片警示描边、阴影与
   边界标签，错峰保持普通外观且无文字。面板展开期间跨过任一时段边界仍经现有 toast 提示一次；设置在每平台配置的
   「高峰时段提醒」区块（内置只读说明、自定义时段编辑器、关闭），设置字段 `peakReminder`
   两侧契约镜像且向后兼容。自定义编辑器的形态见
-  [`refine-peak-window-editor`](../../openspec/changes/refine-peak-window-editor/proposal.md)：
+  [`refine-peak-window-editor`](../../openspec/changes/archive/2026-09-16-refine-peak-window-editor/proposal.md)：
   一条时段是一张两行卡片（星期多选 + 删除，`开始 09:00 → 结束 18:00`），跨午夜时该行自己亮出
   「跨天」；区块底部按**当前草稿**给出判定预览（`现在 高峰 · 距错峰 2 小时 30 分钟`），预览与
   总览卡片共用 `peakStateAt`，因此不会出现两个答案；保存入口旁是修改状态（错误原因 /
@@ -202,7 +202,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   所以每行需要稳定 key，不能用下标。
 
 - 设置窗口的完整审查与整改见
-  [`polish-settings-window`](../../openspec/changes/polish-settings-window/proposal.md)：修掉
+  [`polish-settings-window`](../../openspec/changes/archive/2026-09-16-polish-settings-window/proposal.md)：修掉
   Codex CLI 路径不回填（打开该页点保存会抹掉已存路径）、给删除凭据加就地确认、把禁用态分成
   「持续不可用」（`--disabled-*` 表面，标签仍可读）与「写入期间的短暂禁用」（保留淡化）两档、
   把连接状态收敛成区块正文首行一种呈现并补齐每种失败的恢复建议、把 11 档字号收敛成 8 个命名档

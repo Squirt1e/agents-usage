@@ -38,7 +38,7 @@
 - **8.4**：面板视觉与 PNG 对照。已截取菜单栏托盘图标截图
   `docs/desktop/verification/menubar-tray.png`（3584×2240，含托盘图标），但面板窗口本身需要
   点击托盘图标才会展开，且本环境无法进行图像对比。请在真机点击托盘图标，对照
-  `openspec/changes/add-macos-menubar-usage-panel/assets/overview.png` 等图核对密度/配色/布局。
+  `openspec/changes/archive/2026-09-15-add-macos-menubar-usage-panel/assets/overview.png` 等图核对密度/配色/布局。
 - **8.5**：失焦收起、置顶、拖动、位置恢复、多屏/缩放、钉住后切换桌面、全屏/Space/Mission
   Control 行为。需要人机交互，无法无头验证。多屏定位已修掉一个实机问题，复测时按这个顺序点一遍：
 
