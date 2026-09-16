@@ -9,7 +9,7 @@
 // inside the panel — so the assertions moved with it rather than being rewritten.
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { PlatformSettings } from '../src/desktop/settings/PlatformSettings';
+import { PlatformSettings } from '../../src/desktop/settings/PlatformSettings';
 import {
   createFakeUsageClient,
   defaultPanelSettings,
@@ -17,12 +17,12 @@ import {
   metricOf,
   providerStateOf,
   snapshotOf
-} from '../src/desktop/lib/fake-client';
+} from '../../src/desktop/lib/fake-client';
 import { render } from '@testing-library/react';
-import type { CollectorError } from '../src/shared/contracts';
-import type { PanelSettings, PanelSnapshot } from '../src/shared/desktop-contract';
-import type { ProviderId } from '../src/shared/contracts';
-import { renderBothWindows, renderSettings } from './helpers/windows';
+import type { CollectorError } from '../../src/shared/contracts';
+import type { PanelSettings, PanelSnapshot } from '../../src/shared/desktop-contract';
+import type { ProviderId } from '../../src/shared/contracts';
+import { renderBothWindows, renderSettings } from '../helpers/windows';
 
 function panelSnapshot(): PanelSnapshot {
   return snapshotOf([

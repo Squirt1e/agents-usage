@@ -13,7 +13,7 @@ import {
   UsageClientError,
   type EventSourceLike,
   type PanelEvent
-} from '../src/shared/usage-client';
+} from '../../src/shared/usage-client';
 import {
   createBrowserFallbackHost,
   createDesktopHostControls,
@@ -22,7 +22,7 @@ import {
   DESKTOP_COMMANDS,
   DESKTOP_EVENTS,
   type DesktopCommandBridge
-} from '../src/desktop/lib/desktop-client';
+} from '../../src/desktop/lib/desktop-client';
 
 type Listener = (event: { data?: string }) => void;
 

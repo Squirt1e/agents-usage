@@ -24,7 +24,7 @@
 // checked here.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { PANEL_HEIGHT_ANIMATION_MS } from '../src/desktop/panel/panel-height';
+import { PANEL_HEIGHT_ANIMATION_MS } from '../../src/desktop/panel/panel-height';
 
 /** The sheets the guard reads, in the order the documents load them. */
 const SHEET_FILES = ['src/desktop/panel.css', 'src/desktop/settings.css'];

@@ -4,21 +4,21 @@
 // matrix, and the rule that a local failure never hides another platform's data.
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { CodexCard } from '../src/desktop/panel/CodexCard';
-import { DeepSeekCard } from '../src/desktop/panel/DeepSeekCard';
-import { GlmCard } from '../src/desktop/panel/GlmCard';
-import { PanelApp } from '../src/desktop/panel/PanelApp';
+import { CodexCard } from '../../src/desktop/panel/CodexCard';
+import { DeepSeekCard } from '../../src/desktop/panel/DeepSeekCard';
+import { GlmCard } from '../../src/desktop/panel/GlmCard';
+import { PanelApp } from '../../src/desktop/panel/PanelApp';
 import {
   createFakeUsageClient,
   failedStateOf,
   metricOf,
   providerStateOf,
   snapshotOf
-} from '../src/desktop/lib/fake-client';
-import type { DesktopProviderState, DesktopUsageMetric, PanelSnapshot } from '../src/shared/desktop-contract';
-import { localDayIn } from '../src/shared/desktop-contract';
-import { dailyBilledSpends, dailyRequests, latestAttemptFailed, providerView, shouldRenderMetric, withoutConnection, type MetricGateOptions } from '../src/desktop/lib/metrics';
-import type { PanelHostProps } from '../src/desktop/panel/PanelApp';
+} from '../../src/desktop/lib/fake-client';
+import type { DesktopProviderState, DesktopUsageMetric, PanelSnapshot } from '../../src/shared/desktop-contract';
+import { localDayIn } from '../../src/shared/desktop-contract';
+import { dailyBilledSpends, dailyRequests, latestAttemptFailed, providerView, shouldRenderMetric, withoutConnection, type MetricGateOptions } from '../../src/desktop/lib/metrics';
+import type { PanelHostProps } from '../../src/desktop/panel/PanelApp';
 
 const NOW = new Date('2026-09-10T08:00:00.000Z');
 const TIMEZONE = 'Asia/Shanghai';

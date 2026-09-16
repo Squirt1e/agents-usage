@@ -59,7 +59,7 @@
     普通 `filter` 与被遮内容一起绘制，不存在这个时间窗。
   - 组件侧必须正确标记：占位数据显示时给容器加 `is-covered`，显示真实数据（含缓存）时不加，
     否则真实读数会被当成假数据糊掉。
-  由 `tests/panel-motion.test.ts`（a cover protects what it covers）与 `tests/panel-cover.test.tsx`
+  由 `tests/panel/panel-motion.test.ts`（a cover protects what it covers）与 `tests/panel/panel-cover.test.tsx`
   （哪一块在什么时候被标记）共同守住。
   （同理：任何以「遮住某些内容」为目的的元素，其遮挡机制都不能依赖背景采样。）
 
@@ -75,7 +75,7 @@
 
 ### 1.5 登记与守卫
 
-**新增任何一个切换点，必须同时在 [`tests/panel-motion.test.ts`](tests/panel-motion.test.ts) 的
+**新增任何一个切换点，必须同时在 [`tests/panel/panel-motion.test.ts`](tests/panel/panel-motion.test.ts) 的
 注册表里登记它**（选择器 + 需要被覆盖的属性，或动画名）。守卫会检查：
 
 - 注册表里的每个切换确实声明了 `transition`/`animation`，且属性被逐条覆盖；
@@ -101,9 +101,9 @@
 - **总览卡片不得自行增加连接错误内容**：未经用户明确授权，不得在平台卡片内追加连接错误框、
   接口原始错误文案、重试按钮或配置跳转入口。判定标准是连接失败前后卡片的指标布局不因错误详情
   改变，详情只能在卡片外的底部连接状态浮层或既有设置页查看；已有的指标过期标记、卡片配置
-  图标和无数据遮蔽提示不属于新增错误入口。由 `tests/panel-connection-details.test.tsx` 与
-  `tests/panel-width.test.ts` 守住。
-- **颜色只能来自变量**：`panel.css` 不写硬编码颜色，由 `tests/panel-palette.test.ts` 守住；
+  图标和无数据遮蔽提示不属于新增错误入口。由 `tests/panel/panel-connection-details.test.tsx` 与
+  `tests/panel/panel-width.test.ts` 守住。
+- **颜色只能来自变量**：`panel.css` 不写硬编码颜色，由 `tests/panel/panel-palette.test.ts` 守住；
   两套主题共用同一组变量。
 - **注释解释「为什么」**：面板代码里的注释用于记录取舍与踩过的坑（动效部分尤其如此），不要
   写复述代码的注释。

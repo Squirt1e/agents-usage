@@ -21,7 +21,7 @@
 
 `fixtures/contracts/` 下的样例由两个运行时**同时**校验：
 
-- TypeScript：`tests/contracts-conformance.test.ts`；
+- TypeScript：`tests/panel/contracts-conformance.test.ts`；
 - Rust：`crates/usage-core/tests/contract_conformance.rs`，路径通过
   `usage-core::fixtures::load_fixture` 解析（`build.rs` 注入 `AGENTS_USAGE_FIXTURES_DIR`）。
 
@@ -32,8 +32,8 @@
 
 这条不变量由以下检查共同保证，改动适配器或界面时必须保持：
 
-1. `tests/contracts.test.ts`：`normalizeMetric` 对 `undefined` 产出 `null` 并追加 `unavailable`。
-2. `tests/contracts-conformance.test.ts`：`codex-windows.json` 要求缺失百分比的不兼容响应
+1. `tests/shared/contracts.test.ts`：`normalizeMetric` 对 `undefined` 产出 `null` 并追加 `unavailable`。
+2. `tests/panel/contracts-conformance.test.ts`：`codex-windows.json` 要求缺失百分比的不兼容响应
    被拒绝而不是补 0；`deepseek-currencies.json` 要求可靠零值仍显示；`daily-statistics.json`
    要求缺失日期桶不产生指标、`0` 的桶照常显示。
 3. `crates/usage-core/tests/contract_conformance.rs`：同一份样例的 Rust 侧断言，外加
@@ -45,17 +45,17 @@
 圆环与进度条是同一个形状的两种几何，形变由脚本逐帧绘制（WebKit 没有可插值的 `d` 属性），
 因此它不在 CSS 的 transition/animation 里，而由下面两处共同守住：
 
-1. `tests/panel-motion.test.ts`：例外表登记这次逐帧绘制的原因与它仍然生效的条件，并覆盖它旁边
+1. `tests/panel/panel-motion.test.ts`：例外表登记这次逐帧绘制的原因与它仍然生效的条件，并覆盖它旁边
    真正是 CSS 的切换（填充比例、重置时间行的语气与下划线）。
-2. `tests/panel-quota-morph.test.tsx`：几何（两种静息形态、三段顺序、接缝处两端速度连续、每帧
+2. `tests/panel/panel-quota-morph.test.tsx`：几何（两种静息形态、三段顺序、接缝处两端速度连续、每帧
    不出盒、无 NaN）与 DOM 行为（翻转提交当帧先写回真实帧、减弱动效直接落地、两种文字只在形变期间
    同时挂载、形变期间在 `.panel` 上标注"内容正在动画"）。
-3. `tests/panel-height-hook.test.tsx`：形变期间窗口高度改为逐帧上报实测值（不再等布局稳定后
+3. `tests/panel/panel-height-hook.test.tsx`：形变期间窗口高度改为逐帧上报实测值（不再等布局稳定后
    再走 200ms 缓动），因此窗口与卡片同步收放。
 4. `npm run rust:test`（`src-tauri` 的 `a_resize_keeps_the_panel_where_the_user_put_it`）：窗口高度变化只改高度、不改位置，必要时才收进可用区域。
-5. `tests/panel-width.test.ts`：面板不提供横向滚动（页面级 `clip`、内容区不让出横向轴、底部详情中的长文案允许断行）。浏览器侧的实测方式：向连接错误注入一段很长且不可断行的英文文案，打开底部“连接异常”详情，再读 `documentElement.scrollWidth`／`.panel-body.scrollWidth`，两者都必须等于各自的 `clientWidth`，且手动设置 `scrollLeft` 不产生位移。
+5. `tests/panel/panel-width.test.ts`：面板不提供横向滚动（页面级 `clip`、内容区不让出横向轴、底部详情中的长文案允许断行）。浏览器侧的实测方式：向连接错误注入一段很长且不可断行的英文文案，打开底部“连接异常”详情，再读 `documentElement.scrollWidth`／`.panel-body.scrollWidth`，两者都必须等于各自的 `clientWidth`，且手动设置 `scrollLeft` 不产生位移。
 6. 热区边界（浏览器实测，jsdom 无布局）：在圆环形态下命中 `elementFromPoint` 于环心、环身、环下方一行空白，期望分别是 `.quota-shape-button`、`.quota-shape-button`、`.quota-item`；在进度条形态下命中标签行与进度条为按钮、进度条下方为 `.quota-item`、重置文字为 `.quota-reset-toggle`。注意 `.quota-shape` 必须 `pointer-events: none`，否则它 `overflow: visible` 的绘制盒（进度条形态下比按钮低 20px）会把热区拖到重置行上。
-7. `tests/panel-quota-morph.test.tsx` 另有一条分层断言：切换按钮盖住整个条目且置于内容之下，
+7. `tests/panel/panel-quota-morph.test.tsx` 另有一条分层断言：切换按钮盖住整个条目且置于内容之下，
    重置时间行在其上方、只在自身可点时吃掉点击——这条决定"除重置文字外整块都是热区"。
 
 ## 与两个窗口有关的检查
@@ -63,20 +63,20 @@
 设置从面板内的页面变成独立窗口之后，以下几条一起保证「改一处、另一处立刻可见」与「设置窗口不会
 被面板的规则带走」：
 
-1. `tests/settings-store.test.ts`：写入立刻采纳自己的答案、宿主广播同一个值算回声（只通知一次）、
+1. `tests/settings/settings-store.test.ts`：写入立刻采纳自己的答案、宿主广播同一个值算回声（只通知一次）、
    嵌套字段（`platformVisibility`）的变化能被认出来、`dispose()` 后不再监听。
-2. `tests/settings-window.test.tsx`：分类只挂载一个、方向键在同一控件内移动、`panel://settings-section`
+2. `tests/settings/settings-window.test.tsx`：分类只挂载一个、方向键在同一控件内移动、`panel://settings-section`
    到达时切分类、`settings_ready` 只在首次渲染后发一次；两个窗口同屏时（`renderBothWindows`）
    改一项，面板上的卡片当场变化。
-3. `tests/panel-settings.test.tsx`：面板四个入口各自请求哪个 section；面板本身不再渲染设置界面。
+3. `tests/settings/panel-settings.test.tsx`：面板四个入口各自请求哪个 section；面板本身不再渲染设置界面。
 4. `src-tauri/src/lib.rs`：`only_writes_that_change_what_is_collected_re_collect`（呈现类写入不触发
    采集、采集类写入触发且同平台去重）、`the_settings_write_is_broadcast_to_every_window`（写入后
    广播、凭据写入同样会重新采集）、`a_section_request_lands_on_a_real_section`、
    `the_settings_window_is_fixed_and_decorated`（尺寸、装饰、不置顶、不注册失焦收起）、
    `the_settings_window_sits_beside_the_panel_not_on_it` 与 `..._stays_inside_a_work_area_it_does_not_fit`。
-5. `tests/panel-motion.test.ts`：守卫读 `panel.css` 与 `settings.css` 两份样式，分类选中与内容入场
+5. `tests/panel/panel-motion.test.ts`：守卫读 `panel.css` 与 `settings.css` 两份样式，分类选中与内容入场
    都在登记表里；面板的页面转场条目已随页面一起删除。
-6. `tests/panel-width.test.ts`：设置窗口把面板的 350px 宽度与 320px 最小高度中和掉，且 `panel.css`
+6. `tests/panel/panel-width.test.ts`：设置窗口把面板的 350px 宽度与 320px 最小高度中和掉，且 `panel.css`
    自己不被这些中和改动。
 
 ## 两个窗口的打包产物检查

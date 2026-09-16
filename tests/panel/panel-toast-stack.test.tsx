@@ -9,11 +9,11 @@
 // time.
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PanelSettings, PanelSnapshot } from '../src/shared/desktop-contract';
-import type { RefreshResult } from '../src/shared/usage-client';
-import { PanelApp, type PanelHostProps } from '../src/desktop/panel/PanelApp';
-import { NOTICE_ERROR_TIMEOUT_MS, PANEL_TOAST_EXIT_MS } from '../src/desktop/panel/panel-toasts';
-import { createFakeUsageClient, failedStateOf, metricOf, providerStateOf, snapshotOf } from '../src/desktop/lib/fake-client';
+import type { PanelSettings, PanelSnapshot } from '../../src/shared/desktop-contract';
+import type { RefreshResult } from '../../src/shared/usage-client';
+import { PanelApp, type PanelHostProps } from '../../src/desktop/panel/PanelApp';
+import { NOTICE_ERROR_TIMEOUT_MS, PANEL_TOAST_EXIT_MS } from '../../src/desktop/panel/panel-toasts';
+import { createFakeUsageClient, failedStateOf, metricOf, providerStateOf, snapshotOf } from '../../src/desktop/lib/fake-client';
 
 const NOW = new Date('2026-09-10T08:00:00.000Z');
 

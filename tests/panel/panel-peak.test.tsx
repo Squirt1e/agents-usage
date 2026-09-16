@@ -6,20 +6,20 @@
 // stays quiet, an observed flip says exactly one line).
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { PanelApp, type PanelHostProps } from '../src/desktop/panel/PanelApp';
+import { PanelApp, type PanelHostProps } from '../../src/desktop/panel/PanelApp';
 import {
   createFakeUsageClient,
   defaultPanelSettings,
   metricOf,
   providerStateOf,
   snapshotOf
-} from '../src/desktop/lib/fake-client';
-import { providerView } from '../src/desktop/lib/metrics';
-import { PEAK_ROW_EXIT_MS } from '../src/desktop/settings/ProviderSettings';
-import { SettingsWindowHarness } from './helpers/windows';
-import { DeepSeekCard } from '../src/desktop/panel/DeepSeekCard';
-import { GlmCard } from '../src/desktop/panel/GlmCard';
-import { localDayIn, type PanelSettings, type PanelSnapshot } from '../src/shared/desktop-contract';
+} from '../../src/desktop/lib/fake-client';
+import { providerView } from '../../src/desktop/lib/metrics';
+import { PEAK_ROW_EXIT_MS } from '../../src/desktop/settings/ProviderSettings';
+import { SettingsWindowHarness } from '../helpers/windows';
+import { DeepSeekCard } from '../../src/desktop/panel/DeepSeekCard';
+import { GlmCard } from '../../src/desktop/panel/GlmCard';
+import { localDayIn, type PanelSettings, type PanelSnapshot } from '../../src/shared/desktop-contract';
 
 /** A Thursday: 09:30 in Shanghai (inside the morning peak window). */
 const NOW = new Date('2026-09-10T01:30:00.000Z');

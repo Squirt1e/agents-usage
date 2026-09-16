@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const CSS = readFileSync(new URL('../src/desktop/panel.css', import.meta.url), 'utf8').replace(
+const CSS = readFileSync(new URL('../../src/desktop/panel.css', import.meta.url), 'utf8').replace(
   /\/\*[\s\S]*?\*\//g,
   ''
 );

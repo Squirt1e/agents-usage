@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { renderPanel } from './helpers/windows';
+import { renderPanel } from '../helpers/windows';
 
 // The stylesheet is read by relative path: this file runs in jsdom, where
 // `import.meta.url` is not a file URL.

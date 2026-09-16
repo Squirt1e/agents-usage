@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { act, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { QuotaDisplay, type QuotaDisplayItem } from '../src/desktop/panel/QuotaDisplay';
+import { QuotaDisplay, type QuotaDisplayItem } from '../../src/desktop/panel/QuotaDisplay';
 import {
   BAR_BOX,
   BAR_INSET,
@@ -28,8 +28,8 @@ import {
   headTextOpacity,
   quotaShape,
   ringTextOpacity
-} from '../src/desktop/panel/quota-morph';
-import { PANEL_ANIMATING_ATTRIBUTE } from '../src/desktop/panel/panel-height';
+} from '../../src/desktop/panel/quota-morph';
+import { PANEL_ANIMATING_ATTRIBUTE } from '../../src/desktop/panel/panel-height';
 
 const WIDTH = 160;
 const NOW = new Date('2026-09-10T08:00:00.000Z');

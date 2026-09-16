@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { ReplayNumber } from '../src/desktop/panel/ReplayNumber';
+import { ReplayNumber } from '../../src/desktop/panel/ReplayNumber';
 
 describe('refresh number reel', () => {
   it('returns to live text after its roll so later data updates are not frozen', () => {

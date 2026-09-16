@@ -18,7 +18,7 @@
 
 样例的 `input` 与 `expect` 是采集实现的验收依据，行为变化必须同时更新样例对应的测试。
 Rust 侧由 `crates/usage-core/tests/contract_conformance.rs` 校验（`npm run rust:test`），
-面板侧共享契约由 `tests/contracts.test.ts` 校验（`npm test`）。
+面板侧共享契约由 `tests/shared/contracts.test.ts` 校验（`npm test`）。
 
 ## 1. 窗口（quota window）
 
@@ -137,7 +137,7 @@ Rust 侧由 `crates/usage-core/tests/contract_conformance.rs` 校验（`npm run 
 
 两个清单必须同时改：`SETTINGS_SECTIONS` 在 `settings/SettingsPanel.tsx` 与 `src-tauri/src/lib.rs` 各有一份
 （前端决定渲染哪个分类，宿主决定请求能否落到一个真实分类上），由 Rust 测试
-`a_section_request_lands_on_a_real_section` 与前端测试 `settings-window.test.tsx` 分别守住。
+`a_section_request_lands_on_a_real_section` 与前端测试 `tests/settings/settings-window.test.tsx` 分别守住。
 
 ## 9. 覆盖范围说明
 

@@ -13,8 +13,8 @@ import {
   peakPreviewOf,
   peakStateAt,
   type PeakWindowDef
-} from '../src/desktop/lib/peak-windows';
-import { parsePanelSettings, type PanelSettings } from '../src/shared/desktop-contract';
+} from '../../src/desktop/lib/peak-windows';
+import { parsePanelSettings, type PanelSettings } from '../../src/shared/desktop-contract';
 
 const settings = (value: unknown): PanelSettings => parsePanelSettings(value);
 

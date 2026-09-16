@@ -13,7 +13,7 @@ import {
   PANEL_TOAST_LIMIT,
   pushToast,
   type PanelToast
-} from '../src/desktop/panel/panel-toasts';
+} from '../../src/desktop/panel/panel-toasts';
 
 /** Announce a series of messages, ids handed out the way `PanelApp` hands them out. */
 function announce(...texts: string[]): PanelToast[] {

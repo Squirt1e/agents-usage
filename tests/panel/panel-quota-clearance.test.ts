@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const CSS = readFileSync(new URL('../src/desktop/panel.css', import.meta.url), 'utf8');
+const CSS = readFileSync(new URL('../../src/desktop/panel.css', import.meta.url), 'utf8');
 
 const CLEAN = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
 

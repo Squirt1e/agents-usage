@@ -51,7 +51,7 @@
 页面、显隐、选中、悬停、状态、数值和尺寸变化都必须遵守 [`AGENTS.md`](../../AGENTS.md) §1。
 同一元素换状态用 `transition`，挂载后的入场用 `animation`，宿主窗口尺寸和 SVG 路径这类 CSS
 无法插值的对象才允许逐帧驱动。任何新切换必须登记到
-[`panel-motion.test.ts`](../../tests/panel-motion.test.ts)。
+[`panel-motion.test.ts`](../../tests/panel/panel-motion.test.ts)。
 
 ## 3. 窗口与布局骨架
 
@@ -120,7 +120,7 @@ PanelApp                                  SettingsApp
   `--text-base` 13（设置窗口文档基准）→ `--text-lg` 13.5（面板窗口标题）→
   `--text-xl` 15（设置窗口 pane 标题）→ `--text-display` 19（总览大号数字）。
   相邻档位至少差 0.5px，否则不成其为层级；由
-  [`panel-type-scale.test.ts`](../../tests/panel-type-scale.test.ts) 守住，新增字号必须落进档位。
+  [`panel-type-scale.test.ts`](../../tests/panel/panel-type-scale.test.ts) 守住，新增字号必须落进档位。
 - 文档基准字号用 longhand 声明而不是 `font` 简写：简写里只要有一个部件是 `var()`，
   token 不合法时整条声明都会失效并退回继承值。
 - 平台名、区块标题使用半粗体，不新增大号“宣传型”标题。
@@ -187,7 +187,7 @@ CSS 选择器伪造一个未进入 `ProviderId` 的平台。
 卡片的悬停阴影与高峰柔光只有内容区那 10px 留白可以铺开：`.panel-body` 是滚动容器，裁切发生在它
 自己的 padding box 上，而最外圈的卡片到那条边正好一个 `padding`（上、下、两侧都一样）。阴影的
 blur（加 spread，再加向下的 offset）一旦超过这个数，收尾就不是淡出而是被切平——最下面那张卡片的
-下缘会在页脚上方留下一条硬边。预算由 `tests/panel-card-shadow.test.ts` 守住。
+下缘会在页脚上方留下一条硬边。预算由 `tests/panel/panel-card-shadow.test.ts` 守住。
 
 ### 5.3 数据展示
 
@@ -312,7 +312,7 @@ GLM 钱包、DeepSeek 余额、DeepSeek 网页用量一致），有凭据但采�
 由开关控制的连接紧跟开关之后（放在开关之前会被读成「这个开关当前无效」）。不允许再在标题旁用第二种
 标记复述同一件事（曾经存在过一枚胶囊，已删除）。失败时状态行必须带上出路——默认建议表在同一个文件里
 （`recoveryAdvice`），连接可以覆盖为自己的说法，但**每一种失败类型都要有一句**，包括首次使用时最常见
-的「需要配置」；由 [`status-vocabulary.test.ts`](../../tests/status-vocabulary.test.ts) 遍历所有类型守住。
+的「需要配置」；由 [`status-vocabulary.test.ts`](../../tests/shared/status-vocabulary.test.ts) 遍历所有类型守住。
 
 | 语义 | 标准文案 | tone |
 | --- | --- | --- |
@@ -392,7 +392,7 @@ CSS 动效由文件末尾的 `prefers-reduced-motion` 全局兜底关闭。窗�
 - [ ] 缺失、缓存、估算、实验和错误状态都有明确展示，不用 `0` 冒充缺失值。
 - [ ] 新颜色使用语义 Token，深浅主题变量集合一致，没有规则内颜色字面量。
 - [ ] 数值使用统一格式化与等宽数字，长内容不会造成横向滚动。
-- [ ] 所有可见切换都有合规动效，并登记到 `tests/panel-motion.test.ts`。
+- [ ] 所有可见切换都有合规动效，并登记到 `tests/panel/panel-motion.test.ts`。
 - [ ] `prefers-reduced-motion` 下 CSS 与 JS 动效都能停止。
 - [ ] 鼠标、键盘和屏幕阅读器都能完成操作，焦点往返清晰。
 - [ ] 新卡片不会破坏最多三个完整卡片的高度预算；设置页不会自行改变宿主高度。
@@ -403,14 +403,14 @@ CSS 动效由文件末尾的 `prefers-reduced-motion` 全局兜底关闭。窗�
 
 | 关注点 | 实现入口 | 自动验证 |
 | --- | --- | --- |
-| 颜色变量、主题角色、对比度 | `src/desktop/panel.css`、`lib/theme.ts` | `tests/panel-palette.test.ts`、`tests/panel-theme.test.tsx` |
-| 切换动效、时长、减弱动效 | `panel.css`、`settings.css`、`panel/panel-height.ts`、`panel/quota-morph.ts` | `tests/panel-motion.test.ts`、`tests/panel-height-hook.test.tsx`、`tests/panel-quota-morph.test.tsx` |
-| 面板宽度、高度规则、设置窗口的尺寸中和 | `panel.css`、`settings.css`、`panel/panel-height.ts`、`src-tauri/src/lib.rs` | `tests/panel-width.test.ts`、`tests/panel-height.test.ts` |
-| 两个窗口：开窗入口、分类、共用设置 | `settings/SettingsPanel.tsx`、`settings/settings-window.ts`、`settings/settings-store.ts`、`lib/desktop-client.ts`、`src-tauri/src/lib.rs` | `tests/settings-window.test.tsx`、`tests/panel-settings.test.tsx`、`tests/settings-store.test.ts` |
-| 空态和遮挡 | `panel/MetricStates.tsx`、`panel/GlmCard.tsx` | `tests/panel-cover.test.tsx`、`tests/panel-motion.test.ts` |
-| 面板只有一页（没有页面转场可回归） | `panel/Panel.tsx`、`panel/OverviewView.tsx`、`panel/PlatformCard.tsx` | `tests/panel-overview.test.tsx`、`tests/panel-transition.test.tsx` |
-| 设置控件和排序 | `settings/AppSettings.tsx`、`settings/ProviderSettings.tsx`、`settings/PlatformSettings.tsx` | `tests/settings-window.test.tsx`、`tests/panel-selection.test.ts` |
-| 状态和临时消息 | `components/StatusRow.tsx`、`panel/PanelToasts.tsx` | `tests/panel-toasts.test.ts`、`tests/panel-toast-stack.test.tsx` |
+| 颜色变量、主题角色、对比度 | `src/desktop/panel.css`、`lib/theme.ts` | `tests/panel/panel-palette.test.ts`、`tests/panel/panel-theme.test.tsx` |
+| 切换动效、时长、减弱动效 | `panel.css`、`settings.css`、`panel/panel-height.ts`、`panel/quota-morph.ts` | `tests/panel/panel-motion.test.ts`、`tests/panel/panel-height-hook.test.tsx`、`tests/panel/panel-quota-morph.test.tsx` |
+| 面板宽度、高度规则、设置窗口的尺寸中和 | `panel.css`、`settings.css`、`panel/panel-height.ts`、`src-tauri/src/lib.rs` | `tests/panel/panel-width.test.ts`、`tests/panel/panel-height.test.ts` |
+| 两个窗口：开窗入口、分类、共用设置 | `settings/SettingsPanel.tsx`、`settings/settings-window.ts`、`settings/settings-store.ts`、`lib/desktop-client.ts`、`src-tauri/src/lib.rs` | `tests/settings/settings-window.test.tsx`、`tests/settings/panel-settings.test.tsx`、`tests/settings/settings-store.test.ts` |
+| 空态和遮挡 | `panel/MetricStates.tsx`、`panel/GlmCard.tsx` | `tests/panel/panel-cover.test.tsx`、`tests/panel/panel-motion.test.ts` |
+| 面板只有一页（没有页面转场可回归） | `panel/Panel.tsx`、`panel/OverviewView.tsx`、`panel/PlatformCard.tsx` | `tests/panel/panel-overview.test.tsx`、`tests/panel/panel-transition.test.tsx` |
+| 设置控件和排序 | `settings/AppSettings.tsx`、`settings/ProviderSettings.tsx`、`settings/PlatformSettings.tsx` | `tests/settings/settings-window.test.tsx`、`tests/panel/panel-selection.test.ts` |
+| 状态和临时消息 | `components/StatusRow.tsx`、`panel/PanelToasts.tsx` | `tests/panel/panel-toasts.test.ts`、`tests/panel/panel-toast-stack.test.tsx` |
 
 规范与实现冲突时，不要静默选择其中一边：先判断是实现偏离已有约束，还是规范因新决策需要更新。
 行为决策进入 OpenSpec；工程约定同步更新本文；可机械验证的不变量同步增加或更新测试守卫。

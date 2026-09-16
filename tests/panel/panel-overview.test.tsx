@@ -5,7 +5,7 @@
 // call log.
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { PanelApp } from '../src/desktop/panel/PanelApp';
+import { PanelApp } from '../../src/desktop/panel/PanelApp';
 import {
   createFakeUsageClient,
   defaultPanelSettings,
@@ -14,10 +14,10 @@ import {
   providerStateOf,
   snapshotOf,
   type FakeUsageClient
-} from '../src/desktop/lib/fake-client';
-import type { ProviderId } from '../src/shared/contracts';
-import type { PanelSettings, PanelSnapshot } from '../src/shared/desktop-contract';
-import type { PanelHostProps } from '../src/desktop/panel/PanelApp';
+} from '../../src/desktop/lib/fake-client';
+import type { ProviderId } from '../../src/shared/contracts';
+import type { PanelSettings, PanelSnapshot } from '../../src/shared/desktop-contract';
+import type { PanelHostProps } from '../../src/desktop/panel/PanelApp';
 
 const NOW = new Date('2026-09-10T08:00:00.000Z');
 

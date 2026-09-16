@@ -164,7 +164,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   这类短语），面板（`src/desktop/lib/desktop-client.ts` 的 `hostFailure`）解码后复用网页传输那套
   状态映射（`src/shared/usage-client.ts` 的 `serviceFailure`），传输层包装不进界面。原因可能是
   一整句，因此状态行允许换行：掩码/未配置与删除入口不收缩，反馈独占一行并在行内断行
-  （`tests/panel-width.test.ts` 守住）。粘贴值自带的 `Bearer ` 前缀在服务端写入前被去掉，
+  （`tests/panel/panel-width.test.ts` 守住）。粘贴值自带的 `Bearer ` 前缀在服务端写入前被去掉，
   因此整段 `Authorization` 头也能直接用；凭据状态按服务实际返回的形状解析（本机服务是带
   `target` 字段的数组，早先的服务版本是按目标键控的对象）。
 - 采集核心（`crates/usage-core`）：契约、脱敏、Keychain、SQLite 存储、日消费估算、Codex/
@@ -194,7 +194,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   都按平台分到各自的分类里。DeepSeek 网页用量连接关闭时主卡不显示今日
   用量，启用但未配置 Token 时只显示毛玻璃占位，不回退展示余额差分估算。两套配色共用同一组
   颜色变量，规则中不写硬编码颜色
-  （由 `tests/panel-palette.test.ts` 守住）。浅色采用 macOS 设置风格的系统灰背景、白色分组卡片、
+  （由 `tests/panel/panel-palette.test.ts` 守住）。浅色采用 macOS 设置风格的系统灰背景、白色分组卡片、
   中性深灰文字与细分隔线；平台管理行之间使用直线分隔，不给分隔线附加行圆角。操作、焦点和选中使用系统蓝，开启状态使用系统绿，青绿／草绿／靛蓝
   保留给平台额度与标识，详见
   [`refine-light-palette`](../../openspec/changes/archive/2026-09-15-refine-light-palette/proposal.md)。开关的关闭态由
@@ -204,7 +204,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   界面动效按仓库规则「所有切换都要有过渡动画」
   实现（`AGENTS.md` §1）：分类选中、内容入场、窗口高度、状态切换、数值变化各自用
   transition / animation / 逐帧上报，`prefers-reduced-motion` 统一关闭，切换点登记在
-  `tests/panel-motion.test.ts`（该守卫读 `panel.css` 与 `settings.css` 两份样式）。
+  `tests/panel/panel-motion.test.ts`（该守卫读 `panel.css` 与 `settings.css` 两份样式）。
 - 额度展示的圆环与进度条是同一条描边的两种几何，二者只能通过点击条目本身切换（整个条目都是
   热区，重置时间行只有自身可点时例外；设置页没有形态开关）。全局设置的「外观」提供一个
   「额度数值」的「剩余 / 已用」选择，统一作用于 Codex 与 GLM，默认显示剩余量；缺少所选方向的指标时显示
@@ -212,7 +212,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   [`fix-quota-shape-morph`](../../openspec/changes/archive/2026-09-15-fix-quota-shape-morph/proposal.md)：几何由
   `src/desktop/panel/quota-morph.ts` 的纯函数给出（断开解开 → 回直 → 下移三段），`QuotaDisplay`
   逐帧绘制（WebKit 没有可插值的 `d`），布局由 CSS 从 `--quota-drop` 推出，静态检查见
-  `tests/panel-quota-morph.test.tsx`。
+  `tests/panel/panel-quota-morph.test.tsx`。
 - GLM 套餐的 5 小时与每周额度由接口的窗口单位和数量区分；两者即使共用 `TOKENS_LIMIT` 或
   `CREDIT_LIMIT` 类型，也不会覆盖彼此。接口暂未返回每周额度时，卡片仍保留「每周额度」并显示
   `—`，不拿 5 小时的数值代替；月度工具额度若返回也照常显示。
@@ -246,7 +246,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   Codex CLI 路径不回填（打开该页点保存会抹掉已存路径）、给删除凭据加就地确认、把禁用态分成
   「持续不可用」（`--disabled-*` 表面，标签仍可读）与「写入期间的短暂禁用」（保留淡化）两档、
   把连接状态收敛成区块正文首行一种呈现并补齐每种失败的恢复建议、把 11 档字号收敛成 8 个命名档
-  （`tests/panel-type-scale.test.ts` 守住）、去掉与 pane 标题重复的区块标题、补上开关自身的
+  （`tests/panel/panel-type-scale.test.ts` 守住）、去掉与 pane 标题重复的区块标题、补上开关自身的
   pending 态与外观控件的真忙态、把滚动条抑制收进面板文档让设置窗口恢复系统滚动指示。
 
 尚未完成的是需要真实 macOS 桌面会话的验收（任务 8.4–8.8）：WebView 视觉对照、菜单栏实机

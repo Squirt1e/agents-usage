@@ -3,8 +3,8 @@ import {
   markSnapshotStale,
   normalizeMetric,
   providerSnapshotSchema
-} from '../src/shared/contracts';
-import { redactSecrets } from '../src/shared/redaction';
+} from '../../src/shared/contracts';
+import { redactSecrets } from '../../src/shared/redaction';
 
 describe('normalized usage contracts', () => {
   it('represents an omitted value as unavailable instead of zero', () => {

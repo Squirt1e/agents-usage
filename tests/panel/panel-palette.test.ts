@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const CSS = readFileSync(new URL('../src/desktop/panel.css', import.meta.url), 'utf8');
+const CSS = readFileSync(new URL('../../src/desktop/panel.css', import.meta.url), 'utf8');
 
 const withoutComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -131,7 +131,7 @@ describe('panel palette', () => {
  * reference, never a value.
  */
 describe('settings window palette', () => {
-  const settingsClean = readFileSync(new URL('../src/desktop/settings.css', import.meta.url), 'utf8').replace(
+  const settingsClean = readFileSync(new URL('../../src/desktop/settings.css', import.meta.url), 'utf8').replace(
     /\/\*[\s\S]*?\*\//g,
     ''
   );

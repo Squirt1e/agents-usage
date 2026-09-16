@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { PanelApp } from '../src/desktop/panel/PanelApp';
-import { createFakeUsageClient, failedStateOf, metricOf, providerStateOf, snapshotOf } from '../src/desktop/lib/fake-client';
-import { parsePanelSnapshot, type PanelSettings, type PanelSnapshot } from '../src/shared/desktop-contract';
-import { defaultPanelSettings } from '../src/desktop/lib/fake-client';
-import { connectionIssues, issueHeading } from '../src/desktop/panel/connection-issues';
+import { PanelApp } from '../../src/desktop/panel/PanelApp';
+import { createFakeUsageClient, failedStateOf, metricOf, providerStateOf, snapshotOf } from '../../src/desktop/lib/fake-client';
+import { parsePanelSnapshot, type PanelSettings, type PanelSnapshot } from '../../src/shared/desktop-contract';
+import { defaultPanelSettings } from '../../src/desktop/lib/fake-client';
+import { connectionIssues, issueHeading } from '../../src/desktop/panel/connection-issues';
 
 const NOW = new Date('2026-09-10T08:00:00.000Z');
 const LONG_ERROR = 'Codex app-server error -32603: failed to refresh quota because the upstream connection was interrupted';
