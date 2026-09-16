@@ -61,14 +61,17 @@ function stubBox(element: HTMLElement, key: 'panel' | 'body') {
   });
 }
 
-function Harness(props: { maxHeight?: number; onSetHeight: (height: number) => void }) {
+function Harness(props: { maxHeight?: number; paddedBody?: boolean; onSetHeight: (height: number) => void }) {
   usePanelHeight({
     onSetHeight: props.onSetHeight,
     ...(props.maxHeight !== undefined ? { maxHeight: props.maxHeight } : {})
   });
   return (
     <div className="panel">
-      <div className="panel-body">
+      <div
+        className="panel-body"
+        style={props.paddedBody ? { paddingTop: '10px', paddingBottom: '4px' } : undefined}
+      >
         <div data-testid="content" />
       </div>
     </div>
@@ -96,6 +99,18 @@ describe('usePanelHeight', () => {
     prepare();
 
     await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME + 620));
+  });
+
+  it('includes the scrolling body padding so the footer cannot clip the last card', async () => {
+    // `clientHeight` already includes padding, while the measured content border box
+    // does not. Leaving the padding out makes the native window exactly this many
+    // pixels too short, so its fixed footer appears over the final card.
+    contentHeight = 620;
+    const onSetHeight = vi.fn();
+    render(<Harness paddedBody onSetHeight={onSetHeight} />);
+    prepare();
+
+    await waitFor(() => expect(onSetHeight).toHaveBeenCalledWith(CHROME + 14 + 620));
   });
 
   it('has no card-count cap to stop at', async () => {

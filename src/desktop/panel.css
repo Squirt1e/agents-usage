@@ -524,10 +524,9 @@ button {
      carrying them are allowed to shrink (see `.state-block`). */
   overflow-x: hidden;
   overscroll-behavior: contain;
-  /* The bottom inset is smaller than the other three: the status module below
-     carries a gap of its own, and the two together read as a loose end under the
-     last card. */
-  padding: 10px 10px 4px;
+  /* The first and last cards keep the same distance from the frame. This remains
+     true in compact mode, when the header and bottom status module both leave. */
+  padding: 10px;
 }
 
 /* The frame's bottom status module: the sync line lives here rather than beside
@@ -537,14 +536,24 @@ button {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: space-between;
+  gap: 12px;
   flex: 0 0 auto;
   /* No rule above it: the status line sits on the panel's own background, a
-     little clear of the content instead of fenced off from it. */
-  padding: 4px 108px 9px 12px;
-  font-size: 9.5px;
+     little clear of the content instead of fenced off from it. The two status
+     groups own opposite ends of the row and share one vertical centre. */
+  padding: 2px 12px 4px;
+  font-size: var(--text-2xs);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.panel-footer-sync {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
 }
 
 .panel-footer-dot {
@@ -562,14 +571,14 @@ button {
   background: var(--mint);
 }
 
-/* The trigger stays outside the cards and reserves no conditional layout space. */
+/* The trigger stays in the footer's right-hand slot even while hidden, so the
+   sync group does not shift when a connection issue appears. */
 .connection-trigger {
-  position: absolute;
-  right: 10px;
-  top: 1px;
+  position: static;
+  flex: 0 0 auto;
   border: 1px solid transparent;
   border-radius: 8px;
-  padding: 2px 5px;
+  padding: 1px 5px;
   background: transparent;
   color: var(--warning);
   font: inherit;
@@ -651,8 +660,22 @@ button {
     box-shadow 150ms ease;
 }
 
+.provider-card:not(:first-child) {
+  margin-top: 10px;
+}
+
+/*
+ * A card's shadow only has the body's 10px gutter to fade in. `.panel-body` is a
+ * scroll container, so it clips at its own padding box — the last card's bottom
+ * edge sits exactly `padding` (10px) above that edge, and the same holds for the
+ * first card's top and for both sides. The shadow this replaced (`0 7px 18px`)
+ * reached 25px down, so its fade was sliced off flat 10px under the card: a hard
+ * horizontal seam across the panel just above the footer, where the eye expects
+ * the shadow to keep fading. Blur ≤ 10px and offset + blur ≤ 10px keeps the
+ * whole fade inside the gutter, which is why the lift is this tight.
+ */
 .provider-card:hover {
-  box-shadow: 0 7px 18px var(--card-hover-shadow);
+  box-shadow: 0 3px 7px var(--card-hover-shadow);
 }
 
 .provider-head {
@@ -1047,12 +1070,15 @@ button {
    completely once off-peak. */
 .provider-card[data-period='peak'] {
   border-color: var(--peak-border);
-  box-shadow: 0 0 0 1px var(--peak-border), 0 0 18px var(--peak-shadow);
+  /* Same 10px gutter budget as the hover shadow above: a wider glow than the
+     body leaves around a card is cut off at the body's edge, so the halo is
+     bounded by the gutter instead of the old 18px. */
+  box-shadow: 0 0 0 1px var(--peak-border), 0 0 7px var(--peak-shadow);
 }
 
 .peak-corner {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--text-2xs);
   color: var(--mint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1562,9 +1588,36 @@ button {
  */
 .panel-bottom {
   /* The stack's containing block. The wrapper hugs the footer, so it adds no
-     height of its own and the window's chrome measurement is unaffected. */
+     height of its own and the window's chrome measurement is unaffected. The
+     body's padding owns the edge inset; this wrapper must not compensate for it
+     with a positive or negative margin. */
   position: relative;
   flex: 0 0 auto;
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition:
+    opacity 150ms ease,
+    transform 180ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    visibility 0s;
+}
+
+/* The header and bottom furniture are one compact mode switch. Moving this
+   wrapper out of flow lets the host's existing measured-height travel close the
+   space immediately; opacity and translate carry the visible departure. */
+.panel[data-header-hidden] .panel-bottom {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity 150ms ease,
+    transform 180ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    visibility 0s linear 180ms;
 }
 
 /* Opened only on demand. Its width and height never enter card measurement. */

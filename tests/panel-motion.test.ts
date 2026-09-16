@@ -274,6 +274,7 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
   },
   { what: 'sync dot lights up when a sync lands', selector: '.panel-footer-dot', properties: ['background-color'] },
   { what: 'connection trigger appears and responds to hover', selector: '.connection-trigger', properties: ['opacity', 'visibility', 'background-color', 'border-color'] },
+  { what: 'bottom module leaves with the hidden header', selector: '.panel-bottom', properties: ['opacity', 'transform', 'visibility'] },
   { what: 'connection details open above the footer', selector: '.connection-details', properties: ['opacity', 'transform', 'visibility'] },
   { what: 'card gear turns to the accent on hover', selector: '.gear-button', properties: ['color'] },
   {

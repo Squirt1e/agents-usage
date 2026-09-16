@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // The panel is exactly as wide as its window, so nothing in it may scroll
 // sideways. That is not cosmetic: a body that overflows horizontally is panned by
 // the first two-finger swipe, and what the user sees is the whole frame shifted
@@ -27,6 +28,57 @@ describe('panel width: nothing scrolls sideways', () => {
     expect(page, 'the document must not be horizontally scrollable').toMatch(/overflow-x:\s*clip/);
   });
 
+  it('lays out the two footer groups with horizontal space-between and vertical centring', () => {
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    document.head.append(style);
+    const footer = document.createElement('footer');
+    footer.className = 'panel-footer';
+    document.body.append(footer);
+
+    const computed = getComputedStyle(footer);
+    expect(computed.justifyContent).toBe('space-between');
+    expect(computed.alignItems).toBe('center');
+    expect(computed.paddingLeft).toBe(computed.paddingRight);
+    expect(computed.paddingTop).toBe('2px');
+    expect(computed.paddingBottom).toBe('4px');
+
+    const trigger = document.createElement('button');
+    trigger.className = 'connection-trigger';
+    footer.append(trigger);
+    expect(getComputedStyle(trigger).position).toBe('static');
+    expect(getComputedStyle(trigger).paddingTop).toBe('1px');
+    expect(getComputedStyle(trigger).paddingBottom).toBe('1px');
+
+    footer.remove();
+    style.remove();
+  });
+
+  it('animates the bottom module away from layout with the hidden header', () => {
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    document.head.append(style);
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    const bottom = document.createElement('div');
+    bottom.className = 'panel-bottom';
+    panel.append(bottom);
+    document.body.append(panel);
+
+    expect(getComputedStyle(bottom).position).toBe('relative');
+    expect(getComputedStyle(bottom).opacity).toBe('1');
+
+    panel.dataset.headerHidden = '';
+    const hidden = getComputedStyle(bottom);
+    expect(hidden.position).toBe('absolute');
+    expect(hidden.opacity).toBe('0');
+    expect(hidden.visibility).toBe('hidden');
+    expect(hidden.transform).not.toBe('none');
+
+    panel.remove();
+    style.remove();
+  });
+
   it('never lets the scrolling body gain a horizontal axis', () => {
     const body = rule('.panel-body');
     expect(body).toMatch(/overflow-y:\s*auto/);
@@ -35,6 +87,39 @@ describe('panel width: nothing scrolls sideways', () => {
     // used value falls back to `hidden`, which is still pannable), so the content
     // is what has to fit.
     expect(body).not.toMatch(/overflow-x:\s*clip/);
+  });
+
+  it('lets the content own the frame inset and cards own their spacing', () => {
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    document.head.append(style);
+    const body = document.createElement('div');
+    body.className = 'panel-body';
+    const overview = document.createElement('div');
+    overview.className = 'overview';
+    const firstCard = document.createElement('article');
+    firstCard.className = 'provider-card';
+    const secondCard = document.createElement('article');
+    secondCard.className = 'provider-card';
+    const bottom = document.createElement('div');
+    bottom.className = 'panel-bottom';
+    overview.append(firstCard, secondCard);
+    body.append(overview);
+    document.body.append(body, bottom);
+
+    const bodyStyle = getComputedStyle(body);
+    expect(bodyStyle.paddingTop).toBe('10px');
+    expect(bodyStyle.paddingRight).toBe('10px');
+    expect(bodyStyle.paddingBottom).toBe('10px');
+    expect(bodyStyle.paddingLeft).toBe('10px');
+    expect(Number.parseFloat(getComputedStyle(overview).gap) || 0).toBe(0);
+    expect(Number.parseFloat(getComputedStyle(firstCard).marginTop) || 0).toBe(0);
+    expect(getComputedStyle(secondCard).marginTop).toBe('10px');
+    expect(Number.parseFloat(getComputedStyle(bottom).marginTop) || 0).toBe(0);
+
+    body.remove();
+    bottom.remove();
+    style.remove();
   });
 
   it('makes long service messages fit inside their independent detail layer', () => {
@@ -78,7 +163,7 @@ describe('panel width: nothing scrolls sideways', () => {
  * these assertions are what keep it scoped.
  */
 describe('settings window: nothing here reaches the panel', () => {
-  const SETTINGS_CSS = readFileSync(new URL('../src/desktop/settings.css', import.meta.url), 'utf8').replace(
+  const SETTINGS_CSS = readFileSync('src/desktop/settings.css', 'utf8').replace(
     /\/\*[\s\S]*?\*\//g,
     ''
   );
@@ -86,24 +171,26 @@ describe('settings window: nothing here reaches the panel', () => {
   /** Comments out, whitespace folded: a rule read as one line regardless of formatting. */
   const settingsClean = SETTINGS_CSS.replace(/\s+/g, ' ');
 
-  /**
-   * Every declaration of the rules that name this selector, whitespace folded so a
-   * selector written across two lines or an indented body reads as a one-liner.
-   *
-   * The pattern is written out rather than derived from a plain selector string:
-   * escaping a `.` through a regex build is exactly the kind of thing that quietly
-   * matches nothing, and a guard that matches nothing passes.
-   */
-  const settingsRule = (pattern: RegExp): string =>
-    [...settingsClean.matchAll(pattern)].map((match) => match[1]).join(' ');
+  it('keeps the browser fallback at the native window size', () => {
+    expect(settingsClean).toMatch(/\.settings-sheet\s*\{[^}]*width:\s*600px/);
+    expect(settingsClean).toMatch(/\.settings-sheet\s*\{[^}]*height:\s*400px/);
+  });
 
   it('keys the document rules on the settings document itself', () => {
-    const page = settingsRule(/:root:has\(#settings-root\)\s*body\s*\{([^}]*)\}/g);
-    expect(page, 'the settings document must state its own box').toMatch(/width:\s*100%/);
-    expect(page, 'and must not inherit the panel 350px width').not.toMatch(/width:\s*350px/);
-    // `overflow: hidden` on the document is right here — the window is fixed and the
-    // content area scrolls — and wrong in the panel, which is the point of scoping it.
-    expect(page).toMatch(/overflow:\s*hidden/);
+    // Exercise the selector instead of accepting text that merely mentions `html`.
+    // `:root:has(#settings-root) html` looks plausible but can never match: the root
+    // cannot be its own descendant, so WebKit keeps the inherited 350px width.
+    const style = document.createElement('style');
+    style.textContent = `${CSS}\n${SETTINGS_CSS}`;
+    document.head.append(style);
+    document.body.innerHTML = '<div id="settings-root"></div>';
+
+    expect(getComputedStyle(document.documentElement).width).toBe('100%');
+    expect(getComputedStyle(document.body).width).toBe('100%');
+    expect(getComputedStyle(document.body).overflow).toBe('hidden');
+
+    document.body.replaceChildren();
+    style.remove();
   });
 
   it('declares no unscoped top-level rule at all', () => {
@@ -137,5 +224,23 @@ describe('settings window: nothing here reaches the panel', () => {
     // The neutralisation is this sheet's job; editing `panel.css` to suit the
     // settings window would put the panel's own geometry at risk instead.
     expect(rule('\\.panel'), 'panel.css must keep the panel width').toMatch(/width:\s*350px/);
+  });
+
+  it('keeps the panel\'s hidden scrollbars out of this window', () => {
+    // Hiding the scrollbar is a decision about a 350px panel; the settings window
+    // loads the same sheet and its panes genuinely overflow (GLM by ~240px). A bare
+    // `*` suppression reached both documents, so the settings window had no
+    // scrollbar and no other sign that anything continued below the fold. It is
+    // scoped to the panel document now, which is what this asserts.
+    for (const [selector, pattern] of [
+      ['scrollbar-width', /:root:has\(#panel-root\)\s*\*\s*\{[^}]*scrollbar-width:\s*none/],
+      ['::-webkit-scrollbar', /:root:has\(#panel-root\)\s*::-webkit-scrollbar\s*\{[^}]*display:\s*none/]
+    ] as const) {
+      expect(CSS, `${selector} suppression must be scoped to the panel document`).toMatch(pattern);
+    }
+    // And nothing suppresses it globally any more.
+    expect(CSS, 'a bare `*` still hides every scrollbar in both documents').not.toMatch(
+      /(^|[},])\s*\*\s*\{[^}]*scrollbar-width/
+    );
   });
 });

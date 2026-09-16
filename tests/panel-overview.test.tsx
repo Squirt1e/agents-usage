@@ -348,7 +348,11 @@ describe('panel overview', () => {
     // Frame furniture, not content: it sits below the scrolling body, so opening the
     // settings window (a separate window) cannot move it.
     const footer = screen.getByTestId('panel-footer');
-    expect(within(footer).getByText(/最近同步于 \d{2}:\d{2}/)).toBeInTheDocument();
+    const sync = footer.querySelector('.panel-footer-sync');
+    expect(sync).not.toBeNull();
+    expect(within(sync as HTMLElement).getByText(/最近同步于 \d{2}:\d{2}/)).toBeInTheDocument();
+    expect(sync?.querySelector('.panel-footer-dot')).not.toBeNull();
+    expect(sync?.nextElementSibling).toHaveClass('connection-trigger');
   });
 
   it('asks the host to size the window to the panel content', async () => {

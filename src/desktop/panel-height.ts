@@ -280,11 +280,15 @@ export function usePanelHeight(options: PanelHeightOptions): void {
       // frame below, and the resulting half-padding error is invisible until the
       // window is a few pixels wrong. See `desiredPanelHeight`.
       const contentHeight = content.getBoundingClientRect().height;
+      const bodyStyle = window.getComputedStyle(body);
+      const bodyPadding =
+        (Number.parseFloat(bodyStyle.paddingTop) || 0) + (Number.parseFloat(bodyStyle.paddingBottom) || 0);
       const next = desiredPanelHeight({
-        // `panel.offsetHeight - body.clientHeight` is the border, header and
-        // footer; the body's padding belongs to the frame around the content, so it
-        // is counted here and the content is measured without it.
-        chrome: panel.offsetHeight - body.clientHeight,
+        // `clientHeight` includes padding while the content's border box does not.
+        // Add that padding back after subtracting the body's viewport; otherwise the
+        // native window is exactly the body inset too short and its footer appears to
+        // cut through the final card.
+        chrome: panel.offsetHeight - body.clientHeight + bodyPadding,
         contentHeight,
         ...(ceiling.current !== undefined ? { maxHeight: ceiling.current } : {})
       });

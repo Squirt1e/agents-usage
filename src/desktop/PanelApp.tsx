@@ -407,8 +407,10 @@ export function PanelApp(props: PanelAppProps) {
       headerVisible={props.host.headerVisible}
       footer={
         <>
-          <span className={`panel-footer-dot${lastSyncAt ? ' is-live' : ''}`} aria-hidden="true" />
-          <span>{syncText}</span>
+          <span className="panel-footer-sync">
+            <span className={`panel-footer-dot${lastSyncAt ? ' is-live' : ''}`} aria-hidden="true" />
+            <span>{syncText}</span>
+          </span>
           <button
             type="button"
             className={`connection-trigger${issues.length > 0 ? ' is-visible' : ''}`}
