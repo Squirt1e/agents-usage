@@ -9,7 +9,7 @@
  *   `/api/...` and `/events`: `GET /api/bootstrap` hands out the `X-Session-Token`
  *   used by every mutation (`PUT /api/settings`,
  *   `PUT|DELETE /api/credentials/:target`, `POST /api/refresh/:provider`).
- * - `createDesktopUsageClient(bridge)` (`src/desktop/desktop-client.ts`) talks
+ * - `createDesktopUsageClient(bridge)` (`src/desktop/lib/desktop-client.ts`) talks
  *   to the Tauri host and degrades to the HTTP client when no bridge exists, so
  *   the panel stays testable in a plain browser.
  */
