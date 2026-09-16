@@ -130,3 +130,19 @@
 `docs/superpowers/`。它们只服务于本地规划，被 `.gitignore` 排除，但仍是规格与设计的来源；
 根目录的 `.idea/` 与 `.theme-preview.html` 同样不入库。判定标准是 `git status` 不出现这些路径，
 由 `.gitignore` 与 `tests/verify-commit-msg.test.ts` 所在仓库根演示的忽略列表体现。
+
+---
+
+## 4. 发版规则（强制）
+
+- **版本号只有 `package.json` 一处**：`src-tauri/tauri.conf.json` 的 `version` 指向
+  `../package.json`，打包时 Tauri 现读它；`Cargo.toml` 的 `[workspace.package] version` 必须与
+  `package.json` 相同。判定标准是这两处接线不变、两个版本字符串相等，由
+  `tests/release-pipeline.test.ts` 守住。
+- **打包与发布交给 GitHub**：`main` 的推送触发 `.github/workflows/release.yml`——先
+  `typecheck`/`lint`/`test`，再打 universal dmg，最后更新 `v<version>` 那个 release；本地不再
+  手工打包上传。判定标准是触发时机、版本号来源、打包目标、发布方式这四条接线，同样由
+  `tests/release-pipeline.test.ts` 守住。
+- **release 正文由人写**：流水线只替换 dmg 资产，新版本建成 draft 等人补写；正文里不写校验和与
+  体积（同版本重建就会过期，资产页上的 SHA-256 由 GitHub 现算）。判定标准是工作流里不出现写正文
+  的命令，由上面那条测试守住。

@@ -1,0 +1,105 @@
+# main 的每次推送都重新打包 macOS 通用 dmg，并把它挂到 package.json 里那个版本的
+# release 上——发版不再需要本地跑打包命令。
+#
+# 为什么只在 macOS 上跑：交付物只有 .app 与 .dmg，Tauri 只能在 macOS 上出这两种包。
+# 为什么是 universal：README 承诺的发布包是 Intel 与 Apple Silicon 通用的单一 dmg。
+#   `scripts/desktop/build-service.mjs` 按 `TAURI_ENV_TARGET_TRIPLE` 判断要不要同时编译
+#   两份 sidecar 再用 lipo 合并，`--target universal-apple-darwin` 正是它的入口。
+# 为什么版本号只出现在 package.json：`src-tauri/tauri.conf.json` 的 version 写成
+#   `../package.json`，Tauri 打包时直接读它（落到 CFBundleShortVersionString）。因此这里
+#   不写第二份版本号，tag 与资产名都由读出来的那个值决定。
+#
+# release 正文由人维护：已存在的 release 只替换 dmg 资产，标题与正文一个字都不动；新版本
+# 建的是 draft（附自动变更列表），等补写完中文说明再发布。这样流水线既不会覆盖手写文案，
+# 也不会让一个没有正文的 release 直接对外。
+name: release
+
+on:
+  push:
+    branches: [main]
+
+# 发布必须串行：两个并发 run 会同时替换同一个 release 的资产。
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    # 发版门禁：类型、风格与测试全过才允许出包（AGENTS.md 要求的三条命令）。
+    #
+    # Rust 侧的检查（rust:check / rust:test / rust:clippy）仍留在本地：宿主依赖 macOS 专有
+    # 框架，Linux runner 上跑不了；放到 macOS 上又要为同一份 workspace 再编译一遍，而下面的
+    # 发布作业本来就会编译 release 二进制，编译错误在那里一定会暴露。
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+  release:
+    needs: verify
+    runs-on: macos-latest
+    timeout-minutes: 90 # release 构建是 lto + codegen-units = 1，慢是正常的；挂了别占满默认的 6 小时
+    permissions:
+      contents: write # 建 tag、建 release、替换资产
+    env:
+      # `tools/cargo.sh` 与 `tools/tauri.sh` 都把 CARGO_HOME 指到 `AGENTS_USAGE_CARGO_HOME`
+      # （默认是仓库内的 .dsh/cargo-home）。流水线里所有 cargo 都从这两个包装脚本进，所以只覆盖
+      # 这一个变量就够了：缓存步骤按固定路径把 registry 与 target 一起收进来，也不去动 rustup
+      # 自己的 CARGO_HOME 语义。
+      AGENTS_USAGE_CARGO_HOME: ${{ github.workspace }}/.cargo-home
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # 通用二进制要两个架构的标准库：runner 自己是 arm64，另一份靠 rustup 装上。
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      # release 构建是整条流水线最贵的一步（lto + codegen-units=1），缓存按 Cargo.lock 走：
+      # 依赖没动就只重编本仓库的 crate。
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .cargo-home/registry
+            .cargo-home/git
+            target
+          key: cargo-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.arch }}-
+      - run: npm ci
+      - name: 读出 package.json 里的版本号
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: 打包通用 dmg
+        run: npm run build:desktop -- --target universal-apple-darwin
+      - name: 更新对应版本的 release
+        # 这里刻意不写正文：正文由人维护，流水线只负责资产。
+        run: |
+          set -eo pipefail
+          tag="v${{ steps.version.outputs.version }}"
+          shopt -s nullglob
+          # Tauri 的出包名是 `<productName>_<version>_universal.dmg`，GitHub 上传时会把
+          # 文件名里的空格写成点。多于一个 dmg 说明构建产出了预期之外的东西，直接失败。
+          dmgs=(target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          if [[ "${#dmgs[@]}" -ne 1 ]]; then
+            echo "expected exactly one dmg, found ${#dmgs[@]}" >&2
+            exit 1
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${dmgs[0]}" --clobber
+          else
+            gh release create "$tag" --draft --title "$tag" --target "$GITHUB_SHA" \
+              --generate-notes "${dmgs[0]}"
+          fi
+          echo "$tag now carries $(basename "${dmgs[0]}")"
