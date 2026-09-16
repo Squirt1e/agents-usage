@@ -53,7 +53,7 @@ use crate::contracts::{
     Confidence, ConnectionId, ConnectionStatus, IsoTimestamp, MetricCapability, MetricDirection,
     MetricInput, MetricValue, ProviderId, ProviderSnapshot, StatisticScope, UsageMetric,
 };
-use crate::http::{CollectorError, CommandRunner};
+use crate::transport::{CollectorError, CommandRunner};
 use crate::redaction::redact_str;
 
 pub use crate::adapters::codex::cli::{

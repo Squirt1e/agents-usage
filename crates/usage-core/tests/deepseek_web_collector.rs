@@ -19,7 +19,7 @@ use usage_core::adapters::deepseek_web::{
     web_connection, AMOUNT_PATH, COST_PATH, PLATFORM_ORIGIN,
 };
 use usage_core::contracts::{Confidence, ErrorKind, ProviderSnapshot, UsageMetric};
-use usage_core::http::{CollectorError, HttpGet, HttpResponse, HttpTransport};
+use usage_core::transport::{CollectorError, HttpGet, HttpResponse, HttpTransport};
 use usage_core::adapters::deepseek_web::DeepSeekWebCollector;
 
 // ---------------------------------------------------------------------------

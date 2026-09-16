@@ -24,7 +24,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 use crate::contracts::ErrorKind;
-use crate::http::CollectorError;
+use crate::transport::CollectorError;
 
 /// Timing knobs for one connection.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -35,7 +35,7 @@ use usage_core::credentials::{
     keychain_delete_sync, keychain_get_sync, keychain_set_sync, CredentialStatus, CredentialTarget,
 };
 use usage_core::estimate::Timezone;
-use usage_core::http::SharedHttpTransport;
+use usage_core::transport::SharedHttpTransport;
 use usage_core::redaction::redact;
 use usage_core::scheduler::RefreshScheduler;
 

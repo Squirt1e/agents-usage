@@ -42,7 +42,7 @@ use crate::contracts::{
     ConnectionStatus, GlmRegion, IsoTimestamp, MetricCapability, MetricDirection, MetricInput,
     MetricValue, ProviderId, ProviderSnapshot, StatisticScope, UsageMetric,
 };
-use crate::http::{CollectorError as CollectorFailure, SharedHttpTransport};
+use crate::transport::{CollectorError as CollectorFailure, SharedHttpTransport};
 
 /// Path of the per-model activity endpoint.
 pub const MODEL_USAGE_PATH: &str = "/api/monitor/usage/model-usage";

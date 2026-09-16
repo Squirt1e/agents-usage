@@ -20,7 +20,7 @@
 //! Real runtime children exit for many reasons (no CLI, signed out, a crashed
 //! helper). The last ~2000 bytes of stderr are kept so the failure the caller
 //! sees carries the reason, and every message built from process output passes
-//! through the redaction helpers in [`crate::http::CollectorError::new`].
+//! through the redaction helpers in [`crate::transport::CollectorError::new`].
 
 use std::collections::HashMap;
 use std::fmt;
@@ -38,7 +38,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
 
 use crate::contracts::ErrorKind;
-use crate::http::CollectorError;
+use crate::transport::CollectorError;
 
 /// Arguments that put the Codex CLI into its JSON-RPC server mode.
 pub const APP_SERVER_ARGS: [&str; 2] = ["app-server", "--stdio"];

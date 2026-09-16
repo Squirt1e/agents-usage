@@ -39,7 +39,7 @@ use usage_core::contracts::{
     ProviderId, ProviderSnapshot,
 };
 use usage_core::fixtures::load_fixture;
-use usage_core::http::{CollectorError, CommandOutput, CommandRunner};
+use usage_core::transport::{CollectorError, CommandOutput, CommandRunner};
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex

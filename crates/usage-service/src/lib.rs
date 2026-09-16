@@ -35,8 +35,8 @@ use usage_core::contracts::{
 };
 use usage_core::credentials::{keychain_get_sync, CredentialTarget};
 use usage_core::estimate::Timezone;
-use usage_core::http::{CollectorError, SharedHttpTransport};
-use usage_core::http_client::ReqwestTransport;
+use usage_core::transport::{CollectorError, SharedHttpTransport};
+use usage_core::reqwest_transport::ReqwestTransport;
 use usage_core::scheduler::{RefreshPolicy, RefreshScheduler};
 use usage_core::storage::data_dir::{
     random_token, DataDirectory, ServiceDiscovery, StorageError, PROTOCOL_VERSION,

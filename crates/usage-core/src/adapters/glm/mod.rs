@@ -56,7 +56,7 @@ use crate::contracts::{
     CollectorError, ConnectionId, ErrorKind, IsoTimestamp, ProviderId, ProviderSnapshot,
     StatisticScope, UsageMetric,
 };
-use crate::http::{CollectorError as CollectorFailure, HttpGet, HttpResponse, SharedHttpTransport};
+use crate::transport::{CollectorError as CollectorFailure, HttpGet, HttpResponse, SharedHttpTransport};
 use crate::redaction::redact;
 
 /// Machine identifier of the GLM Coding Plan quota connection.

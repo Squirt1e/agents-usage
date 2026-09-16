@@ -24,7 +24,7 @@
 use std::collections::BTreeMap;
 
 use crate::contracts::ProviderId;
-use crate::http::{CollectorError, CommandOutput, CommandRunner};
+use crate::transport::{CollectorError, CommandOutput, CommandRunner};
 use crate::redaction::redact_str;
 
 /// Base service name shared with the legacy runtime.

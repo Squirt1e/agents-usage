@@ -66,7 +66,7 @@ use crate::contracts::{
     UsageMetric,
 };
 use crate::estimate::Money;
-use crate::http::{CollectorError as CollectorFailure, HttpGet, HttpResponse, SharedHttpTransport};
+use crate::transport::{CollectorError as CollectorFailure, HttpGet, HttpResponse, SharedHttpTransport};
 use crate::redaction::redact_str;
 
 /// Machine identifier of the experimental web usage connection.

@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use usage_core::http::{
+use usage_core::transport::{
     CollectorError, HttpGet, HttpResponse, HttpTransport, UnavailableHttpTransport,
 };
 use usage_service::{ServiceBuilder, ServiceConfig, ServiceError};

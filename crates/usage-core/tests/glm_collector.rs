@@ -31,7 +31,7 @@ use usage_core::estimate::{
     BalanceKey, BalanceObservation, BalanceStore, MemoryBalanceStore, Money, StoreError, Timezone,
 };
 use usage_core::fixtures::load_fixture;
-use usage_core::http::{CollectorError, HttpGet, HttpResponse, HttpTransport};
+use usage_core::transport::{CollectorError, HttpGet, HttpResponse, HttpTransport};
 
 // ---------------------------------------------------------------------------
 // Scripted in-memory transport

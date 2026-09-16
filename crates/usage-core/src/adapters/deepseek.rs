@@ -45,7 +45,7 @@ use crate::estimate::{
     BalanceStore, DailySpendEstimator, DailySpendRecorder, DailySummary, EstimateError, Money,
     Timezone, WALLET_CONNECTION,
 };
-use crate::http::{CollectorError, HttpGet, SharedHttpTransport};
+use crate::transport::{CollectorError, HttpGet, SharedHttpTransport};
 use crate::redaction::redact_str;
 
 /// The documented, read-only balance endpoint.

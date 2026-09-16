@@ -14,7 +14,7 @@ use std::time::Duration;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 
 use crate::contracts::ErrorKind;
-use crate::http::{CollectorError, HttpGet, HttpResponse, HttpTransport};
+use crate::transport::{CollectorError, HttpGet, HttpResponse, HttpTransport};
 
 /// Maximum redirects followed for one request.
 pub const MAX_REDIRECTS: usize = 5;

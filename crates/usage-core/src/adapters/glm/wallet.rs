@@ -57,7 +57,7 @@ use crate::contracts::{
 use crate::estimate::{
     BalanceStore, DailySpendEstimator, DailySpendRecorder, DailySummary, Money, Timezone,
 };
-use crate::http::{CollectorError as CollectorFailure, SharedHttpTransport};
+use crate::transport::{CollectorError as CollectorFailure, SharedHttpTransport};
 use crate::redaction::redact_str;
 
 /// Source string of the balance-delta spend estimate.

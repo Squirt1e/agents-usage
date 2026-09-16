@@ -26,7 +26,7 @@ use usage_core::estimate::{
     StoreError, Timezone,
 };
 use usage_core::fixtures::load_fixture;
-use usage_core::http::{CollectorError, HttpGet, HttpResponse, HttpTransport};
+use usage_core::transport::{CollectorError, HttpGet, HttpResponse, HttpTransport};
 
 const LOCAL_MIDNIGHT: &str = "2026-09-09T16:00:00.000Z";
 const LOCAL_NOON: &str = "2026-09-10T04:00:00.000Z";

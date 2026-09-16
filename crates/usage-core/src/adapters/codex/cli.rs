@@ -30,7 +30,7 @@ use tokio::process::{Child, Command};
 
 use crate::adapters::codex::json_rpc::keep_tail;
 use crate::contracts::ErrorKind;
-use crate::http::{CollectorError, CommandOutput, CommandRunner};
+use crate::transport::{CollectorError, CommandOutput, CommandRunner};
 
 /// Absolute locations probed after the configured path and `$CODEX_HOME`, in
 /// order. `~/` is expanded with the user's home directory.
