@@ -51,7 +51,7 @@ import {
 } from './panel-toasts';
 import type { StatusTone } from '../components/StatusRow';
 import { GearIcon, PinIcon, RefreshIcon } from '../components/icons';
-import { formatClockTime, latestAttemptFailed, latestSync, providerView } from '../lib/metrics';
+import { formatClockTime, latestAttemptFailed, providerView, visibleSyncSummary } from '../lib/metrics';
 
 /** Tag of the live-connection warning, so reopening the stream can take it back. */
 const CONNECTION_TAG = 'connection';
@@ -390,16 +390,18 @@ export function PanelApp(props: PanelAppProps) {
     onSetHeight: props.host.onSetHeight
   });
 
-  const lastSyncAt = latestSync(displayed.map((provider) => providerView(snapshot, provider)));
+  const syncSummary = visibleSyncSummary(displayed.map((provider) => providerView(snapshot, provider)));
   const issues = useMemo(() => connectionIssues(snapshot, settings), [snapshot, settings]);
   // The bottom status module is frame furniture: it neither scrolls with the body
   // nor changes with the page (there is only one). A missing sync time is reported
   // as missing, never as a zero or a time.
-  const syncText = lastSyncAt
-    ? `最近同步于 ${formatClockTime(lastSyncAt, settings.timezone)}`
-    : loading
-      ? '正在读取本地缓存'
-      : '尚未同步';
+  const syncText = loading && !snapshot
+    ? '正在读取本地缓存'
+    : syncSummary.state === 'none'
+      ? '未展示平台'
+      : syncSummary.state === 'partial'
+        ? '部分平台尚未同步'
+        : `全部同步于 ${formatClockTime(syncSummary.oldestSuccessAt, settings.timezone) ?? '时间未知'}`;
 
   return (
     <Panel
@@ -408,7 +410,7 @@ export function PanelApp(props: PanelAppProps) {
       footer={
         <>
           <span className="panel-footer-sync">
-            <span className={`panel-footer-dot${lastSyncAt ? ' is-live' : ''}`} aria-hidden="true" />
+            <span className={`panel-footer-dot${syncSummary.state === 'complete' ? ' is-live' : ''}`} aria-hidden="true" />
             <span>{syncText}</span>
           </span>
           <button
@@ -432,6 +434,7 @@ export function PanelApp(props: PanelAppProps) {
           <PanelIconButton
             label={refreshingAll ? '正在刷新' : '刷新全部平台'}
             disabled={refreshingAll || displayed.length === 0}
+            busy={refreshingAll}
             onClick={refreshDisplayed}
           >
             <RefreshIcon />

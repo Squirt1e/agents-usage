@@ -504,6 +504,24 @@ button {
   cursor: default;
 }
 
+/* Busy is temporarily non-interactive, but it is active work rather than an
+   unavailable action: keep the control present and let the icon carry the wait. */
+.icon-button.is-busy {
+  opacity: 1;
+  color: var(--action);
+}
+
+.icon-button.is-busy svg {
+  transform-origin: center;
+  animation: panel-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes panel-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .icon-button.is-active,
 .icon-button[aria-pressed="true"] {
   border-color: var(--active-border);
@@ -847,9 +865,8 @@ button {
   color: var(--warning);
 }
 
-/* Clickable reset line: flips countdown <-> absolute time. No hover styling on
-   purpose, same as the shape toggle: hovering must not suggest a state change
-   that only the click makes. */
+/* Clickable reset line: flips countdown <-> absolute time. Its tone changes on
+   hover and press so the plain text reads as a control before it is clicked. */
 .quota-reset-toggle {
   appearance: none;
   padding: 0;
@@ -858,6 +875,14 @@ button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+}
+
+.quota-reset-toggle:hover:not(:disabled) {
+  color: var(--action);
+}
+
+.quota-reset-toggle:active:not(:disabled) {
+  color: var(--text-dim);
 }
 
 .quota-reset-toggle:focus-visible {
@@ -2568,8 +2593,18 @@ button {
   width: 100%;
   padding: 0;
   border: 0;
-  background: none;
+  border-radius: 9px;
+  background: transparent;
   cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.quota-shape-button:hover:not(:disabled) {
+  background: var(--soft-button-bg);
+}
+
+.quota-shape-button:active:not(:disabled) {
+  background: var(--active-bg);
 }
 
 .quota-shape-button:disabled {

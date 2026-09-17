@@ -118,8 +118,23 @@ describe('panel overview', () => {
 
     const codex = await screen.findByTestId('card-codex');
     const glm = screen.getByTestId('card-glm');
+    expect(within(codex).queryByText('已用额度')).not.toBeInTheDocument();
+    expect(within(glm).queryByText('已用额度')).not.toBeInTheDocument();
     expect(within(codex).getByRole('group', { name: '5小时 已用 42%' })).toBeInTheDocument();
-    expect(within(glm).getByRole('group', { name: '5 小时额度 已用 28%' })).toBeInTheDocument();
+    expect(within(glm).getByRole('group', { name: '5小时 已用 28%' })).toBeInTheDocument();
+  });
+
+  it('keeps both quota controls available without a persistent instruction row', async () => {
+    renderPanel({ settings: { codexQuotaDisplay: 'ring', glmQuotaDisplay: 'bar' } });
+
+    const codex = await screen.findByTestId('card-codex');
+    const glm = screen.getByTestId('card-glm');
+    for (const card of [codex, glm]) {
+      expect(within(card).queryByText('剩余额度')).not.toBeInTheDocument();
+      expect(within(card).queryByText('点按图形或重置时间可切换')).not.toBeInTheDocument();
+      expect(within(card).getAllByRole('button', { name: /切换为(进度条|圆环)/ }).length).toBeGreaterThan(0);
+      expect(within(card).getAllByRole('button', { name: /切换为具体时间/ }).length).toBeGreaterThan(0);
+    }
   });
 
   it('renders the Codex and GLM quota modes from their independent settings', async () => {
@@ -129,7 +144,7 @@ describe('panel overview', () => {
     const glm = screen.getByTestId('card-glm');
     expect(within(codex).getByTestId('codex-quota-display')).toHaveAttribute('data-display-mode', 'bar');
     expect(within(codex).getByText('5小时')).toBeInTheDocument();
-    expect(within(glm).getByRole('group', { name: /5 小时额度/ })).toBeInTheDocument();
+    expect(within(glm).getByRole('group', { name: /5小时/ })).toBeInTheDocument();
     expect(within(glm).getByTestId('glm-quota-list')).toHaveAttribute('data-display-mode', 'ring');
   });
 
@@ -140,7 +155,7 @@ describe('panel overview', () => {
     expect(screen.getByTestId('card-glm')).toBeInTheDocument();
     expect(screen.getByTestId('card-deepseek')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '用量总览' })).toBeInTheDocument();
-    expect(screen.getByText(/最近同步于 \d{2}:\d{2}/)).toBeInTheDocument();
+    expect(screen.getByText(/全部同步于 \d{2}:\d{2}/)).toBeInTheDocument();
 
     // Every card carries a gear that opens its own configuration.
     expect(screen.getByRole('button', { name: '配置 Codex' })).toBeInTheDocument();
@@ -252,6 +267,28 @@ describe('panel overview', () => {
     expect(screen.queryAllByTestId('panel-toast')).toHaveLength(0);
   });
 
+  it('exposes a busy refresh control until every displayed refresh settles', async () => {
+    const client = createFakeUsageClient({ snapshot: overviewSnapshot() });
+    const held = holdRefreshes(client);
+    renderPanel({ client });
+    await screen.findByTestId('card-codex');
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新全部平台' }));
+
+    const busy = screen.getByRole('button', { name: '正在刷新' });
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute('aria-busy', 'true');
+    expect(busy).toHaveClass('is-busy');
+
+    held.release();
+    await waitFor(() => {
+      const settled = screen.getByRole('button', { name: '刷新全部平台' });
+      expect(settled).toBeEnabled();
+      expect(settled).not.toHaveAttribute('aria-busy');
+      expect(settled).not.toHaveClass('is-busy');
+    });
+  });
+
   it('takes the refresh verdict from the state the service published, not the reply', async () => {
     // The service answers a manual refresh with an acknowledgement and publishes
     // what it did, so a platform that came back with a fresh error is the failed
@@ -350,7 +387,7 @@ describe('panel overview', () => {
     const footer = screen.getByTestId('panel-footer');
     const sync = footer.querySelector('.panel-footer-sync');
     expect(sync).not.toBeNull();
-    expect(within(sync as HTMLElement).getByText(/最近同步于 \d{2}:\d{2}/)).toBeInTheDocument();
+    expect(within(sync as HTMLElement).getByText(/全部同步于 \d{2}:\d{2}/)).toBeInTheDocument();
     expect(sync?.querySelector('.panel-footer-dot')).not.toBeNull();
     expect(sync?.nextElementSibling).toHaveClass('connection-trigger');
   });
@@ -370,12 +407,44 @@ describe('panel overview', () => {
     expect(reported).toBeGreaterThanOrEqual(0);
   });
 
-  it('reports a missing sync time as missing rather than as a time', async () => {
-    renderPanel({ client: createFakeUsageClient({ snapshot: snapshotOf([]) }) });
+  it('uses the oldest visible provider time for an all-synced summary', async () => {
+    const snapshot = snapshotOf([
+      providerStateOf('codex', [], { capturedAt: '2026-09-10T08:30:00.000Z' }),
+      providerStateOf('glm', [], { capturedAt: '2026-09-10T08:31:00.000Z' }),
+      providerStateOf('deepseek', [], { capturedAt: '2026-09-10T08:32:00.000Z' })
+    ]);
+    renderPanel({ client: createFakeUsageClient({ snapshot }) });
 
     const footer = await screen.findByTestId('panel-footer');
-    await waitFor(() => expect(within(footer).getByText('尚未同步')).toBeInTheDocument());
-    expect(within(footer).queryByText(/最近同步于/)).not.toBeInTheDocument();
+    await waitFor(() => expect(within(footer).getByText('全部同步于 16:30')).toBeInTheDocument());
+    expect(within(footer).queryByText('全部同步于 16:32')).not.toBeInTheDocument();
+    expect(footer.querySelector('.panel-footer-dot')).toHaveClass('is-live');
+  });
+
+  it('reports when any visible provider has never synced', async () => {
+    const snapshot = snapshotOf([
+      providerStateOf('codex', [], { capturedAt: '2026-09-10T08:30:00.000Z' }),
+      providerStateOf('glm', [], { capturedAt: '2026-09-10T08:31:00.000Z' })
+    ]);
+    renderPanel({ client: createFakeUsageClient({ snapshot }) });
+
+    const footer = await screen.findByTestId('panel-footer');
+    await waitFor(() => expect(within(footer).getByText('部分平台尚未同步')).toBeInTheDocument());
+    expect(within(footer).queryByText(/全部同步于/)).not.toBeInTheDocument();
+    expect(footer.querySelector('.panel-footer-dot')).not.toHaveClass('is-live');
+  });
+
+  it('reports that there are no displayed providers without calling it a sync failure', async () => {
+    const client = createFakeUsageClient({
+      snapshot: snapshotOf([]),
+      settings: { platformVisibility: { codex: false, glm: false, deepseek: false } }
+    });
+    renderPanel({ client });
+
+    const footer = await screen.findByTestId('panel-footer');
+    await waitFor(() => expect(within(footer).getByText('未展示平台')).toBeInTheDocument());
+    expect(within(footer).queryByText(/同步/)).not.toBeInTheDocument();
+    expect(footer.querySelector('.panel-footer-dot')).not.toHaveClass('is-live');
   });
 
   it('reports a cooldown and keeps the last data on screen', async () => {

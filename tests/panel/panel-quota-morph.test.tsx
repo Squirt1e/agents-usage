@@ -13,7 +13,7 @@
 //      landing frame on the spot, and the two descriptions of the item overlap
 //      only while the morph runs.
 import { readFileSync } from 'node:fs';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { QuotaDisplay, type QuotaDisplayItem } from '../../src/desktop/panel/QuotaDisplay';
 import {
@@ -35,7 +35,7 @@ const WIDTH = 160;
 const NOW = new Date('2026-09-10T08:00:00.000Z');
 const ITEM: QuotaDisplayItem = {
   id: 'five-hour',
-  label: '5 小时额度',
+  label: '5小时',
   kind: 'five-hour',
   percent: 42,
   resetAt: '2026-09-10T09:42:18.000Z'
@@ -288,7 +288,7 @@ describe('quota item: the morph in the DOM', () => {
     };
   }
 
-  const renderItems = (mode: 'ring' | 'bar') =>
+  const renderItems = (mode: 'ring' | 'bar', replayKey?: number) =>
     render(
       <QuotaDisplay
         mode={mode}
@@ -297,9 +297,39 @@ describe('quota item: the morph in the DOM', () => {
         now={NOW}
         timezone="Asia/Shanghai"
         resetTimeFormat="countdown"
+        replayKey={replayKey}
         testId="quota"
       />
     );
+
+  it('does not replay refreshed digits again when the ring becomes a bar', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    frozenFrames();
+    const view = renderItems('ring', 1);
+    const item = screen.getByTestId('quota-item-five-hour');
+
+    // A fresh replay key still owns the one intended roll.
+    const refreshedDigits = [...item.querySelectorAll('.rolling-number-strip')];
+    expect(refreshedDigits.length).toBeGreaterThan(0);
+    for (const strip of refreshedDigits) fireEvent.animationEnd(strip);
+    expect(item.querySelector('.rolling-number-strip')).toBeNull();
+
+    // Changing only the shape must not create a second roll from zero.
+    act(() => view.rerender(
+      <QuotaDisplay
+        mode="bar"
+        valueMode="used"
+        items={[ITEM]}
+        now={NOW}
+        timezone="Asia/Shanghai"
+        resetTimeFormat="countdown"
+        replayKey={1}
+        testId="quota"
+      />
+    ));
+    expect(item.querySelector('.rolling-number-strip')).toBeNull();
+    expect(item.querySelector('.quota-item-head .quota-value')).toHaveTextContent('42%');
+  });
 
   it('draws the landing frame at once when motion is unwelcome', () => {
     vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('prefers-reduced-motion'), media: query }));

@@ -287,10 +287,15 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
   },
   {
     // The line turns into "等待刷新" in place; the words are replaced, while its
-    // tone is the property that carries the visible state change.
-    what: 'reset line turns into 等待刷新',
+    // tone is the property that carries both the state change and hover feedback.
+    what: 'reset line turns into 等待刷新 and responds to hover',
     selector: '.quota-reset',
     properties: ['color']
+  },
+  {
+    what: 'quota shape gains a hover and pressed surface',
+    selector: '.quota-shape-button',
+    properties: ['background-color']
   },
   {
     what: 'the quota arc and the quota bar follow the reading',
@@ -481,6 +486,7 @@ interface AnimationSwitch {
 }
 
 const ANIMATION_SWITCHES: AnimationSwitch[] = [
+  { what: 'the refresh icon turns while requests are in flight', selectors: ['.icon-button.is-busy svg'], animation: 'panel-refresh-spin' },
   { what: 'successful refresh restarts quota fill from zero', selectors: ['.quota-item.is-replaying .quota-shape-fill'], animation: 'quota-refresh-fill' },
   { what: 'successful refresh rolls visible digit columns from zero', selectors: ['.rolling-number-strip'], animation: 'replay-digit-roll' },
   { what: 'a message arrives in the stack', selectors: ['.panel-toast'], animation: 'panel-toast-in' },

@@ -320,9 +320,9 @@ export interface QuotaBar {
 }
 
 const GLM_BAR_LABELS: Record<string, string> = {
-  '5h': '5 小时额度',
-  weekly: '每周额度',
-  'tools.monthly': '月度工具额度'
+  '5h': '5小时',
+  weekly: '7天',
+  'tools.monthly': '月度'
 };
 
 const GLM_BAR_ORDER = ['5h', 'weekly', 'tools.monthly'];
@@ -625,14 +625,29 @@ export function formatResetLabel(
   return value === '等待刷新' ? value : `${value}后重置`;
 }
 
-/** Newest successful capture among the providers that are displayed. */
-export function latestSync(views: ProviderView[]): string | undefined {
-  let latest: string | undefined;
-  for (const view of views) {
-    if (!view.lastSuccessAt) continue;
-    if (!latest || new Date(view.lastSuccessAt).getTime() > new Date(latest).getTime()) latest = view.lastSuccessAt;
+export type VisibleSyncSummary =
+  | { state: 'none' }
+  | { state: 'partial' }
+  | { state: 'complete'; oldestSuccessAt: string };
+
+/**
+ * A conservative answer to "how fresh are all cards on screen?".
+ *
+ * The newest provider cannot stand in for the others: the footer says "全部同步"
+ * only when every visible provider has succeeded, and then reports the oldest of
+ * those successes — the instant by which the whole set was known to be current.
+ */
+export function visibleSyncSummary(views: ProviderView[]): VisibleSyncSummary {
+  if (views.length === 0) return { state: 'none' };
+  if (views.some((view) => !view.lastSuccessAt)) return { state: 'partial' };
+
+  let oldestSuccessAt = views[0]!.lastSuccessAt!;
+  for (const view of views.slice(1)) {
+    if (new Date(view.lastSuccessAt!).getTime() < new Date(oldestSuccessAt).getTime()) {
+      oldestSuccessAt = view.lastSuccessAt!;
+    }
   }
-  return latest;
+  return { state: 'complete', oldestSuccessAt };
 }
 
 /** Confidence markers the panel shows next to a value. */

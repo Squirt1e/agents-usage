@@ -87,6 +87,7 @@ export interface PanelIconButtonProps {
   pressed?: boolean;
   disabled?: boolean;
   active?: boolean;
+  busy?: boolean;
   onClick(): void;
   buttonRef?: (node: HTMLButtonElement | null) => void;
   children: ReactNode;
@@ -96,8 +97,9 @@ export function PanelIconButton(props: PanelIconButtonProps) {
   return (
     <button
       type="button"
-      className={`icon-button${props.active ? ' is-active' : ''}`}
+      className={`icon-button${props.active ? ' is-active' : ''}${props.busy ? ' is-busy' : ''}`}
       aria-label={props.label}
+      aria-busy={props.busy || undefined}
       {...(props.pressed === undefined ? {} : { 'aria-pressed': props.pressed })}
       disabled={props.disabled === true}
       onClick={props.onClick}

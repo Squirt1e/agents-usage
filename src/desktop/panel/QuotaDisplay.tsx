@@ -96,7 +96,7 @@ function ResetLine(props: { item: QuotaDisplayItem; now: Date; timezone?: string
 function QuotaItem(props: QuotaDisplayProps & { item: QuotaDisplayItem }) {
   const { item, mode } = props;
   const percent = item.percent === null ? null : clampPercent(item.percent);
-  const replay = !!props.replayKey && !props.covered && percent !== null;
+  const replayRequested = !!props.replayKey && !props.covered && percent !== null;
   const valueLabel = props.valueMode === 'remaining' ? '剩余' : '已用';
   const label = percent === null ? `${item.label} ${valueLabel}未返回` : `${item.label} ${valueLabel} ${formatPercent(percent)}%`;
   const itemRef = useRef<HTMLDivElement>(null);
@@ -105,7 +105,18 @@ function QuotaItem(props: QuotaDisplayProps & { item: QuotaDisplayItem }) {
   const ringTextRef = useRef<SVGGElement>(null);
   /** 0 = ring form, 1 = bar form; every frame between the two. */
   const progressRef = useRef(mode === 'bar' ? 1 : 0);
+  // `replayKey` remounts the item after a manual refresh. Remember the form that
+  // received that refresh so a later morph cannot remount the other form's digit
+  // reel and accidentally replay it from zero.
+  const replayModeRef = useRef(mode);
+  const [replayEligible, setReplayEligible] = useState(true);
   const [morphing, setMorphing] = useState(false);
+  const refreshReplay =
+    replayRequested && replayEligible && mode === replayModeRef.current && !morphing;
+
+  useEffect(() => {
+    if (mode !== replayModeRef.current) setReplayEligible(false);
+  }, [mode]);
 
   /**
    * The frame this item is showing at `progress`.
@@ -275,7 +286,7 @@ function QuotaItem(props: QuotaDisplayProps & { item: QuotaDisplayItem }) {
 
   return (
     <div
-      className={`quota-item${replay ? ' is-replaying' : ''}`}
+      className={`quota-item${refreshReplay ? ' is-replaying' : ''}`}
       data-mode={mode}
       role="group"
       aria-label={label}
@@ -326,7 +337,7 @@ function QuotaItem(props: QuotaDisplayProps & { item: QuotaDisplayItem }) {
               </g>
           ) : null}
         </svg>
-        {ringText && replay ? (
+        {ringText && refreshReplay ? (
           <span className="quota-ring-replay" aria-hidden="true">
             <ReplayNumber text={`${formatPercent(percent)}%`} replay />
           </span>
@@ -343,7 +354,7 @@ function QuotaItem(props: QuotaDisplayProps & { item: QuotaDisplayItem }) {
         <div className="quota-item-head" aria-hidden="true">
           <span className="quota-label">{item.label}</span>
           <span className="quota-value">
-            {percent === null ? '—' : <ReplayNumber text={`${formatPercent(percent)}%`} replay={replay} />}
+            {percent === null ? '—' : <ReplayNumber text={`${formatPercent(percent)}%`} replay={refreshReplay} />}
           </span>
         </div>
       ) : null}

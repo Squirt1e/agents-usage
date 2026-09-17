@@ -59,8 +59,8 @@ import {
  * instead of empty dashes.
  */
 const PLACEHOLDER_QUOTA: Array<{ id: string; label: string; percent: number; offsetSeconds: number }> = [
-  { id: '5h', label: '5 小时额度', percent: 28, offsetSeconds: 2 * 3600 + 18 * 60 + 45 },
-  { id: 'weekly', label: '每周额度', percent: 16, offsetSeconds: 5 * 86_400 + 6 * 3600 + 12 * 60 }
+  { id: '5h', label: '5小时', percent: 28, offsetSeconds: 2 * 3600 + 18 * 60 + 45 },
+  { id: 'weekly', label: '7天', percent: 16, offsetSeconds: 5 * 86_400 + 6 * 3600 + 12 * 60 }
 ];
 
 /** Placeholder wallet values for the frosted wallet cover. */

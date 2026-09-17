@@ -342,8 +342,8 @@ describe('GLM quota and wallet', () => {
       { quotaValueMode: 'remaining' }
     );
 
-    expect(screen.getByRole('group', { name: '5 小时额度 剩余 72%' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: '每周额度 剩余 84%' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '5小时 剩余 72%' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '7天 剩余 84%' })).toBeInTheDocument();
     expect(screen.getByText('72%')).toBeInTheDocument();
     expect(screen.getByText('84%')).toBeInTheDocument();
   });
@@ -354,18 +354,18 @@ describe('GLM quota and wallet', () => {
       metricOf({ key: 'quota.tools.monthly.remaining', value: 40, unit: 'percent', direction: 'remaining', connection: { provider: 'glm', connection: 'quota' } })
     ])]), { quotaValueMode: 'remaining', enabled: false });
 
-    expect(screen.getByRole('group', { name: '5 小时额度 剩余 100%' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: '每周额度 剩余未返回' })).toHaveTextContent('—');
-    expect(screen.getByRole('group', { name: '月度工具额度 剩余 40%' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '5小时 剩余 100%' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '7天 剩余未返回' })).toHaveTextContent('—');
+    expect(screen.getByRole('group', { name: '月度 剩余 40%' })).toBeInTheDocument();
     expect(screen.queryByTestId('glm-quota-mask')).not.toBeInTheDocument();
   });
 
   it('shows quota bars and the wallet together', () => {
     renderGlm(snapshotOf([providerStateOf('glm', glmMetrics, { connection: { provider: 'glm', connection: 'quota' } })]));
 
-    expect(screen.getByText('5 小时额度')).toBeInTheDocument();
+    expect(screen.getByText('5小时')).toBeInTheDocument();
     expect(screen.getByText('28%')).toBeInTheDocument();
-    expect(screen.getByText('每周额度')).toBeInTheDocument();
+    expect(screen.getByText('7天')).toBeInTheDocument();
     expect(screen.getByText('16%')).toBeInTheDocument();
     // Reset lines follow the Codex vocabulary: countdown by default.
     expect(screen.getByText('2 小时 18 分钟后重置')).toBeInTheDocument();
@@ -394,7 +394,7 @@ describe('GLM quota and wallet', () => {
     // filled with the placeholder windows, and the frosted hint goes on top.
     const mask = screen.getByTestId('glm-quota-mask');
     expect(mask).toHaveTextContent('暂无额度数据');
-    expect(screen.getByText('5 小时额度')).toBeInTheDocument();
+    expect(screen.getByText('5小时')).toBeInTheDocument();
     expect(screen.getByText('28%')).toBeInTheDocument();
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
     expect(screen.queryByTestId('glm-quota-empty')).not.toBeInTheDocument();
@@ -463,7 +463,7 @@ describe('GLM quota and wallet', () => {
     const mask = screen.getByTestId('glm-quota-mask');
     expect(mask).toHaveTextContent('暂无额度数据');
     expect(mask).not.toHaveTextContent('GLM rejected the Coding Plan key');
-    expect(screen.getByText('5 小时额度')).toBeInTheDocument();
+    expect(screen.getByText('5小时')).toBeInTheDocument();
     expect(screen.queryByText('套餐额度未返回')).not.toBeInTheDocument();
     // The wallet has data, so it stays uncovered.
     expect(screen.queryByTestId('glm-wallet-mask')).not.toBeInTheDocument();
@@ -482,7 +482,7 @@ describe('GLM quota and wallet', () => {
     expect(mask).not.toHaveTextContent('需要配置');
     expect(mask).not.toHaveTextContent('GLM Coding Plan API key is not configured');
     // The formal layout stays underneath the frosted cover, with placeholder data.
-    expect(screen.getByText('5 小时额度')).toBeInTheDocument();
+    expect(screen.getByText('5小时')).toBeInTheDocument();
     expect(screen.getByText('28%')).toBeInTheDocument();
     expect(screen.queryByText('套餐额度未返回')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '前往配置' })).not.toBeInTheDocument();
@@ -975,7 +975,7 @@ describe('local failures stay local', () => {
 
     expect(await screen.findByRole('button', { name: '连接异常 1' })).toBeInTheDocument();
     expect(within(screen.getByTestId('card-codex')).queryByText('Codex is not signed in')).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('card-glm')).getByRole('group', { name: '5 小时额度 剩余 72%' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('card-glm')).getByRole('group', { name: '5小时 剩余 72%' })).toBeInTheDocument();
     expect(screen.getByText('¥ 42.60')).toBeInTheDocument();
     expect(screen.getByText('¥ 86.42')).toBeInTheDocument();
     // The existing card gear remains; no failure-specific recovery entry is added.

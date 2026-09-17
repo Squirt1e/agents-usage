@@ -213,22 +213,27 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
 - 额度展示的圆环与进度条是同一条描边的两种几何，二者只能通过点击条目本身切换（整个条目都是
   热区，重置时间行只有自身可点时例外；设置页没有形态开关）。全局设置的「外观」提供一个
   「额度数值」的「剩余 / 已用」选择，统一作用于 Codex 与 GLM，默认显示剩余量；缺少所选方向的指标时显示
-  `—`，不从另一方向伪造。形态切换动画见
+  `—`，不从另一方向伪造。额度区不常驻显示口径或点击说明，既有热区通过 hover/active/focus 反馈操作。
+  形态切换动画见
   [`fix-quota-shape-morph`](../../openspec/changes/archive/2026-09-15-fix-quota-shape-morph/proposal.md)：几何由
   `src/desktop/panel/quota-morph.ts` 的纯函数给出（断开解开 → 回直 → 下移三段），`QuotaDisplay`
   逐帧绘制（WebKit 没有可插值的 `d`），布局由 CSS 从 `--quota-drop` 推出，静态检查见
   `tests/panel/panel-quota-morph.test.tsx`。
 - GLM 套餐的 5 小时与每周额度由接口的窗口单位和数量区分；两者即使共用 `TOKENS_LIMIT` 或
-  `CREDIT_LIMIT` 类型，也不会覆盖彼此。接口暂未返回每周额度时，卡片仍保留「每周额度」并显示
-  `—`，不拿 5 小时的数值代替；月度工具额度若返回也照常显示。
+  `CREDIT_LIMIT` 类型，也不会覆盖彼此。窗口名与 Codex 统一为「5小时」「7天」，月度工具额度简写为
+  「月度」。接口暂未返回每周额度时，卡片仍保留「7天」并显示 `—`，不拿 5 小时的数值代替。
 - 手动刷新成功时不显示 toast；屏幕上该平台卡片的额度圆环/进度条与数字从 0 重播，即使新旧读数相同也重播。
   失败仍显示平台名加「刷新失败」的 toast，冷却和连接错误提示维持原状。数字重播使用 CSS 位移的数字列，
-  减弱动效时由面板的统一规则直接显示最终读数。
+  并且只由本次刷新触发一次；圆环与进度条互换时数字保持静态。减弱动效时由面板的统一规则直接显示最终读数。
+  刷新进行期间顶部按钮显示“正在刷新”、设置
+  `aria-busy` 并旋转图标，禁用防重入；全部请求结束后恢复。
 - 刷新结果的成败来自服务刷新后发布的状态，而不是刷新应答：服务对手动刷新只回一句
   「已收到并执行」（`refresh-requested`），结果以该平台的新状态发布，因此客户端把它读成
   `RefreshStatus.requested`（不裁决），面板按卡片自身状态行所用的同一份事实判定。失败提示与成功重播只对
   结果到达时屏幕上确实存在的卡片执行——平台已被隐藏、已进入子页或面板还在加载态时不执行。
   见 [`fix-refresh-verdict-messages`](../../openspec/changes/archive/2026-09-15-fix-refresh-verdict-messages/proposal.md)。
+- 底部同步摘要只按当前可见平台聚合：没有可见平台显示“未展示平台”，任一平台没有成功时间显示
+  “部分平台尚未同步”，全部具备成功时间时才取其中最早时间显示“全部同步于 HH:mm”并点亮绿点。
 - 高峰/错峰时段提醒见
   [`add-peak-window-reminder`](../../openspec/changes/archive/2026-09-15-add-peak-window-reminder/proposal.md)：
   判定是纯前端计算（`src/desktop/lib/peak-windows.ts`，按定义自身时区取本地星期与时刻，支持跨午夜
