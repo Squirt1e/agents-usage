@@ -83,7 +83,8 @@ npm run dev:desktop         # 热更新模式：构建 service 后交给宿主�
    缓存落在工作区的 `.cargo-home`（覆盖 `tools/cargo.sh` 默认的 `.dsh/cargo-home`），
    `actions/cache` 按 `Cargo.lock` 缓存 registry 与 `target`——release 构建是 `lto` +
    `codegen-units = 1`，不缓存就要整轮重编。最后 `gh release create` 用 `--notes-file` 把仓库里
-   那份已提交的正文贴上去并建公开的 `v<version>` release，dmg 一并挂上——一次建成，之后不再碰它。
+   那份已提交的正文贴上去并建公开的 `v<version>` release；Tauri 原始 dmg 在上传前统一改名为
+   `Agents-Usage_v<version>-macos.dmg`——一次建成，之后不再碰它。
 
 **release 正文写在仓库里**：`docs/release-notes/v<version>.md`，与该版本的版本号在同一条提交，
 骨架见 [`docs/release-notes/TEMPLATE.md`](../release-notes/TEMPLATE.md)。「这个版本里有什么」
@@ -99,8 +100,9 @@ SHA-256 由 GitHub 现算）。流水线不生成正文、不留 draft，所以�
 版本号只有 `package.json` 一处：`src-tauri/tauri.conf.json` 的 `version` 指向
 `../package.json`（Tauri 打包时现读，落到 `CFBundleShortVersionString`），`Cargo.toml` 的
 `[workspace.package] version` 必须跟着一致。`tests/release-pipeline.test.ts` 守住这三者与流水线的
-接线（触发时机、版本号来源、打包目标、只打一次、正文来源、正文缺失即失败、出包即发布、
-已发出的资产与正文不再变动）。
+接线（触发时机、版本号来源、打包目标、产物命名、只打一次、正文来源、正文缺失即失败、
+出包即发布、已发出的资产与正文不再变动）；`tests/release-dmg-name.test.ts` 直接执行命名脚本，
+确认文件内容原样保留且文件名精确匹配发布约定。
 
 ### 热更新（改样式/界面）
 

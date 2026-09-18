@@ -138,8 +138,8 @@ jobs:
           tag="v${{ needs.plan.outputs.version }}"
           notes="docs/release-notes/$tag.md"
           shopt -s nullglob
-          # Tauri 的出包名是 `<productName>_<version>_universal.dmg`，GitHub 上传时会把
-          # 文件名里的空格写成点。多于一个 dmg 说明构建产出了预期之外的东西，直接失败。
+          # Tauri 先按自己的规则产出 `<productName>_<version>_universal.dmg`。多于一个 dmg
+          # 说明构建产出了预期之外的东西，直接失败；唯一产物再统一为公开的 macOS 文件名。
           dmgs=(target/universal-apple-darwin/release/bundle/dmg/*.dmg)
           if [[ "${#dmgs[@]}" -ne 1 ]]; then
             echo "expected exactly one dmg, found ${#dmgs[@]}" >&2
@@ -151,7 +151,8 @@ jobs:
             echo "::error::$tag 已经存在，流水线不替换已发布版本的资产；要重新发版请升 package.json 的版本号" >&2
             exit 1
           fi
+          asset=$(node scripts/desktop/prepare-release-dmg.mjs "${dmgs[0]}" "${{ needs.plan.outputs.version }}")
           # 一次建成发布版：正文已经随版本提交了，没有第二步等人补写，之后再回来改它。
           gh release create "$tag" --title "$tag" --target "$GITHUB_SHA" \
-            --notes-file "$notes" "${dmgs[0]}"
-          echo "created $tag with $(basename "${dmgs[0]}")"
+            --notes-file "$notes" "$asset"
+          echo "created $tag with $(basename "$asset")"

@@ -83,6 +83,15 @@ describe('发布流水线', () => {
     expect(workflow).toContain('target/universal-apple-darwin/release/bundle/dmg/*.dmg');
   });
 
+  it('把 Tauri 产物规范成版本化的 macOS 文件名后再上传', () => {
+    const release = jobBlock(workflow, 'release');
+    expect(release).toContain(
+      'asset=$(node scripts/desktop/prepare-release-dmg.mjs "${dmgs[0]}" "${{ needs.plan.outputs.version }}")',
+    );
+    expect(release).toContain('--notes-file "$notes" "$asset"');
+    expect(release).not.toContain('--notes-file "$notes" "${dmgs[0]}"');
+  });
+
   it('同一个版本只打一次：tag 或 release 已存在就整段跳过打包', () => {
     // 判据两条：远端 tag 与 release（`gh release view` 连手工建的 draft 也看得见）。
     expect(workflow).toContain('refs/tags/$tag');
