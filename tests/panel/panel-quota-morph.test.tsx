@@ -38,6 +38,7 @@ const ITEM: QuotaDisplayItem = {
   label: '5小时',
   kind: 'five-hour',
   percent: 42,
+  remainingPercent: 58,
   resetAt: '2026-09-10T09:42:18.000Z'
 };
 
@@ -301,6 +302,103 @@ describe('quota item: the morph in the DOM', () => {
         testId="quota"
       />
     );
+
+  it('uses a flat fill cap for zero and unknown readings in both forms', () => {
+    const zero = { ...ITEM, percent: 0, remainingPercent: 0 };
+    const missing = { ...ITEM, id: 'weekly', percent: null, remainingPercent: null };
+    const view = render(
+      <QuotaDisplay
+        mode="ring"
+        valueMode="remaining"
+        warningThreshold={0}
+        items={[zero, missing]}
+        now={NOW}
+        resetTimeFormat="countdown"
+      />
+    );
+
+    for (const id of ['five-hour', 'weekly']) {
+      expect(screen.getByTestId(`quota-item-${id}`).querySelector('.quota-shape-fill')).toHaveAttribute(
+        'stroke-linecap',
+        'butt'
+      );
+    }
+
+    view.rerender(
+      <QuotaDisplay
+        mode="bar"
+        valueMode="remaining"
+        warningThreshold={0}
+        items={[zero, missing]}
+        now={NOW}
+        resetTimeFormat="countdown"
+      />
+    );
+    for (const id of ['five-hour', 'weekly']) {
+      expect(screen.getByTestId(`quota-item-${id}`).querySelector('.quota-shape-fill')).toHaveAttribute(
+        'stroke-linecap',
+        'butt'
+      );
+    }
+
+    // A stylesheet presentation property outranks the SVG attribute. Keep the
+    // per-reading cap owned by the component, otherwise a computed `round` cap
+    // paints a dot even though the DOM misleadingly says `butt`.
+    const css = readFileSync('src/desktop/panel.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const fillRule = /\.quota-shape-fill\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(fillRule, 'the sheet must not override the per-reading SVG cap').not.toMatch(/stroke-linecap\s*:/);
+  });
+
+  it('warns at the inclusive remaining boundary without guessing missing readings', () => {
+    const items: QuotaDisplayItem[] = [
+      { ...ITEM, id: 'boundary', label: '边界', percent: 10, remainingPercent: 10 },
+      { ...ITEM, id: 'above', label: '高于', percent: 11, remainingPercent: 11 },
+      { ...ITEM, id: 'missing', label: '未知', percent: null, remainingPercent: null }
+    ];
+    const view = render(
+      <QuotaDisplay
+        mode="ring"
+        valueMode="remaining"
+        warningThreshold={10}
+        items={items}
+        now={NOW}
+        resetTimeFormat="countdown"
+      />
+    );
+
+    expect(screen.getByTestId('quota-item-boundary')).toHaveClass('is-warning');
+    expect(screen.getByRole('group', { name: '边界 剩余 10% 低额度警戒' })).toBeInTheDocument();
+    expect(screen.getByTestId('quota-item-above')).not.toHaveClass('is-warning');
+    expect(screen.getByTestId('quota-item-missing')).not.toHaveClass('is-warning');
+
+    view.rerender(
+      <QuotaDisplay
+        mode="bar"
+        valueMode="remaining"
+        warningThreshold={0}
+        items={items}
+        now={NOW}
+        resetTimeFormat="countdown"
+      />
+    );
+    expect(screen.getByTestId('quota-item-boundary')).not.toHaveClass('is-warning');
+    expect(screen.getByRole('group', { name: '边界 剩余 10%' })).toBeInTheDocument();
+  });
+
+  it('can display used percentage while warning from the separate remaining value', () => {
+    render(
+      <QuotaDisplay
+        mode="bar"
+        valueMode="used"
+        warningThreshold={10}
+        items={[{ ...ITEM, percent: 92, remainingPercent: 8 }]}
+        now={NOW}
+        resetTimeFormat="countdown"
+      />
+    );
+
+    expect(screen.getByRole('group', { name: '5小时 已用 92% 低额度警戒' })).toHaveClass('is-warning');
+  });
 
   it('does not replay refreshed digits again when the ring becomes a bar', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));

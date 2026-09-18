@@ -12,6 +12,8 @@ export interface QuotaDisplayItem {
   /** The window's own units: five-hour vs weekly countdowns and clocks differ. */
   kind: QuotaWindowKind;
   percent: number | null;
+  /** Warning semantics always use remaining quota, even while `percent` shows used. */
+  remainingPercent: number | null;
   resetAt?: string;
   stale?: boolean;
 }
@@ -19,6 +21,7 @@ export interface QuotaDisplayItem {
 export interface QuotaDisplayProps {
   mode: QuotaDisplayMode;
   valueMode: QuotaValueMode;
+  warningThreshold?: number;
   items: QuotaDisplayItem[];
   now: Date;
   timezone?: string;
@@ -96,9 +99,15 @@ function ResetLine(props: { item: QuotaDisplayItem; now: Date; timezone?: string
 function QuotaItem(props: QuotaDisplayProps & { item: QuotaDisplayItem }) {
   const { item, mode } = props;
   const percent = item.percent === null ? null : clampPercent(item.percent);
+  const remainingPercent = item.remainingPercent === null ? null : clampPercent(item.remainingPercent);
+  const warningThreshold = props.warningThreshold ?? 0;
+  const warning = warningThreshold > 0 && remainingPercent !== null && remainingPercent <= warningThreshold;
   const replayRequested = !!props.replayKey && !props.covered && percent !== null;
   const valueLabel = props.valueMode === 'remaining' ? '剩余' : '已用';
-  const label = percent === null ? `${item.label} ${valueLabel}未返回` : `${item.label} ${valueLabel} ${formatPercent(percent)}%`;
+  const readingLabel = percent === null
+    ? `${item.label} ${valueLabel}未返回`
+    : `${item.label} ${valueLabel} ${formatPercent(percent)}%`;
+  const label = warning ? `${readingLabel} 低额度警戒` : readingLabel;
   const itemRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<SVGPathElement>(null);
   const fillRef = useRef<SVGPathElement>(null);
@@ -286,8 +295,9 @@ function QuotaItem(props: QuotaDisplayProps & { item: QuotaDisplayItem }) {
 
   return (
     <div
-      className={`quota-item${refreshReplay ? ' is-replaying' : ''}`}
+      className={`quota-item${warning ? ' is-warning' : ''}${refreshReplay ? ' is-replaying' : ''}`}
       data-mode={mode}
+      data-warning={warning ? 'true' : 'false'}
       role="group"
       aria-label={label}
       data-testid={`quota-item-${item.id}`}
@@ -313,7 +323,7 @@ function QuotaItem(props: QuotaDisplayProps & { item: QuotaDisplayItem }) {
               ref={fillRef}
               className="quota-shape-fill"
               fill="none"
-              strokeLinecap="round"
+              strokeLinecap={percent === null || percent === 0 ? 'butt' : 'round'}
               pathLength={100}
               strokeDasharray={`${percent === null ? 0 : percent} 100`}
             />

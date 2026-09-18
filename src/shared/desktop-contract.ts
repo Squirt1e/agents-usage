@@ -197,6 +197,8 @@ export interface PanelSettings {
   glmQuotaDisplay: QuotaDisplayMode;
   /** Whether every quota card presents the reported remaining or used percentage. */
   quotaValueMode: QuotaValueMode;
+  /** Remaining quota at or below this percentage is a warning; zero disables it. */
+  quotaWarningThreshold: number;
   /**
    * Per-provider peak/off-peak reminder settings (add-peak-window-reminder).
    * An absent provider falls back to the builtin official table when one
@@ -215,6 +217,7 @@ export const THEME_PREFERENCES: readonly ThemePreference[] = ['light', 'dark', '
 
 export const QUOTA_DISPLAY_MODES: readonly QuotaDisplayMode[] = ['ring', 'bar'];
 export const QUOTA_VALUE_MODES: readonly QuotaValueMode[] = ['remaining', 'used'];
+export const DEFAULT_QUOTA_WARNING_THRESHOLD = 10;
 
 /**
  * Reset-time presentation. `countdown` counts down in the units that suit the
@@ -303,6 +306,7 @@ export type PanelSettingsPatch = Partial<
     | 'codexQuotaDisplay'
     | 'glmQuotaDisplay'
     | 'quotaValueMode'
+    | 'quotaWarningThreshold'
     | 'peakReminder'
   >
 >;
@@ -321,6 +325,12 @@ function text(value: unknown): string | undefined {
 
 function finiteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function quotaWarningThreshold(value: unknown): number {
+  return Number.isInteger(value) && typeof value === 'number' && value >= 0 && value <= 100
+    ? value
+    : DEFAULT_QUOTA_WARNING_THRESHOLD;
 }
 
 function optionalBoolean(value: unknown): boolean | undefined {
@@ -691,6 +701,7 @@ export function parsePanelSettings(value: unknown): PanelSettings {
     quotaValueMode: isOneOf(QUOTA_VALUE_MODES, record.quotaValueMode)
       ? record.quotaValueMode
       : 'remaining',
+    quotaWarningThreshold: quotaWarningThreshold(record.quotaWarningThreshold),
     credentials: parseCredentials(record.credentials),
     ...(order ? { platformOrder: order } : {}),
     ...(codexCliPath ? { codexCliPath } : {}),

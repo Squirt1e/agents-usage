@@ -2035,6 +2035,7 @@ mod tests {
         for patch in [
             json!({ "theme": "light" }),
             json!({ "quotaValueMode": "used" }),
+            json!({ "quotaWarningThreshold": 15 }),
             json!({ "platformVisibility": { "glm": false } }),
             json!({ "platformOrder": ["glm", "codex"] }),
             json!({ "codexResetFormat": "absolute" }),

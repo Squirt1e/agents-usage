@@ -628,6 +628,12 @@ pub struct DesktopSettings {
     pub glm_quota_display: QuotaDisplayMode,
     /// Whether every quota card presents remaining or used percentage.
     pub quota_value_mode: QuotaValueMode,
+    /// Remaining quota at or below this percentage is a warning. Zero disables it.
+    #[serde(
+        default = "default_quota_warning_threshold",
+        deserialize_with = "deserialize_quota_warning_threshold"
+    )]
+    pub quota_warning_threshold: u8,
     /// Per-provider peak/off-peak reminder settings. Absent means "use the
     /// builtin table if one exists"; the builtin tables and the period
     /// judgement live in the panel, this only persists the choice. A stored
@@ -818,6 +824,22 @@ where
     Ok(raw.as_ref().and_then(peak_reminder_from_value))
 }
 
+const fn default_quota_warning_threshold() -> u8 {
+    10
+}
+
+fn deserialize_quota_warning_threshold<'de, D>(deserializer: D) -> Result<u8, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = serde_json::Value::deserialize(deserializer)?;
+    Ok(raw
+        .as_u64()
+        .filter(|value| *value <= 100)
+        .map(|value| value as u8)
+        .unwrap_or_else(default_quota_warning_threshold))
+}
+
 impl Default for DesktopSettings {
     fn default() -> Self {
         Self {
@@ -837,6 +859,7 @@ impl Default for DesktopSettings {
             codex_quota_display: QuotaDisplayMode::Ring,
             glm_quota_display: QuotaDisplayMode::Ring,
             quota_value_mode: QuotaValueMode::Remaining,
+            quota_warning_threshold: default_quota_warning_threshold(),
             peak_reminder: None,
         }
     }
@@ -1028,6 +1051,7 @@ mod tests {
         assert_eq!(settings.codex_quota_display, QuotaDisplayMode::Ring);
         assert_eq!(settings.glm_quota_display, QuotaDisplayMode::Ring);
         assert_eq!(settings.quota_value_mode, QuotaValueMode::Remaining);
+        assert_eq!(settings.quota_warning_threshold, 10);
 
         // The new values round-trip as the lowercase wire spelling the panel
         // uses, with one setting shared by every quota card.
@@ -1035,6 +1059,7 @@ mod tests {
             codex_reset_format: ResetTimeFormat::Absolute,
             glm_quota_display: QuotaDisplayMode::Bar,
             quota_value_mode: QuotaValueMode::Used,
+            quota_warning_threshold: 0,
             ..settings
         };
         let encoded = serde_json::to_value(&updated).expect("settings must serialize");
@@ -1046,6 +1071,32 @@ mod tests {
         assert_eq!(encoded["codexQuotaDisplay"], serde_json::json!("ring"));
         assert_eq!(encoded["glmQuotaDisplay"], serde_json::json!("bar"));
         assert_eq!(encoded["quotaValueMode"], serde_json::json!("used"));
+        assert_eq!(encoded["quotaWarningThreshold"], serde_json::json!(0));
+    }
+
+    #[test]
+    fn quota_warning_threshold_degrades_untrusted_stored_values_to_ten() {
+        for value in [
+            serde_json::json!(-1),
+            serde_json::json!(101),
+            serde_json::json!(10.5),
+            serde_json::json!("10"),
+            serde_json::Value::Null,
+        ] {
+            let settings: DesktopSettings = serde_json::from_value(serde_json::json!({
+                "quotaWarningThreshold": value
+            }))
+            .expect("one bad field must not reject the settings record");
+            assert_eq!(settings.quota_warning_threshold, 10);
+        }
+
+        for expected in [0, 1, 10, 100] {
+            let settings: DesktopSettings = serde_json::from_value(serde_json::json!({
+                "quotaWarningThreshold": expected
+            }))
+            .expect("legal threshold must load");
+            assert_eq!(settings.quota_warning_threshold, expected);
+        }
     }
 
     #[test]

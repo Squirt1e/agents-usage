@@ -122,6 +122,23 @@ describe('panel palette', () => {
     expect(contrast(variable(light, '--text-dim')!, card)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(variable(light, '--action')!, card)).toBeGreaterThanOrEqual(4.5);
   });
+
+  it('routes every low-quota reading through one theme warning colour', () => {
+    expect(variable(dark, '--quota-warning')).toMatch(/^#/);
+    expect(variable(light, '--quota-warning')).toMatch(/^#/);
+    expect(block(clean, '.quota-item.is-warning .quota-shape-fill')).toMatch(
+      /stroke:\s*var\(--quota-warning\)/
+    );
+    expect(block(clean, '.quota-item.is-warning .quota-item-ringtext')).toMatch(
+      /fill:\s*var\(--quota-warning\)/
+    );
+    expect(block(clean, '.quota-item.is-warning .quota-item-head .quota-value')).toMatch(
+      /color:\s*var\(--quota-warning\)/
+    );
+    expect(block(clean, '.quota-item.is-warning .quota-ring-replay')).toMatch(
+      /color:\s*var\(--quota-warning\)/
+    );
+  });
 });
 
 /**

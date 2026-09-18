@@ -199,6 +199,7 @@ export function useSettingsWindow(options: SettingsWindowOptions): SettingsPanel
     onReorder: (order) => void updateSettings({ platformOrder: order }),
     onThemeChange: (theme) => updateSettings({ theme }),
     onQuotaValueModeChange: (quotaValueMode) => updateSettings({ quotaValueMode }),
+    onQuotaWarningThresholdChange: (quotaWarningThreshold) => updateSettings({ quotaWarningThreshold }),
     onUpdateSettings: updateSettings,
     onValidateCredential: validateCredential,
     onDeleteCredential: deleteCredential

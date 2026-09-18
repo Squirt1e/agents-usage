@@ -449,6 +449,7 @@ struct SettingsPatch {
     codex_quota_display: Option<String>,
     glm_quota_display: Option<String>,
     quota_value_mode: Option<String>,
+    quota_warning_threshold: Option<serde_json::Value>,
     /// Parsed leniently by the same function the stored record uses: an entry
     /// the panel should not have sent is dropped, not failed.
     peak_reminder: Option<serde_json::Value>,
@@ -486,6 +487,18 @@ async fn update_settings(
     if !token_is_valid(&state, &headers) {
         return error_response(StatusCode::FORBIDDEN, "Invalid local session token");
     }
+    let quota_warning_threshold = match patch.quota_warning_threshold.as_ref() {
+        Some(value) => match value.as_u64().filter(|value| *value <= 100) {
+            Some(value) => Some(value as u8),
+            None => {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    "Invalid quota warning threshold",
+                )
+            }
+        },
+        None => None,
+    };
     // Apply the patch under a scoped write lock, then release it before the
     // response is read back (settings_payload re-acquires the read lock, and a
     // sync RwLock is not reentrant).
@@ -577,6 +590,9 @@ async fn update_settings(
                 Some(parsed) => parsed,
                 None => return error_response(StatusCode::BAD_REQUEST, "Invalid quota value mode"),
             };
+        }
+        if let Some(threshold) = quota_warning_threshold {
+            settings.quota_warning_threshold = threshold;
         }
         if let Some(value) = patch.peak_reminder {
             // An unusable map degrades to unset here too, so a bad patch can

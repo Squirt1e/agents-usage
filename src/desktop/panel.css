@@ -40,6 +40,7 @@
   --lime: #c8ff4d;
   --indigo: #9aa6ff;
   --danger: #ff9090;
+  --quota-warning: #ff6b70;
   --warning: #f2c069;
   --estimate: #ffa66b;
   --mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -166,6 +167,7 @@
   --lime: #438034;
   --indigo: #5856d6;
   --danger: #c9343a;
+  --quota-warning: #d70015;
   --warning: #855b0b;
   --estimate: #a4511b;
   --tile-bottom: #ededf2;
@@ -2541,6 +2543,36 @@ button {
   color: var(--text-faint);
 }
 
+.quota-threshold-control {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.quota-threshold-input {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.quota-threshold-input .text-input {
+  width: 68px;
+  text-align: right;
+}
+
+.quota-threshold-suffix {
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+}
+
+.quota-threshold-feedback {
+  min-height: 14px;
+  color: var(--danger);
+  font-size: var(--text-2xs);
+  line-height: 14px;
+}
+
 .select-input {
   width: auto;
   flex: 0 0 auto;
@@ -2668,7 +2700,6 @@ button {
 .quota-shape-fill {
   fill: none;
   stroke: var(--mint);
-  stroke-linecap: round;
   /* The quota moves: an arc that jumps to its new length reads as a different
      reading instead of the same one changing. The value is carried by
      `stroke-dasharray` against `pathLength="100"`, so the transition covers the
@@ -2749,11 +2780,13 @@ button {
   line-height: 22px;
   text-align: center;
   opacity: calc(1 - var(--quota-head));
+  transition: color 150ms ease;
 }
 
 .quota-ring-replay .replay-number-percent {
   color: var(--text-dim);
   font-size: var(--text-xs);
+  transition: color 150ms ease;
 }
 
 .quota-item:nth-child(2) .quota-shape-fill {
@@ -2764,6 +2797,7 @@ button {
    centre rather than on whatever box the form happens to have. */
 .quota-item-ringtext {
   fill: var(--text);
+  transition: fill 150ms ease;
 }
 
 .quota-item-ringtext .quota-value {
@@ -2776,6 +2810,7 @@ button {
 .quota-item-ringtext .pct {
   font-size: var(--text-xs);
   fill: var(--text-dim);
+  transition: fill 150ms ease;
 }
 
 .quota-item-ringtext .quota-label {
@@ -2803,6 +2838,37 @@ button {
   opacity: var(--quota-head, 0);
   /* Only words: the toggle behind it keeps every click. */
   pointer-events: none;
+}
+
+.quota-item-head .quota-value {
+  transition: color 150ms ease;
+}
+
+/* One semantic warning state colours the fill and the reading only. Window
+   labels, reset times and tracks keep their hierarchy, so the card does not
+   turn into a generic error block. */
+.quota-item.is-warning .quota-shape-fill {
+  stroke: var(--quota-warning);
+}
+
+.quota-item.is-warning .quota-item-ringtext {
+  fill: var(--quota-warning);
+}
+
+.quota-item.is-warning .quota-item-ringtext .pct {
+  fill: var(--quota-warning);
+}
+
+.quota-item.is-warning .quota-item-head .quota-value {
+  color: var(--quota-warning);
+}
+
+.quota-item.is-warning .quota-ring-replay {
+  color: var(--quota-warning);
+}
+
+.quota-item.is-warning .quota-ring-replay .replay-number-percent {
+  color: var(--quota-warning);
 }
 
 /* ---------------------------------------------------------------- motion off */

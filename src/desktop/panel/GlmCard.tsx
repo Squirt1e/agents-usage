@@ -47,6 +47,7 @@ import {
   formatMoney,
   glmQuotaWindows,
   metricNumber,
+  quotaRemainingPercent,
   shouldRenderMetric,
   walletBalances,
   dailySpends,
@@ -80,6 +81,7 @@ function windowKindOf(bar: QuotaBar): QuotaWindowKind {
 export interface GlmCardProps extends PlatformCardViewProps {
   quotaDisplayMode: QuotaDisplayMode;
   quotaValueMode: QuotaValueMode;
+  quotaWarningThreshold?: number;
   resetTimeFormat: ResetTimeFormat;
   /** Whether a Coding Plan key is stored (`credentials.glm.configured`). Without
    *  one the quota module is a placeholder under the cover — a reading collected
@@ -156,11 +158,13 @@ export function GlmCard(props: GlmCardProps) {
         <QuotaDisplay
           mode={props.quotaDisplayMode}
           valueMode={props.quotaValueMode}
+          warningThreshold={props.quotaWarningThreshold}
           items={bars.map((bar) => ({
             id: bar.id,
             label: bar.label,
             kind: windowKindOf(bar),
             percent: metricNumber(props.quotaValueMode === 'remaining' ? bar.remaining : bar.used),
+            remainingPercent: quotaRemainingPercent(bar.remaining, bar.used),
             resetAt: bar.used?.resetAt ?? bar.remaining?.resetAt,
             stale: (props.quotaValueMode === 'remaining' ? bar.remaining : bar.used)?.confidence.includes('stale') === true
           }))}

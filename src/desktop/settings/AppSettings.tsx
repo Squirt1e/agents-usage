@@ -47,6 +47,7 @@ export interface AppSettingsProps {
   onReorder(order: ProviderId[]): void;
   onThemeChange(theme: PanelSettings['theme']): Promise<void>;
   onQuotaValueModeChange(mode: PanelSettings['quotaValueMode']): Promise<void>;
+  onQuotaWarningThresholdChange(threshold: number): Promise<void>;
 }
 
 export function AppSettings(props: AppSettingsProps) {
@@ -64,6 +65,9 @@ export function AppSettings(props: AppSettingsProps) {
    * something visibly unavailable beats something silently ignored.
    */
   const [savingAppearance, setSavingAppearance] = useState<'theme' | 'quota' | null>(null);
+  const [thresholdDraft, setThresholdDraft] = useState(String(props.settings.quotaWarningThreshold));
+  const [savingThreshold, setSavingThreshold] = useState(false);
+  const [thresholdFeedback, setThresholdFeedback] = useState('');
   /**
    * Whether this half is still on screen. The settings window unmounts a section
    * when the reader moves to another one, and a write that lands afterwards would
@@ -77,6 +81,10 @@ export function AppSettings(props: AppSettingsProps) {
       mounted.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!savingThreshold) setThresholdDraft(String(props.settings.quotaWarningThreshold));
+  }, [props.settings.quotaWarningThreshold, savingThreshold]);
 
   const saveAppearance = async (kind: 'theme' | 'quota', save: () => Promise<void>) => {
     if (savingAppearance !== null) return;
@@ -92,6 +100,30 @@ export function AppSettings(props: AppSettingsProps) {
       // window whose visible state is already correct.
     } finally {
       if (mounted.current) setSavingAppearance(null);
+    }
+  };
+
+  const commitQuotaWarningThreshold = async () => {
+    if (savingThreshold) return;
+    const parsed = Number(thresholdDraft);
+    if (!/^\d+$/.test(thresholdDraft) || !Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
+      setThresholdFeedback('请输入 0–100 的整数');
+      return;
+    }
+    if (parsed === props.settings.quotaWarningThreshold) {
+      setThresholdDraft(String(parsed));
+      setThresholdFeedback('');
+      return;
+    }
+    setSavingThreshold(true);
+    setThresholdFeedback('');
+    try {
+      await props.onQuotaWarningThresholdChange(parsed);
+    } catch {
+      setThresholdDraft(String(props.settings.quotaWarningThreshold));
+      setThresholdFeedback('保存失败，已恢复上一个值');
+    } finally {
+      if (mounted.current) setSavingThreshold(false);
     }
   };
 
@@ -144,6 +176,51 @@ export function AppSettings(props: AppSettingsProps) {
                 </button>
               ))}
             </SegmentedGroup>
+          </div>
+          <div className="setting-row quota-threshold-setting">
+            <div className="setting-text">
+              <label className="setting-label" htmlFor="quota-warning-threshold">
+                低额度警戒线
+              </label>
+              <span className="setting-desc" id="quota-warning-threshold-help">
+                0 为关闭，按剩余额度判断
+              </span>
+            </div>
+            <div className="quota-threshold-control">
+              <div className="quota-threshold-input">
+                <input
+                  id="quota-warning-threshold"
+                  className={`text-input${thresholdFeedback === '请输入 0–100 的整数' ? ' is-invalid' : ''}`}
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={thresholdDraft}
+                  disabled={savingThreshold}
+                  aria-label="低额度警戒线"
+                  aria-describedby="quota-warning-threshold-help quota-warning-threshold-feedback"
+                  aria-invalid={thresholdFeedback === '请输入 0–100 的整数'}
+                  onChange={(event) => {
+                    setThresholdDraft(event.currentTarget.value);
+                    setThresholdFeedback('');
+                  }}
+                  onBlur={() => void commitQuotaWarningThreshold()}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    void commitQuotaWarningThreshold();
+                  }}
+                />
+                <span className="quota-threshold-suffix" aria-hidden="true">%</span>
+              </div>
+              <span
+                id="quota-warning-threshold-feedback"
+                className="quota-threshold-feedback"
+                aria-live="polite"
+              >
+                {thresholdFeedback}
+              </span>
+            </div>
           </div>
         </section>
       )}

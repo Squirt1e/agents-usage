@@ -87,7 +87,7 @@ export const SECTION_TITLES: Record<SettingsSection, string> = {
  */
 const SECTION_NOTES: Record<SettingsSection, string> = {
   platforms: '选择总览展示哪些平台、以什么顺序展示（拖住左侧把手排序）。隐藏只影响显示，账号配置与采集都保留。',
-  appearance: '主题与额度数值的显示方式，两个窗口共用同一份偏好。',
+  appearance: '主题、额度数值与低额度警戒线，两个窗口共用同一份偏好。',
   codex: 'Codex 使用本机已有登录，这里调整可执行文件路径与高峰时段提醒。',
   glm: 'Coding Plan 与钱包连接各自独立保存凭据，共用下面的高峰时段提醒。',
   deepseek: '钱包与网页用量连接各自独立（网页用量需粘贴 Token），共用下面的高峰时段提醒。'
@@ -110,6 +110,7 @@ export interface SettingsPanelProps {
   onReorder(order: ProviderId[]): void;
   onThemeChange(theme: PanelSettings['theme']): Promise<void>;
   onQuotaValueModeChange(mode: PanelSettings['quotaValueMode']): Promise<void>;
+  onQuotaWarningThresholdChange(threshold: number): Promise<void>;
   onUpdateSettings(patch: PanelSettingsPatch): Promise<void>;
   onValidateCredential(target: CredentialTarget, secret: string): Promise<CredentialStatus>;
   onDeleteCredential(target: CredentialTarget): Promise<void>;
@@ -235,6 +236,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
               onReorder={props.onReorder}
               onThemeChange={props.onThemeChange}
               onQuotaValueModeChange={props.onQuotaValueModeChange}
+              onQuotaWarningThresholdChange={props.onQuotaWarningThresholdChange}
             />
           ) : (
             <ProviderSettings

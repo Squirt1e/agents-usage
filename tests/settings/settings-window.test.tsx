@@ -454,6 +454,20 @@ describe('a change here lands on the panel', () => {
     // asks the service to collect GLM again.
     expect(client.methodCalls('refresh')).toEqual([]);
   });
+
+  it('re-evaluates low quota immediately without collecting a provider again', async () => {
+    const client = clientWith({ quotaValueMode: 'used', quotaWarningThreshold: 50 });
+    const { panel } = renderBothWindows({ client, section: 'appearance' });
+    const input = await screen.findByRole('spinbutton', { name: '低额度警戒线' });
+    const quota = await panel.findByTestId('quota-item-five-hour');
+    expect(quota).not.toHaveClass('is-warning');
+
+    fireEvent.change(input, { target: { value: '60' } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(quota).toHaveClass('is-warning'));
+    expect(client.methodCalls('refresh')).toEqual([]);
+  });
 });
 
 describe('per-platform settings stay out of the global ones', () => {
@@ -474,6 +488,81 @@ describe('per-platform settings stay out of the global ones', () => {
     fireEvent.click(within(group).getByRole('button', { name: '已用' }));
 
     await waitFor(() => expect(client.methodCalls('updateSettings')).toEqual([[{ quotaValueMode: 'used' }]]));
+  });
+
+  it('shows the default low-quota threshold and explains its remaining-quota semantics', async () => {
+    renderSettings({ client: clientWith(), section: 'appearance' });
+
+    expect(await screen.findByRole('spinbutton', { name: '低额度警戒线' })).toHaveValue(10);
+    expect(screen.getByText('0 为关闭，按剩余额度判断')).toBeInTheDocument();
+  });
+
+  it('saves legal threshold integers, including zero as disabled', async () => {
+    const client = clientWith();
+    renderSettings({ client, section: 'appearance' });
+    const input = await screen.findByRole('spinbutton', { name: '低额度警戒线' });
+
+    fireEvent.change(input, { target: { value: '15' } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(client.methodCalls('updateSettings')).toEqual([[{ quotaWarningThreshold: 15 }]])
+    );
+
+    fireEvent.change(input, { target: { value: '0' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() =>
+      expect(client.methodCalls('updateSettings')).toEqual([
+        [{ quotaWarningThreshold: 15 }],
+        [{ quotaWarningThreshold: 0 }]
+      ])
+    );
+  });
+
+  it('keeps an invalid threshold local and does not send a patch', async () => {
+    const client = clientWith();
+    renderSettings({ client, section: 'appearance' });
+    const input = await screen.findByRole('spinbutton', { name: '低额度警戒线' });
+
+    fireEvent.change(input, { target: { value: '10.5' } });
+    fireEvent.blur(input);
+
+    expect(await screen.findByText('请输入 0–100 的整数')).toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(client.methodCalls('updateSettings')).toEqual([]);
+  });
+
+  it('restores the saved threshold when its write fails', async () => {
+    const client = clientWith({ quotaWarningThreshold: 12 });
+    vi.spyOn(client, 'updateSettings').mockRejectedValueOnce(new Error('offline'));
+    renderSettings({ client, section: 'appearance' });
+    const input = await screen.findByRole('spinbutton', { name: '低额度警戒线' });
+    await waitFor(() => expect(input).toHaveValue(12));
+
+    fireEvent.change(input, { target: { value: '18' } });
+    fireEvent.blur(input);
+
+    expect(await screen.findByText('保存失败，已恢复上一个值')).toBeInTheDocument();
+    expect(input).toHaveValue(12);
+  });
+
+  it('disables only the threshold input while that setting is being saved', async () => {
+    let release: (() => void) | undefined;
+    const client = clientWith();
+    vi.spyOn(client, 'updateSettings').mockImplementation(
+      () => new Promise((resolve) => (release = () => resolve(defaultPanelSettings({ quotaWarningThreshold: 15 }))))
+    );
+    renderSettings({ client, section: 'appearance' });
+    const input = await screen.findByRole('spinbutton', { name: '低额度警戒线' });
+
+    fireEvent.change(input, { target: { value: '15' } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(input).toBeDisabled());
+    expect(screen.getByRole('button', { name: '浅色' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '已用' })).not.toBeDisabled();
+
+    release?.();
+    await waitFor(() => expect(input).not.toBeDisabled());
   });
 });
 

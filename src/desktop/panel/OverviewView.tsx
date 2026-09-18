@@ -102,6 +102,7 @@ export function OverviewView(props: OverviewViewProps) {
                   peak={peak}
                   quotaDisplayMode={props.settings.codexQuotaDisplay}
                   quotaValueMode={props.settings.quotaValueMode}
+                  quotaWarningThreshold={props.settings.quotaWarningThreshold}
                   resetTimeFormat={props.settings.codexResetFormat}
                   onToggleResetTimeFormat={() => props.onToggleResetTimeFormat('codex')}
                   onToggleQuotaDisplay={() => props.onToggleQuotaDisplay('codex')}
@@ -121,6 +122,7 @@ export function OverviewView(props: OverviewViewProps) {
                   walletConfigured={props.settings.credentials['glm-wallet'].configured === true}
                   quotaDisplayMode={props.settings.glmQuotaDisplay}
                   quotaValueMode={props.settings.quotaValueMode}
+                  quotaWarningThreshold={props.settings.quotaWarningThreshold}
                   resetTimeFormat={props.settings.glmResetFormat}
                   onToggleResetTimeFormat={() => props.onToggleResetTimeFormat('glm')}
                   onToggleQuotaDisplay={() => props.onToggleQuotaDisplay('glm')}

@@ -302,6 +302,31 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
     selector: '.quota-shape-fill',
     properties: ['stroke-dasharray', 'stroke']
   },
+  {
+    what: 'ring quota digits take the warning colour',
+    selector: '.quota-item-ringtext',
+    properties: ['fill']
+  },
+  {
+    what: 'the ring percent sign takes the warning colour',
+    selector: '.quota-item-ringtext .pct',
+    properties: ['fill']
+  },
+  {
+    what: 'bar quota digits take the warning colour',
+    selector: '.quota-item-head .quota-value',
+    properties: ['color']
+  },
+  {
+    what: 'refreshed ring digits take the warning colour',
+    selector: '.quota-ring-replay',
+    properties: ['color']
+  },
+  {
+    what: 'the refreshed ring percent sign takes the warning colour',
+    selector: '.quota-ring-replay .replay-number-percent',
+    properties: ['color']
+  },
   { what: '估算 / 已过期 badge changes tone', selector: '.tag', properties: ['border-color', 'color'] },
   { what: 'connection dot changes tone', selector: '.status-dot', properties: ['background-color'] },
   { what: 'status word takes the tone of its row', selector: '.status-label', properties: ['color'] },

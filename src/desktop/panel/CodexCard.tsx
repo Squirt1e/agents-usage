@@ -27,12 +27,14 @@ import {
   dailyTokens,
   formatTokens,
   metricNumber,
+  quotaRemainingPercent,
   shouldRenderMetric
 } from '../lib/metrics';
 
 export interface CodexCardProps extends PlatformCardViewProps {
   quotaDisplayMode: QuotaDisplayMode;
   quotaValueMode: QuotaValueMode;
+  quotaWarningThreshold?: number;
   resetTimeFormat: ResetTimeFormat;
 }
 
@@ -64,11 +66,13 @@ export function CodexCard(props: CodexCardProps) {
         <QuotaDisplay
           mode={props.quotaDisplayMode}
           valueMode={props.quotaValueMode}
+          warningThreshold={props.quotaWarningThreshold}
           items={windows.map((window) => ({
             id: window.id,
             label: window.label,
             kind: window.id,
             percent: metricNumber(props.quotaValueMode === 'remaining' ? window.remaining : window.used),
+            remainingPercent: quotaRemainingPercent(window.remaining, window.used),
             resetAt: window.used?.resetAt ?? window.remaining?.resetAt,
             stale: window.used?.confidence.includes('stale') === true
           }))}

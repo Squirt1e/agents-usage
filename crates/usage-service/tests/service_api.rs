@@ -458,6 +458,74 @@ async fn theme_settings_are_validated_and_survive_restart() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn quota_warning_threshold_is_validated_without_losing_the_saved_value() {
+    let data_dir = temp_data_dir();
+    let mut running =
+        ServiceBuilder::with_transport(config(data_dir.clone()), Arc::new(FailingTransport))
+            .start()
+            .await
+            .expect("service");
+    let origin = running.origin();
+    let server = tokio::spawn(running.take_http_server().unwrap().serve());
+    let client = reqwest::Client::new();
+    let bootstrap: serde_json::Value = client
+        .get(format!("{origin}/api/bootstrap"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(bootstrap["settings"]["quotaWarningThreshold"], 10);
+    let token = bootstrap["sessionToken"].as_str().unwrap();
+
+    for threshold in [serde_json::json!(15), serde_json::json!(0)] {
+        let response = client
+            .put(format!("{origin}/api/settings"))
+            .header("x-session-token", token)
+            .json(&serde_json::json!({ "quotaWarningThreshold": threshold }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["quotaWarningThreshold"], threshold);
+    }
+
+    let saved = 0;
+    for invalid in [
+        serde_json::json!(-1),
+        serde_json::json!(101),
+        serde_json::json!(10.5),
+        serde_json::json!("10"),
+        serde_json::json!(true),
+    ] {
+        let response = client
+            .put(format!("{origin}/api/settings"))
+            .header("x-session-token", token)
+            .json(&serde_json::json!({ "quotaWarningThreshold": invalid }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
+
+        let settings: serde_json::Value = client
+            .get(format!("{origin}/api/settings"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(settings["quotaWarningThreshold"], saved);
+    }
+
+    running.shutdown().await;
+    server.abort();
+    std::fs::remove_dir_all(data_dir).ok();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn deepseek_web_usage_is_off_by_default_and_round_trips() {
     let data_dir = temp_data_dir();
     let transport: std::sync::Arc<dyn HttpTransport> = Arc::new(FailingTransport);

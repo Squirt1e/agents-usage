@@ -30,6 +30,7 @@ const cardProps = {
   gate: GATE,
   quotaDisplayMode: 'ring' as const,
   quotaValueMode: 'used' as const,
+  quotaWarningThreshold: 0,
   resetTimeFormat: 'countdown' as const,
   onOpenSettings: noop,
   onRefresh: noop,
@@ -84,6 +85,36 @@ function renderCodex(metrics: DesktopUsageMetric[], extra: Parameters<typeof pro
 }
 
 describe('Codex dual gauges', () => {
+  it('prefers an explicit remaining value over deriving one from used quota', () => {
+    const resetAt = '2026-09-10T09:42:18.000Z';
+    const used = { ...fiveHour(resetAt), value: 99 };
+    const remaining = { ...fiveHourRemaining(resetAt), value: 20 };
+    const snapshot = snapshotOf([codexState([used, remaining])]);
+    render(
+      <CodexCard
+        view={providerView(snapshot, 'codex')}
+        {...cardProps}
+        quotaWarningThreshold={10}
+      />
+    );
+
+    expect(screen.getByRole('group', { name: '5小时 已用 99%' })).not.toHaveClass('is-warning');
+  });
+
+  it('derives remaining quota from a trustworthy used value when needed', () => {
+    const used = { ...fiveHour('2026-09-10T09:42:18.000Z'), value: 92 };
+    const snapshot = snapshotOf([codexState([used])]);
+    render(
+      <CodexCard
+        view={providerView(snapshot, 'codex')}
+        {...cardProps}
+        quotaWarningThreshold={10}
+      />
+    );
+
+    expect(screen.getByRole('group', { name: '5小时 已用 92% 低额度警戒' })).toHaveClass('is-warning');
+  });
+
   it('keeps quota primary and groups daily activity below it', () => {
     renderCodex([
       fiveHour('2026-09-10T09:42:18.000Z'),
@@ -342,6 +373,7 @@ describe('GLM quota and wallet', () => {
       walletConfigured?: boolean;
       quotaDisplayMode?: 'ring' | 'bar';
       quotaValueMode?: 'remaining' | 'used';
+      quotaWarningThreshold?: number;
       onToggleResetTimeFormat?(): void;
     } = {}
   ) {
@@ -355,6 +387,7 @@ describe('GLM quota and wallet', () => {
         {...cardProps}
         quotaDisplayMode={options.quotaDisplayMode ?? 'bar'}
         quotaValueMode={options.quotaValueMode ?? 'used'}
+        quotaWarningThreshold={options.quotaWarningThreshold ?? 0}
       />
     );
   }
@@ -369,6 +402,28 @@ describe('GLM quota and wallet', () => {
     expect(screen.getByRole('group', { name: '7天 剩余 84%' })).toBeInTheDocument();
     expect(screen.getByText('72%')).toBeInTheDocument();
     expect(screen.getByText('84%')).toBeInTheDocument();
+  });
+
+  it('uses GLM remaining quota for warning even while the card displays used quota', () => {
+    const inconsistent = [
+      metricOf({
+        key: 'quota.5h.used',
+        value: 96,
+        unit: 'percent',
+        direction: 'used',
+        connection: { provider: 'glm', connection: 'quota' }
+      }),
+      metricOf({
+        key: 'quota.5h.remaining',
+        value: 15,
+        unit: 'percent',
+        direction: 'remaining',
+        connection: { provider: 'glm', connection: 'quota' }
+      })
+    ];
+    renderGlm(snapshotOf([providerStateOf('glm', inconsistent)]), { quotaWarningThreshold: 10 });
+
+    expect(screen.getByRole('group', { name: '5小时 已用 96%' })).not.toHaveClass('is-warning');
   });
 
   it('keeps the weekly slot visible when GLM returns only five-hour quota and shows monthly tools quota', () => {

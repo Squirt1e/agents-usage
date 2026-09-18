@@ -439,6 +439,21 @@ export function metricNumber(metric: DesktopUsageMetric | undefined): number | n
   return null;
 }
 
+/**
+ * Remaining quota used by warning semantics, independent from what the card
+ * currently displays. A provider's explicit remaining reading wins; only its
+ * absence allows a trustworthy used reading to be converted.
+ */
+export function quotaRemainingPercent(
+  remaining: DesktopUsageMetric | undefined,
+  used: DesktopUsageMetric | undefined
+): number | null {
+  const reportedRemaining = metricNumber(remaining);
+  if (reportedRemaining !== null) return Math.max(0, Math.min(100, reportedRemaining));
+  const reportedUsed = metricNumber(used);
+  return reportedUsed === null ? null : Math.max(0, Math.min(100, 100 - reportedUsed));
+}
+
 function pad(value: number): string {
   return String(value).padStart(2, '0');
 }
