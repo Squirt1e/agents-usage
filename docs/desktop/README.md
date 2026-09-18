@@ -196,7 +196,8 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   DeepSeek），右侧是唯一的内容滚动区；平台管理是第一个分类，支持指针拖拽排序并即时持久化；
   外观包含主题：浅色 / 深色 / 跟随系统，以及全局额度数值：剩余 / 已用；默认深色并显示剩余额度，
   跟随系统响应 macOS 外观变化。Codex 双仪表、GLM 套餐/钱包、DeepSeek 余额与可选的网页账单用量
-  都按平台分到各自的分类里。DeepSeek 网页用量连接关闭时主卡不显示今日
+  都按平台分到各自的分类里；每张卡片内部统一为主要指标与辅助分组，Codex Tokens 和 DeepSeek
+  消费/Tokens/请求归入无可见标题的“今日用量”语义分组，GLM 钱包归入带标题的“钱包”分组。DeepSeek 网页用量连接关闭时主卡不显示今日
   用量，启用但未配置 Token 时只显示毛玻璃占位，不回退展示余额差分估算。两套配色共用同一组
   颜色变量，规则中不写硬编码颜色
   （由 `tests/panel/panel-palette.test.ts` 守住）。浅色采用 macOS 设置风格的系统灰背景、白色分组卡片、
@@ -238,8 +239,8 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
   [`add-peak-window-reminder`](../../openspec/changes/archive/2026-09-15-add-peak-window-reminder/proposal.md)：
   判定是纯前端计算（`src/desktop/lib/peak-windows.ts`，按定义自身时区取本地星期与时刻，支持跨午夜
   回绕），内置官方时段表目前只有 DeepSeek（北京周一至五 09:00–12:00、14:00–18:00，带来源与
-  核实日期），无内置定义的平台（GLM/Codex）不显示时段信息；仅高峰时显示卡片警示描边、阴影与
-  边界标签，错峰保持普通外观且无文字。面板展开期间跨过任一时段边界仍经现有 toast 提示一次；设置在每平台配置的
+  核实日期），无内置定义的平台（GLM/Codex）不显示时段信息；仅高峰时显示头部胶囊与卡片内侧短强调线，
+  不改变整卡描边或增加外发光，错峰保持普通外观且无文字。面板展开期间跨过任一时段边界仍经现有 toast 提示一次；设置在每平台配置的
   「高峰时段提醒」区块（内置只读说明、自定义时段编辑器、关闭），设置字段 `peakReminder`
   两侧契约镜像且向后兼容。自定义编辑器的形态见
   [`refine-peak-window-editor`](../../openspec/changes/archive/2026-09-16-refine-peak-window-editor/proposal.md)：

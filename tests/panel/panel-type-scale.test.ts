@@ -88,6 +88,11 @@ describe('the type scale is a scale', () => {
     }
   });
 
+  it('keeps compact panel text readable at the two smallest levels', () => {
+    expect(stepOf('--text-2xs')).toBeGreaterThanOrEqual(10);
+    expect(stepOf('--text-xs')).toBeGreaterThanOrEqual(11);
+  });
+
   it('names a step in every rule, in both sheets', () => {
     for (const [file, css] of SHEET_FILES.map((file) => [file, read(file)] as const)) {
       // The settings document is a different sheet that imports the same palette,

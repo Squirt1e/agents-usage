@@ -36,6 +36,7 @@ import {
   type ResetTimeFormat
 } from '../../shared/desktop-contract';
 import type { PlatformCardViewProps } from './card-props';
+import { CardSection } from './CardSection';
 import { FrostedHint } from './MetricStates';
 import { MetricRow } from './MetricRow';
 import { PlatformCard } from './PlatformCard';
@@ -151,91 +152,95 @@ export function GlmCard(props: GlmCardProps) {
       registerGear={props.registerGear}
       onOpenSettings={props.onOpenSettings}
     >
-      <QuotaDisplay
-        mode={props.quotaDisplayMode}
-        valueMode={props.quotaValueMode}
-        items={bars.map((bar) => ({
-          id: bar.id,
-          label: bar.label,
-          kind: windowKindOf(bar),
-          percent: metricNumber(props.quotaValueMode === 'remaining' ? bar.remaining : bar.used),
-          resetAt: bar.used?.resetAt ?? bar.remaining?.resetAt,
-          stale: (props.quotaValueMode === 'remaining' ? bar.remaining : bar.used)?.confidence.includes('stale') === true
-        }))}
-        now={now}
-        timezone={gate.timezone}
-        resetTimeFormat={resetTimeFormat}
-        onToggleResetTimeFormat={onToggleResetTimeFormat}
-        onToggleDisplayMode={props.onToggleQuotaDisplay}
-        replayKey={props.replayKey}
-        testId="glm-quota-list"
-        /* Only when the columns are placeholders: the cover blurs the content it
-           sits on, and there is nothing to blur over real data. */
-        covered={quotaReadings.length === 0}
-        overlay={quotaReadings.length === 0 ? (
-          <FrostedHint
-            testId="glm-quota-mask"
-            label={
-              !quotaConfigured || quotaError?.kind === 'missing_config'
-                ? '配置 API Key 后显示额度'
-                : '暂无额度数据'
-            }
-            onActivate={() => props.onOpenSettings('glm')}
-          />
-        ) : null}
-      />
+      <CardSection kind="primary" label="主要指标">
+        <QuotaDisplay
+          mode={props.quotaDisplayMode}
+          valueMode={props.quotaValueMode}
+          items={bars.map((bar) => ({
+            id: bar.id,
+            label: bar.label,
+            kind: windowKindOf(bar),
+            percent: metricNumber(props.quotaValueMode === 'remaining' ? bar.remaining : bar.used),
+            resetAt: bar.used?.resetAt ?? bar.remaining?.resetAt,
+            stale: (props.quotaValueMode === 'remaining' ? bar.remaining : bar.used)?.confidence.includes('stale') === true
+          }))}
+          now={now}
+          timezone={gate.timezone}
+          resetTimeFormat={resetTimeFormat}
+          onToggleResetTimeFormat={onToggleResetTimeFormat}
+          onToggleDisplayMode={props.onToggleQuotaDisplay}
+          replayKey={props.replayKey}
+          testId="glm-quota-list"
+          /* Only when the columns are placeholders: the cover blurs the content it
+             sits on, and there is nothing to blur over real data. */
+          covered={quotaReadings.length === 0}
+          overlay={quotaReadings.length === 0 ? (
+            <FrostedHint
+              testId="glm-quota-mask"
+              label={
+                !quotaConfigured || quotaError?.kind === 'missing_config'
+                  ? '配置 API Key 后显示额度'
+                  : '暂无额度数据'
+              }
+              onActivate={() => props.onOpenSettings('glm')}
+            />
+          ) : null}
+        />
+      </CardSection>
 
       {walletEnabled ? (
-        <div className={`glm-wallet${walletEmpty ? ' is-covered' : ''}`} data-testid="glm-wallet">
-          {wallets.map(({ currency, metric }) => {
-            const value = metricNumber(metric);
-            return (
-              <MetricRow
-                key={`balance-${currency}`}
-                label="钱包余额"
-                note="实验数据源"
-                strong
-                value={value === null ? String(metric.value) : formatMoney(value, currency)}
-                replayKey={props.replayKey}
-              />
-            );
-          })}
-          {spends.map(({ currency, metric }) => {
-            const value = metricNumber(metric);
-            return (
-              <div className="wallet-spend" key={`spend-${currency}`}>
-                <span className="metric-label">
-                  今日钱包消费
-                  <ConfidenceTag tone="estimate">估算</ConfidenceTag>
-                </span>
-                <span className="wallet-spend-value">
-                  <ReplayNumber key={props.replayKey} text={value === null ? String(metric.value) : formatMoney(value, currency)} replay={!!props.replayKey} />
-                </span>
-              </div>
-            );
-          })}
-          {walletEmpty ? (
-            <>
-              <MetricRow label="钱包余额" note="实验数据源" strong value={formatMoney(PLACEHOLDER_WALLET.balance, PLACEHOLDER_WALLET.currency)} />
-              <div className="wallet-spend">
-                <span className="metric-label">
-                  今日钱包消费
-                  <ConfidenceTag tone="estimate">估算</ConfidenceTag>
-                </span>
-                <span className="wallet-spend-value">{formatMoney(PLACEHOLDER_WALLET.spend, PLACEHOLDER_WALLET.currency)}</span>
-              </div>
-              <FrostedHint
-                testId="glm-wallet-mask"
-                label={
-                  !walletConfigured || walletError?.kind === 'missing_config'
-                    ? '配置钱包凭据后显示用量'
-                    : '暂无钱包数据'
-                }
-                onActivate={() => props.onOpenSettings('glm')}
-              />
-            </>
-          ) : null}
-        </div>
+        <CardSection kind="secondary" label="钱包" title="钱包">
+          <div className={`glm-wallet${walletEmpty ? ' is-covered' : ''}`} data-testid="glm-wallet">
+            {wallets.map(({ currency, metric }) => {
+              const value = metricNumber(metric);
+              return (
+                <MetricRow
+                  key={`balance-${currency}`}
+                  label="钱包余额"
+                  note="实验数据源"
+                  strong
+                  value={value === null ? String(metric.value) : formatMoney(value, currency)}
+                  replayKey={props.replayKey}
+                />
+              );
+            })}
+            {spends.map(({ currency, metric }) => {
+              const value = metricNumber(metric);
+              return (
+                <div className="wallet-spend" key={`spend-${currency}`}>
+                  <span className="metric-label">
+                    今日钱包消费
+                    <ConfidenceTag tone="estimate">估算</ConfidenceTag>
+                  </span>
+                  <span className="wallet-spend-value">
+                    <ReplayNumber key={props.replayKey} text={value === null ? String(metric.value) : formatMoney(value, currency)} replay={!!props.replayKey} />
+                  </span>
+                </div>
+              );
+            })}
+            {walletEmpty ? (
+              <>
+                <MetricRow label="钱包余额" note="实验数据源" strong value={formatMoney(PLACEHOLDER_WALLET.balance, PLACEHOLDER_WALLET.currency)} />
+                <div className="wallet-spend">
+                  <span className="metric-label">
+                    今日钱包消费
+                    <ConfidenceTag tone="estimate">估算</ConfidenceTag>
+                  </span>
+                  <span className="wallet-spend-value">{formatMoney(PLACEHOLDER_WALLET.spend, PLACEHOLDER_WALLET.currency)}</span>
+                </div>
+                <FrostedHint
+                  testId="glm-wallet-mask"
+                  label={
+                    !walletConfigured || walletError?.kind === 'missing_config'
+                      ? '配置钱包凭据后显示用量'
+                      : '暂无钱包数据'
+                  }
+                  onActivate={() => props.onOpenSettings('glm')}
+                />
+              </>
+            ) : null}
+          </div>
+        </CardSection>
       ) : null}
     </PlatformCard>
   );

@@ -306,19 +306,14 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
   { what: 'connection dot changes tone', selector: '.status-dot', properties: ['background-color'] },
   { what: 'status word takes the tone of its row', selector: '.status-label', properties: ['color'] },
   {
-    what: 'the provider card warms as its provider crosses into peak',
-    selector: '.provider-card',
-    properties: ['border-color', 'box-shadow']
-  },
-  {
-    what: 'a provider card gains depth on hover',
-    selector: '.provider-card',
-    properties: ['box-shadow']
+    what: 'the provider card peak rail appears without turning the card into a warning',
+    selector: '.provider-card::before',
+    properties: ['opacity', 'transform']
   },
   {
     what: 'the peak corner appears only while the provider is in peak',
     selector: '.peak-corner',
-    properties: ['color', 'opacity', 'transform', 'visibility']
+    properties: ['color', 'background-color', 'border-color', 'opacity', 'transform', 'visibility']
   },
   {
     what: 'a message withdraws from the stack',
@@ -491,6 +486,11 @@ const ANIMATION_SWITCHES: AnimationSwitch[] = [
   { what: 'successful refresh rolls visible digit columns from zero', selectors: ['.rolling-number-strip'], animation: 'replay-digit-roll' },
   { what: 'a message arrives in the stack', selectors: ['.panel-toast'], animation: 'panel-toast-in' },
   {
+    what: 'an auxiliary card section arrives without shifting its measured layout',
+    selectors: ['.card-section-secondary'],
+    animation: 'card-section-in'
+  },
+  {
     // A settings section mounts already in its new state, so there is no previous
     // value to move from: its travel is an animation. The pane's React key is the
     // section, which is what re-runs it.
@@ -635,10 +635,8 @@ describe('panel motion: every registered switch travels', () => {
 });
 
 describe('panel card hover', () => {
-  it('stays put and uses the theme shadow', () => {
-    const hover = blocksFor('.provider-card:hover').flatMap((entry) => declarations(entry.body));
-    expect(hover.some((entry) => entry.property === 'transform')).toBe(false);
-    expect(hover.find((entry) => entry.property === 'box-shadow')?.value).toContain('var(--card-hover-shadow)');
+  it('leaves the non-interactive card itself without hover feedback', () => {
+    expect(blocks.filter((block) => block.selectors.includes('.provider-card:hover'))).toEqual([]);
   });
 
   it('keeps reset-time links free of an underline', () => {
@@ -840,11 +838,11 @@ describe('panel motion: a cover protects what it covers', () => {
       '.is-covered > :not(.frost-hint) must blur the covered content: the blur has to be painted with the content it hides'
     ).toMatch(/filter:\s*blur\(/);
     expect(blurred, 'the covered content must be dimmed as well').toMatch(/opacity:/);
-    const web = blocksFor('.deepseek-web')[0]!.body;
-    expect(web, 'a subtle divider separates web usage without a nested card outline').toMatch(
+    const secondary = blocksFor('.card-section-secondary')[0]!.body;
+    expect(secondary, 'a subtle divider separates auxiliary data without a nested card outline').toMatch(
       /border-top:\s*1px solid var\(--line-soft\)/
     );
-    expect(web).toMatch(/background:\s*transparent/);
+    const web = blocksFor('.deepseek-web')[0]!.body;
     expect(web).not.toMatch(/border:\s*1px solid/);
     const wallet = blocksFor('.glm-wallet')[0]!.body;
     expect(wallet, 'the GLM wallet should not gain a heavier outline').not.toMatch(/border:\s*1px solid/);

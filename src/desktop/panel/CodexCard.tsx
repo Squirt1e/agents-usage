@@ -17,6 +17,7 @@
 import { localDayIn, providerPlanLabel } from '../../shared/desktop-contract';
 import type { QuotaDisplayMode, QuotaValueMode, ResetTimeFormat } from '../../shared/desktop-contract';
 import type { PlatformCardViewProps } from './card-props';
+import { CardSection } from './CardSection';
 import { MetricRow } from './MetricRow';
 import { PlatformCard } from './PlatformCard';
 import { QuotaDisplay } from './QuotaDisplay';
@@ -59,34 +60,38 @@ export function CodexCard(props: CodexCardProps) {
       registerGear={props.registerGear}
       onOpenSettings={props.onOpenSettings}
     >
-      <QuotaDisplay
-        mode={props.quotaDisplayMode}
-        valueMode={props.quotaValueMode}
-        items={windows.map((window) => ({
-          id: window.id,
-          label: window.label,
-          kind: window.id,
-          percent: metricNumber(props.quotaValueMode === 'remaining' ? window.remaining : window.used),
-          resetAt: window.used?.resetAt ?? window.remaining?.resetAt,
-          stale: window.used?.confidence.includes('stale') === true
-        }))}
-        now={now}
-        timezone={gate.timezone}
-        resetTimeFormat={props.resetTimeFormat}
-        onToggleResetTimeFormat={props.onToggleResetTimeFormat}
-        onToggleDisplayMode={props.onToggleQuotaDisplay}
-        replayKey={props.replayKey}
-        testId="codex-quota-display"
-      />
-      {tokensGate.render && tokens ? (
-        <MetricRow
-          label="今日 Tokens"
-          note={confidenceNote(tokens.confidence)}
-          noteTone={tokens.confidence?.includes('estimated') ? 'estimate' : undefined}
-          value={tokensValue === null ? String(tokens.value) : formatTokens(tokensValue)}
+      <CardSection kind="primary" label="主要指标">
+        <QuotaDisplay
+          mode={props.quotaDisplayMode}
+          valueMode={props.quotaValueMode}
+          items={windows.map((window) => ({
+            id: window.id,
+            label: window.label,
+            kind: window.id,
+            percent: metricNumber(props.quotaValueMode === 'remaining' ? window.remaining : window.used),
+            resetAt: window.used?.resetAt ?? window.remaining?.resetAt,
+            stale: window.used?.confidence.includes('stale') === true
+          }))}
+          now={now}
+          timezone={gate.timezone}
+          resetTimeFormat={props.resetTimeFormat}
+          onToggleResetTimeFormat={props.onToggleResetTimeFormat}
+          onToggleDisplayMode={props.onToggleQuotaDisplay}
           replayKey={props.replayKey}
-          testId="metric-codex-tokens"
+          testId="codex-quota-display"
         />
+      </CardSection>
+      {tokensGate.render && tokens ? (
+        <CardSection kind="secondary" label="今日用量">
+          <MetricRow
+            label="今日 Tokens"
+            note={confidenceNote(tokens.confidence)}
+            noteTone={tokens.confidence?.includes('estimated') ? 'estimate' : undefined}
+            value={tokensValue === null ? String(tokens.value) : formatTokens(tokensValue)}
+            replayKey={props.replayKey}
+            testId="metric-codex-tokens"
+          />
+        </CardSection>
       ) : null}
     </PlatformCard>
   );

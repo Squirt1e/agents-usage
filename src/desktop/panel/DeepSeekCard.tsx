@@ -24,6 +24,7 @@
 
 import { providerPlanLabel } from '../../shared/desktop-contract';
 import type { PlatformCardViewProps } from './card-props';
+import { CardSection } from './CardSection';
 import { FrostedHint } from './MetricStates';
 import { MetricRow } from './MetricRow';
 import { PlatformCard } from './PlatformCard';
@@ -91,6 +92,14 @@ export function DeepSeekCard(props: DeepSeekCardProps) {
   // The frosted placeholder belongs to the module without a token; once a
   // token is stored (collecting, failing or succeeding) the plain rows render.
   const webCovered = webEnabled && !webConfigured;
+  const renderedSpends = spends.filter(({ metric }) =>
+    shouldRenderMetric(metric, { ...gate, rangeRequired: true }).render
+  );
+  const hasTodayUsage =
+    renderedSpends.length > 0 ||
+    webCovered ||
+    (tokensGate.render && tokens !== undefined) ||
+    (requestsGate.render && requests !== undefined);
 
   return (
     <PlatformCard
@@ -100,83 +109,84 @@ export function DeepSeekCard(props: DeepSeekCardProps) {
       registerGear={props.registerGear}
       onOpenSettings={props.onOpenSettings}
     >
-      <div className={`card-module${balanceEmpty ? ' is-covered' : ''}`} data-testid="deepseek-balance">
-        {renderedBalances.map(({ currency, metric }) => {
-          const value = metricNumber(metric);
-          return (
-            <MetricRow
-              key={`balance-${currency}`}
-              label={multipleCurrencies ? `剩余余额（${currency}）` : '剩余余额'}
-              strong
-              value={value === null ? String(metric.value) : formatMoney(value, currency)}
-              replayKey={props.replayKey}
-            />
-          );
-        })}
-        {balanceEmpty ? (
-          <>
-            <MetricRow
-              label="剩余余额"
-              strong
-              value={formatMoney(PLACEHOLDER_BALANCE.amount, PLACEHOLDER_BALANCE.currency)}
-            />
-            <FrostedHint
-              testId="deepseek-balance-mask"
-              label={
-                !balanceConfigured || balanceError?.kind === 'missing_config'
-                  ? '配置 API Key 后显示余额'
-                  : '暂无余额数据'
-              }
-              onActivate={() => props.onOpenSettings('deepseek')}
-            />
-          </>
-        ) : null}
-      </div>
-      {spends.map(({ currency, metric }) => {
-        const gateResult = shouldRenderMetric(metric, { ...gate, rangeRequired: true });
-        if (!gateResult.render) return null;
-        const value = metricNumber(metric);
-        // One reading among the others: label left, amount right, the same row the
-        // tokens and requests below it use. The web bill is not marked as an
-        // experiment on the card — the connection is opted into on its own page.
-        return (
-          <MetricRow
-            key={`spend-${currency}`}
-            label={spends.length > 1 ? `今日消费（${currency}）` : '今日消费'}
-            value={value === null ? String(metric.value) : formatMoney(value, currency)}
-            replayKey={props.replayKey}
-            testId={`metric-deepseek-spend-${currency}`}
-          />
-        );
-      })}
-      {webCovered ? (
-        <div className="glm-wallet deepseek-web is-covered" data-testid="deepseek-web">
-          <div className="wallet-spend">
-            <span className="metric-label">今日消费（账单）</span>
-            <span className="wallet-spend-value">--</span>
-          </div>
-          <FrostedHint
-            testId="deepseek-web-mask"
-            label="配置网页 Token 后显示今日用量"
-            onActivate={() => props.onOpenSettings('deepseek')}
-          />
+      <CardSection kind="primary" label="主要指标">
+        <div className={`card-module${balanceEmpty ? ' is-covered' : ''}`} data-testid="deepseek-balance">
+          {renderedBalances.map(({ currency, metric }) => {
+            const value = metricNumber(metric);
+            return (
+              <MetricRow
+                key={`balance-${currency}`}
+                label={multipleCurrencies ? `剩余余额（${currency}）` : '剩余余额'}
+                strong
+                value={value === null ? String(metric.value) : formatMoney(value, currency)}
+                replayKey={props.replayKey}
+              />
+            );
+          })}
+          {balanceEmpty ? (
+            <>
+              <MetricRow
+                label="剩余余额"
+                strong
+                value={formatMoney(PLACEHOLDER_BALANCE.amount, PLACEHOLDER_BALANCE.currency)}
+              />
+              <FrostedHint
+                testId="deepseek-balance-mask"
+                label={
+                  !balanceConfigured || balanceError?.kind === 'missing_config'
+                    ? '配置 API Key 后显示余额'
+                    : '暂无余额数据'
+                }
+                onActivate={() => props.onOpenSettings('deepseek')}
+              />
+            </>
+          ) : null}
         </div>
-      ) : null}
-      {tokensGate.render && tokens ? (
-        <MetricRow
-          label="今日 Tokens"
-          value={tokensValue === null ? String(tokens.value) : formatTokens(tokensValue)}
-          replayKey={props.replayKey}
-          testId="metric-deepseek-tokens"
-        />
-      ) : null}
-      {requestsGate.render && requests ? (
-        <MetricRow
-          label="今日请求"
-          value={requestsValue === null ? String(requests.value) : String(requestsValue)}
-          replayKey={props.replayKey}
-          testId="metric-deepseek-requests"
-        />
+      </CardSection>
+      {hasTodayUsage ? (
+        <CardSection kind="secondary" label="今日用量">
+          {renderedSpends.map(({ currency, metric }) => {
+            const value = metricNumber(metric);
+            return (
+              <MetricRow
+                key={`spend-${currency}`}
+                label={spends.length > 1 ? `今日消费（${currency}）` : '今日消费'}
+                value={value === null ? String(metric.value) : formatMoney(value, currency)}
+                replayKey={props.replayKey}
+                testId={`metric-deepseek-spend-${currency}`}
+              />
+            );
+          })}
+          {webCovered ? (
+            <div className="card-module deepseek-web is-covered" data-testid="deepseek-web">
+              <div className="wallet-spend">
+                <span className="metric-label">今日消费（账单）</span>
+                <span className="wallet-spend-value">--</span>
+              </div>
+              <FrostedHint
+                testId="deepseek-web-mask"
+                label="配置网页 Token 后显示今日用量"
+                onActivate={() => props.onOpenSettings('deepseek')}
+              />
+            </div>
+          ) : null}
+          {tokensGate.render && tokens ? (
+            <MetricRow
+              label="今日 Tokens"
+              value={tokensValue === null ? String(tokens.value) : formatTokens(tokensValue)}
+              replayKey={props.replayKey}
+              testId="metric-deepseek-tokens"
+            />
+          ) : null}
+          {requestsGate.render && requests ? (
+            <MetricRow
+              label="今日请求"
+              value={requestsValue === null ? String(requests.value) : String(requestsValue)}
+              replayKey={props.replayKey}
+              testId="metric-deepseek-requests"
+            />
+          ) : null}
+        </CardSection>
       ) : null}
     </PlatformCard>
   );

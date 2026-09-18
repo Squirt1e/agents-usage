@@ -432,12 +432,12 @@ describe('a change here lands on the panel', () => {
     const { client, panel } = renderBothWindows({ client: clientWith({ glmWalletEnabled: true }), section: 'glm' });
     await screen.findByTestId('settings-glm');
     await panel.findByTestId('card-glm');
-    expect(within(panel.getByTestId('card-glm')).getByText(/钱包/)).toBeInTheDocument();
+    expect(within(panel.getByTestId('card-glm')).getByRole('region', { name: '钱包' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('checkbox', { name: '启用实验钱包连接' }));
 
     await waitFor(() =>
-      expect(within(panel.getByTestId('card-glm')).queryByText(/钱包/)).not.toBeInTheDocument()
+      expect(within(panel.getByTestId('card-glm')).queryByRole('region', { name: '钱包' })).not.toBeInTheDocument()
     );
     expect(client.methodCalls('deleteCredential')).toEqual([]);
   });

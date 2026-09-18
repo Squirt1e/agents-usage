@@ -84,6 +84,29 @@ function renderCodex(metrics: DesktopUsageMetric[], extra: Parameters<typeof pro
 }
 
 describe('Codex dual gauges', () => {
+  it('keeps quota primary and groups daily activity below it', () => {
+    renderCodex([
+      fiveHour('2026-09-10T09:42:18.000Z'),
+      weekly('2026-09-13T16:26:00.000Z'),
+      metricOf({
+        key: 'activity.daily.tokens',
+        value: 42_000,
+        unit: 'tokens',
+        direction: 'activity',
+        capability: 'supported',
+        scope: { localDay: '2026-09-10', timezone: 'UTC', rangeConfirmed: true }
+      })
+    ]);
+
+    const card = screen.getByTestId('card-codex');
+    const primary = within(card).getByRole('region', { name: '主要指标' });
+    const today = within(card).getByRole('region', { name: '今日用量' });
+    expect(within(primary).getByTestId('codex-quota-display')).toBeInTheDocument();
+    expect(within(today).getByTestId('metric-codex-tokens')).toHaveTextContent('42.0 K');
+    expect(within(today).queryByRole('heading', { name: '今日用量' })).not.toBeInTheDocument();
+    expect(primary.compareDocumentPosition(today) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('renders the selected remaining value and labels its meaning', () => {
     const resetAt = '2026-09-10T09:42:18.000Z';
     const snapshot = snapshotOf([codexState([fiveHour(resetAt), fiveHourRemaining(resetAt)])]);
@@ -381,6 +404,17 @@ describe('GLM quota and wallet', () => {
     // Real data: no frosted cover anywhere.
     expect(screen.queryByTestId('glm-quota-mask')).not.toBeInTheDocument();
     expect(screen.queryByTestId('glm-wallet-mask')).not.toBeInTheDocument();
+  });
+
+  it('keeps Coding Plan quota primary and groups the wallet as auxiliary data', () => {
+    renderGlm(snapshotOf([providerStateOf('glm', glmMetrics)]));
+
+    const card = screen.getByTestId('card-glm');
+    const primary = within(card).getByRole('region', { name: '主要指标' });
+    const wallet = within(card).getByRole('region', { name: '钱包' });
+    expect(within(primary).getByTestId('glm-quota-list')).toBeInTheDocument();
+    expect(within(wallet).getByTestId('glm-wallet')).toHaveTextContent('钱包余额');
+    expect(primary.compareDocumentPosition(wallet) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('covers an empty quota module with the frosted hint over placeholder data', () => {
@@ -711,6 +745,32 @@ describe('DeepSeek balances and spend', () => {
     // Tokens and requests from the same billed source pass the day gate.
     expect(screen.getByTestId('metric-deepseek-tokens')).toHaveTextContent('667.3 M');
     expect(screen.getByTestId('metric-deepseek-requests')).toHaveTextContent('2230');
+  });
+
+  it('keeps balance primary and groups web activity as today usage', () => {
+    const webDay = localDayIn(TIMEZONE, NOW);
+    const snapshot = snapshotOf([
+      providerStateOf('deepseek', [
+        ...deepSeekMetrics,
+        metricOf({
+          key: 'spend.CNY.daily.billed',
+          value: 49.06,
+          unit: 'CNY',
+          direction: 'spend',
+          source: 'deepseek-web-usage',
+          details: { localDay: webDay }
+        })
+      ])
+    ]);
+    render(<DeepSeekCard view={providerView(snapshot, 'deepseek')} {...cardProps} webEnabled webConfigured />);
+
+    const card = screen.getByTestId('card-deepseek');
+    const primary = within(card).getByRole('region', { name: '主要指标' });
+    const today = within(card).getByRole('region', { name: '今日用量' });
+    expect(within(primary).getByTestId('deepseek-balance')).toHaveTextContent('¥ 86.42');
+    expect(within(today).getByTestId('metric-deepseek-spend-CNY')).toHaveTextContent('¥ 49.06');
+    expect(within(today).queryByRole('heading', { name: '今日用量' })).not.toBeInTheDocument();
+    expect(primary.compareDocumentPosition(today) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('selects billed spends and requests from the merged view', () => {

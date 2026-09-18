@@ -144,4 +144,10 @@ describe('settings window palette', () => {
     expect(settingsClean).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(settingsClean).not.toMatch(/\brgba?\(/);
   });
+
+  it('only references tokens provided by the shared panel stylesheet', () => {
+    const declared = new Set([...clean.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1]!));
+    const referenced = new Set([...settingsClean.matchAll(/var\((--[a-z0-9-]+)/g)].map((match) => match[1]!));
+    expect([...referenced].filter((name) => !declared.has(name))).toEqual([]);
+  });
 });

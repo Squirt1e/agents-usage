@@ -302,7 +302,7 @@
   background: var(--page);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: var(--card-hover-shadow);
+  box-shadow: var(--settings-sheet-shadow);
 }
 
 /* ---------------------------------------------------------------- motion off */
