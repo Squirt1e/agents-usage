@@ -123,6 +123,7 @@ export function OverviewView(props: OverviewViewProps) {
                   quotaDisplayMode={props.settings.glmQuotaDisplay}
                   quotaValueMode={props.settings.quotaValueMode}
                   quotaWarningThreshold={props.settings.quotaWarningThreshold}
+                  balanceWarningThreshold={props.settings.balanceWarningThreshold}
                   resetTimeFormat={props.settings.glmResetFormat}
                   onToggleResetTimeFormat={() => props.onToggleResetTimeFormat('glm')}
                   onToggleQuotaDisplay={() => props.onToggleQuotaDisplay('glm')}
@@ -137,6 +138,7 @@ export function OverviewView(props: OverviewViewProps) {
                 view={view}
                 peak={peak}
                 balanceConfigured={props.settings.credentials.deepseek.configured === true}
+                balanceWarningThreshold={props.settings.balanceWarningThreshold}
                 webEnabled={props.settings.deepseekWebEnabled}
                 webConfigured={props.settings.credentials['deepseek-web'].configured === true}
                 replayKey={props.replayKeys?.deepseek}

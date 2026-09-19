@@ -107,7 +107,7 @@ function QuotaItem(props: QuotaDisplayProps & { item: QuotaDisplayItem }) {
   const readingLabel = percent === null
     ? `${item.label} ${valueLabel}未返回`
     : `${item.label} ${valueLabel} ${formatPercent(percent)}%`;
-  const label = warning ? `${readingLabel} 低额度警戒` : readingLabel;
+  const label = warning ? `${readingLabel} 低额度提醒` : readingLabel;
   const itemRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<SVGPathElement>(null);
   const fillRef = useRef<SVGPathElement>(null);

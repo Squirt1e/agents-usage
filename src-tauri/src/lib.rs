@@ -2036,6 +2036,7 @@ mod tests {
             json!({ "theme": "light" }),
             json!({ "quotaValueMode": "used" }),
             json!({ "quotaWarningThreshold": 15 }),
+            json!({ "balanceWarningThreshold": 12.5 }),
             json!({ "platformVisibility": { "glm": false } }),
             json!({ "platformOrder": ["glm", "codex"] }),
             json!({ "codexResetFormat": "absolute" }),

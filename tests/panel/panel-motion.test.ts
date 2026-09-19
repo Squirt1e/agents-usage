@@ -318,6 +318,11 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
     properties: ['color']
   },
   {
+    what: 'a balance amount takes and gives back the low-value warning colour',
+    selector: '.metric-value',
+    properties: ['color']
+  },
+  {
     what: 'refreshed ring digits take the warning colour',
     selector: '.quota-ring-replay',
     properties: ['color']

@@ -17,13 +17,23 @@ export interface MetricRowProps {
   value: ReactNode;
   strong?: boolean;
   testId?: string;
+  /** Marks only a real balance amount that has crossed the configured reminder. */
+  lowBalance?: boolean;
   /** Incremented after a successful manual refresh of this row's platform. */
   replayKey?: number;
 }
 
 export function MetricRow(props: MetricRowProps) {
+  const accessibleValue = typeof props.value === 'string' ? props.value : '';
   return (
-    <div className={`metric-row${props.strong ? ' metric-row-strong' : ''}`} {...(props.testId ? { 'data-testid': props.testId } : {})}>
+    <div
+      className={`metric-row${props.strong ? ' metric-row-strong' : ''}${props.lowBalance ? ' is-low-balance' : ''}`}
+      data-low-balance={props.lowBalance === true}
+      {...(props.lowBalance
+        ? { role: 'group', 'aria-label': `${props.label} ${accessibleValue} 低余额提醒` }
+        : {})}
+      {...(props.testId ? { 'data-testid': props.testId } : {})}
+    >
       <span className="metric-label">
         {props.label}
         {props.note ? <ConfidenceTag tone={props.noteTone}>{props.note}</ConfidenceTag> : null}

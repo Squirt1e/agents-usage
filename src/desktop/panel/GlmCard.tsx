@@ -82,6 +82,7 @@ export interface GlmCardProps extends PlatformCardViewProps {
   quotaDisplayMode: QuotaDisplayMode;
   quotaValueMode: QuotaValueMode;
   quotaWarningThreshold?: number;
+  balanceWarningThreshold?: number;
   resetTimeFormat: ResetTimeFormat;
   /** Whether a Coding Plan key is stored (`credentials.glm.configured`). Without
    *  one the quota module is a placeholder under the cover — a reading collected
@@ -197,6 +198,10 @@ export function GlmCard(props: GlmCardProps) {
           <div className={`glm-wallet${walletEmpty ? ' is-covered' : ''}`} data-testid="glm-wallet">
             {wallets.map(({ currency, metric }) => {
               const value = metricNumber(metric);
+              const lowBalance =
+                (props.balanceWarningThreshold ?? 0) > 0 &&
+                value !== null &&
+                value <= (props.balanceWarningThreshold ?? 0);
               return (
                 <MetricRow
                   key={`balance-${currency}`}
@@ -204,6 +209,8 @@ export function GlmCard(props: GlmCardProps) {
                   note="实验数据源"
                   strong
                   value={value === null ? String(metric.value) : formatMoney(value, currency)}
+                  lowBalance={lowBalance}
+                  testId={`metric-glm-balance-${currency}`}
                   replayKey={props.replayKey}
                 />
               );

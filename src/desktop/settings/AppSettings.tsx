@@ -48,6 +48,7 @@ export interface AppSettingsProps {
   onThemeChange(theme: PanelSettings['theme']): Promise<void>;
   onQuotaValueModeChange(mode: PanelSettings['quotaValueMode']): Promise<void>;
   onQuotaWarningThresholdChange(threshold: number): Promise<void>;
+  onBalanceWarningThresholdChange(threshold: number): Promise<void>;
 }
 
 export function AppSettings(props: AppSettingsProps) {
@@ -68,6 +69,11 @@ export function AppSettings(props: AppSettingsProps) {
   const [thresholdDraft, setThresholdDraft] = useState(String(props.settings.quotaWarningThreshold));
   const [savingThreshold, setSavingThreshold] = useState(false);
   const [thresholdFeedback, setThresholdFeedback] = useState('');
+  const [balanceThresholdDraft, setBalanceThresholdDraft] = useState(
+    String(props.settings.balanceWarningThreshold)
+  );
+  const [savingBalanceThreshold, setSavingBalanceThreshold] = useState(false);
+  const [balanceThresholdFeedback, setBalanceThresholdFeedback] = useState('');
   /**
    * Whether this half is still on screen. The settings window unmounts a section
    * when the reader moves to another one, and a write that lands afterwards would
@@ -85,6 +91,10 @@ export function AppSettings(props: AppSettingsProps) {
   useEffect(() => {
     if (!savingThreshold) setThresholdDraft(String(props.settings.quotaWarningThreshold));
   }, [props.settings.quotaWarningThreshold, savingThreshold]);
+
+  useEffect(() => {
+    if (!savingBalanceThreshold) setBalanceThresholdDraft(String(props.settings.balanceWarningThreshold));
+  }, [props.settings.balanceWarningThreshold, savingBalanceThreshold]);
 
   const saveAppearance = async (kind: 'theme' | 'quota', save: () => Promise<void>) => {
     if (savingAppearance !== null) return;
@@ -124,6 +134,30 @@ export function AppSettings(props: AppSettingsProps) {
       setThresholdFeedback('保存失败，已恢复上一个值');
     } finally {
       if (mounted.current) setSavingThreshold(false);
+    }
+  };
+
+  const commitBalanceWarningThreshold = async () => {
+    if (savingBalanceThreshold) return;
+    const parsed = Number(balanceThresholdDraft);
+    if (balanceThresholdDraft.trim() === '' || !Number.isFinite(parsed) || parsed < 0) {
+      setBalanceThresholdFeedback('请输入不小于 0 的数字');
+      return;
+    }
+    if (parsed === props.settings.balanceWarningThreshold) {
+      setBalanceThresholdDraft(String(parsed));
+      setBalanceThresholdFeedback('');
+      return;
+    }
+    setSavingBalanceThreshold(true);
+    setBalanceThresholdFeedback('');
+    try {
+      await props.onBalanceWarningThresholdChange(parsed);
+    } catch {
+      setBalanceThresholdDraft(String(props.settings.balanceWarningThreshold));
+      setBalanceThresholdFeedback('保存失败，已恢复上一个值');
+    } finally {
+      if (mounted.current) setSavingBalanceThreshold(false);
     }
   };
 
@@ -180,10 +214,10 @@ export function AppSettings(props: AppSettingsProps) {
           <div className="setting-row quota-threshold-setting">
             <div className="setting-text">
               <label className="setting-label" htmlFor="quota-warning-threshold">
-                低额度警戒线
+                低额度提醒
               </label>
               <span className="setting-desc" id="quota-warning-threshold-help">
-                0 为关闭，按剩余额度判断
+                剩余额度不高于该百分比时标红；0 为关闭。
               </span>
             </div>
             <div className="quota-threshold-control">
@@ -197,7 +231,7 @@ export function AppSettings(props: AppSettingsProps) {
                   step="1"
                   value={thresholdDraft}
                   disabled={savingThreshold}
-                  aria-label="低额度警戒线"
+                  aria-label="低额度提醒"
                   aria-describedby="quota-warning-threshold-help quota-warning-threshold-feedback"
                   aria-invalid={thresholdFeedback === '请输入 0–100 的整数'}
                   onChange={(event) => {
@@ -208,7 +242,7 @@ export function AppSettings(props: AppSettingsProps) {
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter') return;
                     event.preventDefault();
-                    void commitQuotaWarningThreshold();
+                    event.currentTarget.blur();
                   }}
                 />
                 <span className="quota-threshold-suffix" aria-hidden="true">%</span>
@@ -219,6 +253,49 @@ export function AppSettings(props: AppSettingsProps) {
                 aria-live="polite"
               >
                 {thresholdFeedback}
+              </span>
+            </div>
+          </div>
+          <div className="setting-row quota-threshold-setting">
+            <div className="setting-text">
+              <label className="setting-label" htmlFor="balance-warning-threshold">
+                低余额提醒
+              </label>
+              <span className="setting-desc" id="balance-warning-threshold-help">
+                余额不高于该金额时标红；0 为关闭，各币种按原始金额判断。
+              </span>
+            </div>
+            <div className="quota-threshold-control">
+              <div className="quota-threshold-input">
+                <input
+                  id="balance-warning-threshold"
+                  className={`text-input${balanceThresholdFeedback === '请输入不小于 0 的数字' ? ' is-invalid' : ''}`}
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={balanceThresholdDraft}
+                  disabled={savingBalanceThreshold}
+                  aria-label="低余额提醒"
+                  aria-describedby="balance-warning-threshold-help balance-warning-threshold-feedback"
+                  aria-invalid={balanceThresholdFeedback === '请输入不小于 0 的数字'}
+                  onChange={(event) => {
+                    setBalanceThresholdDraft(event.currentTarget.value);
+                    setBalanceThresholdFeedback('');
+                  }}
+                  onBlur={() => void commitBalanceWarningThreshold()}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                  }}
+                />
+              </div>
+              <span
+                id="balance-warning-threshold-feedback"
+                className="quota-threshold-feedback"
+                aria-live="polite"
+              >
+                {balanceThresholdFeedback}
               </span>
             </div>
           </div>

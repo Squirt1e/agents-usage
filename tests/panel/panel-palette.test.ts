@@ -123,21 +123,27 @@ describe('panel palette', () => {
     expect(contrast(variable(light, '--action')!, card)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('routes every low-quota reading through one theme warning colour', () => {
-    expect(variable(dark, '--quota-warning')).toMatch(/^#/);
-    expect(variable(light, '--quota-warning')).toMatch(/^#/);
+  it('routes low quota and low balance through one theme warning colour', () => {
+    expect(variable(dark, '--low-value-warning')).toMatch(/^#/);
+    expect(variable(light, '--low-value-warning')).toMatch(/^#/);
+    expect(variable(dark, '--quota-warning')).toBeUndefined();
+    expect(variable(light, '--quota-warning')).toBeUndefined();
     expect(block(clean, '.quota-item.is-warning .quota-shape-fill')).toMatch(
-      /stroke:\s*var\(--quota-warning\)/
+      /stroke:\s*var\(--low-value-warning\)/
     );
     expect(block(clean, '.quota-item.is-warning .quota-item-ringtext')).toMatch(
-      /fill:\s*var\(--quota-warning\)/
+      /fill:\s*var\(--low-value-warning\)/
     );
     expect(block(clean, '.quota-item.is-warning .quota-item-head .quota-value')).toMatch(
-      /color:\s*var\(--quota-warning\)/
+      /color:\s*var\(--low-value-warning\)/
     );
     expect(block(clean, '.quota-item.is-warning .quota-ring-replay')).toMatch(
-      /color:\s*var\(--quota-warning\)/
+      /color:\s*var\(--low-value-warning\)/
     );
+    expect(block(clean, '.metric-row.is-low-balance .metric-value')).toMatch(
+      /color:\s*var\(--low-value-warning\)/
+    );
+    expect(clean).not.toMatch(/\.metric-row\.is-low-balance\s+\.metric-label/);
   });
 });
 

@@ -199,6 +199,8 @@ export interface PanelSettings {
   quotaValueMode: QuotaValueMode;
   /** Remaining quota at or below this percentage is a warning; zero disables it. */
   quotaWarningThreshold: number;
+  /** Balance at or below this raw currency amount is a warning; zero disables it. */
+  balanceWarningThreshold: number;
   /**
    * Per-provider peak/off-peak reminder settings (add-peak-window-reminder).
    * An absent provider falls back to the builtin official table when one
@@ -218,6 +220,7 @@ export const THEME_PREFERENCES: readonly ThemePreference[] = ['light', 'dark', '
 export const QUOTA_DISPLAY_MODES: readonly QuotaDisplayMode[] = ['ring', 'bar'];
 export const QUOTA_VALUE_MODES: readonly QuotaValueMode[] = ['remaining', 'used'];
 export const DEFAULT_QUOTA_WARNING_THRESHOLD = 10;
+export const DEFAULT_BALANCE_WARNING_THRESHOLD = 10;
 
 /**
  * Reset-time presentation. `countdown` counts down in the units that suit the
@@ -307,6 +310,7 @@ export type PanelSettingsPatch = Partial<
     | 'glmQuotaDisplay'
     | 'quotaValueMode'
     | 'quotaWarningThreshold'
+    | 'balanceWarningThreshold'
     | 'peakReminder'
   >
 >;
@@ -331,6 +335,11 @@ function quotaWarningThreshold(value: unknown): number {
   return Number.isInteger(value) && typeof value === 'number' && value >= 0 && value <= 100
     ? value
     : DEFAULT_QUOTA_WARNING_THRESHOLD;
+}
+
+function balanceWarningThreshold(value: unknown): number {
+  const parsed = finiteNumber(value);
+  return parsed !== undefined && parsed >= 0 ? parsed : DEFAULT_BALANCE_WARNING_THRESHOLD;
 }
 
 function optionalBoolean(value: unknown): boolean | undefined {
@@ -702,6 +711,7 @@ export function parsePanelSettings(value: unknown): PanelSettings {
       ? record.quotaValueMode
       : 'remaining',
     quotaWarningThreshold: quotaWarningThreshold(record.quotaWarningThreshold),
+    balanceWarningThreshold: balanceWarningThreshold(record.balanceWarningThreshold),
     credentials: parseCredentials(record.credentials),
     ...(order ? { platformOrder: order } : {}),
     ...(codexCliPath ? { codexCliPath } : {}),

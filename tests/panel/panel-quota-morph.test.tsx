@@ -367,7 +367,7 @@ describe('quota item: the morph in the DOM', () => {
     );
 
     expect(screen.getByTestId('quota-item-boundary')).toHaveClass('is-warning');
-    expect(screen.getByRole('group', { name: '边界 剩余 10% 低额度警戒' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '边界 剩余 10% 低额度提醒' })).toBeInTheDocument();
     expect(screen.getByTestId('quota-item-above')).not.toHaveClass('is-warning');
     expect(screen.getByTestId('quota-item-missing')).not.toHaveClass('is-warning');
 
@@ -397,7 +397,7 @@ describe('quota item: the morph in the DOM', () => {
       />
     );
 
-    expect(screen.getByRole('group', { name: '5小时 已用 92% 低额度警戒' })).toHaveClass('is-warning');
+    expect(screen.getByRole('group', { name: '5小时 已用 92% 低额度提醒' })).toHaveClass('is-warning');
   });
 
   it('does not replay refreshed digits again when the ring becomes a bar', () => {

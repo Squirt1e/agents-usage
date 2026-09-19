@@ -458,7 +458,7 @@ describe('a change here lands on the panel', () => {
   it('re-evaluates low quota immediately without collecting a provider again', async () => {
     const client = clientWith({ quotaValueMode: 'used', quotaWarningThreshold: 50 });
     const { panel } = renderBothWindows({ client, section: 'appearance' });
-    const input = await screen.findByRole('spinbutton', { name: '低额度警戒线' });
+    const input = await screen.findByRole('spinbutton', { name: '低额度提醒' });
     const quota = await panel.findByTestId('quota-item-five-hour');
     expect(quota).not.toHaveClass('is-warning');
 
@@ -466,6 +466,20 @@ describe('a change here lands on the panel', () => {
     fireEvent.blur(input);
 
     await waitFor(() => expect(quota).toHaveClass('is-warning'));
+    expect(client.methodCalls('refresh')).toEqual([]);
+  });
+
+  it('re-evaluates low balances immediately without collecting a provider again', async () => {
+    const client = clientWith({ glmWalletEnabled: true, balanceWarningThreshold: 40 });
+    const { panel } = renderBothWindows({ client, section: 'appearance' });
+    const input = await screen.findByRole('spinbutton', { name: '低余额提醒' });
+    const row = (await panel.findByText('¥ 42.60')).closest('.metric-row');
+    expect(row).not.toHaveClass('is-low-balance');
+
+    fireEvent.change(input, { target: { value: '42.6' } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(row).toHaveClass('is-low-balance'));
     expect(client.methodCalls('refresh')).toEqual([]);
   });
 });
@@ -490,17 +504,20 @@ describe('per-platform settings stay out of the global ones', () => {
     await waitFor(() => expect(client.methodCalls('updateSettings')).toEqual([[{ quotaValueMode: 'used' }]]));
   });
 
-  it('shows the default low-quota threshold and explains its remaining-quota semantics', async () => {
+  it('uses reminder wording for both defaults and explains their distinct semantics', async () => {
     renderSettings({ client: clientWith(), section: 'appearance' });
 
-    expect(await screen.findByRole('spinbutton', { name: '低额度警戒线' })).toHaveValue(10);
-    expect(screen.getByText('0 为关闭，按剩余额度判断')).toBeInTheDocument();
+    expect(await screen.findByRole('spinbutton', { name: '低额度提醒' })).toHaveValue(10);
+    expect(screen.getByRole('spinbutton', { name: '低余额提醒' })).toHaveValue(10);
+    expect(screen.getByText('剩余额度不高于该百分比时标红；0 为关闭。')).toBeInTheDocument();
+    expect(screen.getByText('余额不高于该金额时标红；0 为关闭，各币种按原始金额判断。')).toBeInTheDocument();
+    expect(screen.queryByText('低额度警戒线')).not.toBeInTheDocument();
   });
 
   it('saves legal threshold integers, including zero as disabled', async () => {
     const client = clientWith();
     renderSettings({ client, section: 'appearance' });
-    const input = await screen.findByRole('spinbutton', { name: '低额度警戒线' });
+    const input = await screen.findByRole('spinbutton', { name: '低额度提醒' });
 
     fireEvent.change(input, { target: { value: '15' } });
     fireEvent.blur(input);
@@ -509,7 +526,10 @@ describe('per-platform settings stay out of the global ones', () => {
     );
 
     fireEvent.change(input, { target: { value: '0' } });
+    input.focus();
+    expect(input).toHaveFocus();
     fireEvent.keyDown(input, { key: 'Enter' });
+    expect(input).not.toHaveFocus();
     await waitFor(() =>
       expect(client.methodCalls('updateSettings')).toEqual([
         [{ quotaWarningThreshold: 15 }],
@@ -521,7 +541,7 @@ describe('per-platform settings stay out of the global ones', () => {
   it('keeps an invalid threshold local and does not send a patch', async () => {
     const client = clientWith();
     renderSettings({ client, section: 'appearance' });
-    const input = await screen.findByRole('spinbutton', { name: '低额度警戒线' });
+    const input = await screen.findByRole('spinbutton', { name: '低额度提醒' });
 
     fireEvent.change(input, { target: { value: '10.5' } });
     fireEvent.blur(input);
@@ -535,7 +555,7 @@ describe('per-platform settings stay out of the global ones', () => {
     const client = clientWith({ quotaWarningThreshold: 12 });
     vi.spyOn(client, 'updateSettings').mockRejectedValueOnce(new Error('offline'));
     renderSettings({ client, section: 'appearance' });
-    const input = await screen.findByRole('spinbutton', { name: '低额度警戒线' });
+    const input = await screen.findByRole('spinbutton', { name: '低额度提醒' });
     await waitFor(() => expect(input).toHaveValue(12));
 
     fireEvent.change(input, { target: { value: '18' } });
@@ -552,7 +572,7 @@ describe('per-platform settings stay out of the global ones', () => {
       () => new Promise((resolve) => (release = () => resolve(defaultPanelSettings({ quotaWarningThreshold: 15 }))))
     );
     renderSettings({ client, section: 'appearance' });
-    const input = await screen.findByRole('spinbutton', { name: '低额度警戒线' });
+    const input = await screen.findByRole('spinbutton', { name: '低额度提醒' });
 
     fireEvent.change(input, { target: { value: '15' } });
     fireEvent.blur(input);
@@ -563,6 +583,79 @@ describe('per-platform settings stay out of the global ones', () => {
 
     release?.();
     await waitFor(() => expect(input).not.toBeDisabled());
+  });
+
+  it('saves decimal balance reminders and zero as disabled', async () => {
+    const client = clientWith();
+    renderSettings({ client, section: 'appearance' });
+    const input = await screen.findByRole('spinbutton', { name: '低余额提醒' });
+
+    fireEvent.change(input, { target: { value: '12.5' } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(client.methodCalls('updateSettings')).toEqual([[{ balanceWarningThreshold: 12.5 }]])
+    );
+
+    fireEvent.change(input, { target: { value: '0' } });
+    input.focus();
+    expect(input).toHaveFocus();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(input).not.toHaveFocus();
+    await waitFor(() =>
+      expect(client.methodCalls('updateSettings')).toEqual([
+        [{ balanceWarningThreshold: 12.5 }],
+        [{ balanceWarningThreshold: 0 }]
+      ])
+    );
+  });
+
+  it('keeps an invalid balance reminder local and does not send a patch', async () => {
+    const client = clientWith();
+    renderSettings({ client, section: 'appearance' });
+    const input = await screen.findByRole('spinbutton', { name: '低余额提醒' });
+
+    fireEvent.change(input, { target: { value: '-0.01' } });
+    fireEvent.blur(input);
+
+    expect(await screen.findByText('请输入不小于 0 的数字')).toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(client.methodCalls('updateSettings')).toEqual([]);
+  });
+
+  it('restores the saved balance reminder when its write fails', async () => {
+    const client = clientWith({ balanceWarningThreshold: 8.5 });
+    vi.spyOn(client, 'updateSettings').mockRejectedValueOnce(new Error('offline'));
+    renderSettings({ client, section: 'appearance' });
+    const input = await screen.findByRole('spinbutton', { name: '低余额提醒' });
+    await waitFor(() => expect(input).toHaveValue(8.5));
+
+    fireEvent.change(input, { target: { value: '12.5' } });
+    fireEvent.blur(input);
+
+    expect(await screen.findByText('保存失败，已恢复上一个值')).toBeInTheDocument();
+    expect(input).toHaveValue(8.5);
+  });
+
+  it('disables only the balance reminder while it is being saved', async () => {
+    let release: (() => void) | undefined;
+    const client = clientWith();
+    vi.spyOn(client, 'updateSettings').mockImplementation(
+      () => new Promise((resolve) => (release = () => resolve(defaultPanelSettings({ balanceWarningThreshold: 12.5 }))))
+    );
+    renderSettings({ client, section: 'appearance' });
+    const balance = await screen.findByRole('spinbutton', { name: '低余额提醒' });
+    const quota = screen.getByRole('spinbutton', { name: '低额度提醒' });
+
+    fireEvent.change(balance, { target: { value: '12.5' } });
+    fireEvent.blur(balance);
+
+    await waitFor(() => expect(balance).toBeDisabled());
+    expect(quota).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '浅色' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '已用' })).not.toBeDisabled();
+
+    release?.();
+    await waitFor(() => expect(balance).not.toBeDisabled());
   });
 });
 

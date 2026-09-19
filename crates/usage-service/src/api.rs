@@ -450,6 +450,7 @@ struct SettingsPatch {
     glm_quota_display: Option<String>,
     quota_value_mode: Option<String>,
     quota_warning_threshold: Option<serde_json::Value>,
+    balance_warning_threshold: Option<serde_json::Value>,
     /// Parsed leniently by the same function the stored record uses: an entry
     /// the panel should not have sent is dropped, not failed.
     peak_reminder: Option<serde_json::Value>,
@@ -494,6 +495,18 @@ async fn update_settings(
                 return error_response(
                     StatusCode::BAD_REQUEST,
                     "Invalid quota warning threshold",
+                )
+            }
+        },
+        None => None,
+    };
+    let balance_warning_threshold = match patch.balance_warning_threshold.as_ref() {
+        Some(value) => match value.as_f64().filter(|value| value.is_finite() && *value >= 0.0) {
+            Some(value) => Some(value),
+            None => {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    "Invalid balance warning threshold",
                 )
             }
         },
@@ -593,6 +606,9 @@ async fn update_settings(
         }
         if let Some(threshold) = quota_warning_threshold {
             settings.quota_warning_threshold = threshold;
+        }
+        if let Some(threshold) = balance_warning_threshold {
+            settings.balance_warning_threshold = threshold;
         }
         if let Some(value) = patch.peak_reminder {
             // An unusable map degrades to unset here too, so a bad patch can

@@ -40,6 +40,7 @@ import {
 } from '../lib/metrics';
 
 export interface DeepSeekCardProps extends PlatformCardViewProps {
+  balanceWarningThreshold?: number;
   /** Whether a balance API key is stored (`credentials.deepseek.configured`).
    *  Without one the balance module is a placeholder under the cover: the reading
    *  collected before the key was deleted must not keep standing in for a live
@@ -113,13 +114,19 @@ export function DeepSeekCard(props: DeepSeekCardProps) {
         <div className={`card-module${balanceEmpty ? ' is-covered' : ''}`} data-testid="deepseek-balance">
           {renderedBalances.map(({ currency, metric }) => {
             const value = metricNumber(metric);
+            const lowBalance =
+              (props.balanceWarningThreshold ?? 0) > 0 &&
+              value !== null &&
+              value <= (props.balanceWarningThreshold ?? 0);
             return (
               <MetricRow
                 key={`balance-${currency}`}
                 label={multipleCurrencies ? `剩余余额（${currency}）` : '剩余余额'}
                 strong
                 value={value === null ? String(metric.value) : formatMoney(value, currency)}
+                lowBalance={lowBalance}
                 replayKey={props.replayKey}
+                testId={`metric-deepseek-balance-${currency}`}
               />
             );
           })}

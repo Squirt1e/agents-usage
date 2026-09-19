@@ -200,6 +200,7 @@ export function useSettingsWindow(options: SettingsWindowOptions): SettingsPanel
     onThemeChange: (theme) => updateSettings({ theme }),
     onQuotaValueModeChange: (quotaValueMode) => updateSettings({ quotaValueMode }),
     onQuotaWarningThresholdChange: (quotaWarningThreshold) => updateSettings({ quotaWarningThreshold }),
+    onBalanceWarningThresholdChange: (balanceWarningThreshold) => updateSettings({ balanceWarningThreshold }),
     onUpdateSettings: updateSettings,
     onValidateCredential: validateCredential,
     onDeleteCredential: deleteCredential

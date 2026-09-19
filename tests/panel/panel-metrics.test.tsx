@@ -112,7 +112,7 @@ describe('Codex dual gauges', () => {
       />
     );
 
-    expect(screen.getByRole('group', { name: '5小时 已用 92% 低额度警戒' })).toHaveClass('is-warning');
+    expect(screen.getByRole('group', { name: '5小时 已用 92% 低额度提醒' })).toHaveClass('is-warning');
   });
 
   it('keeps quota primary and groups daily activity below it', () => {
@@ -374,6 +374,7 @@ describe('GLM quota and wallet', () => {
       quotaDisplayMode?: 'ring' | 'bar';
       quotaValueMode?: 'remaining' | 'used';
       quotaWarningThreshold?: number;
+      balanceWarningThreshold?: number;
       onToggleResetTimeFormat?(): void;
     } = {}
   ) {
@@ -388,6 +389,7 @@ describe('GLM quota and wallet', () => {
         quotaDisplayMode={options.quotaDisplayMode ?? 'bar'}
         quotaValueMode={options.quotaValueMode ?? 'used'}
         quotaWarningThreshold={options.quotaWarningThreshold ?? 0}
+        balanceWarningThreshold={options.balanceWarningThreshold ?? 0}
       />
     );
   }
@@ -459,6 +461,57 @@ describe('GLM quota and wallet', () => {
     // Real data: no frosted cover anywhere.
     expect(screen.queryByTestId('glm-quota-mask')).not.toBeInTheDocument();
     expect(screen.queryByTestId('glm-wallet-mask')).not.toBeInTheDocument();
+  });
+
+  it('warns for a real GLM wallet balance at the inclusive boundary and keeps cached balances eligible', () => {
+    const cached = glmMetrics.map((metric) =>
+      metric.key === 'wallet.CNY.balance'
+        ? { ...metric, confidence: ['experimental', 'stale'] as DesktopUsageMetric['confidence'] }
+        : metric
+    );
+    renderGlm(snapshotOf([providerStateOf('glm', cached)]), { balanceWarningThreshold: 42.6 });
+
+    const row = screen.getByTestId('metric-glm-balance-CNY');
+    expect(row).toHaveClass('is-low-balance');
+    expect(row).toHaveAttribute('data-low-balance', 'true');
+    expect(row).toHaveAccessibleName('钱包余额 ¥ 42.60 低余额提醒');
+  });
+
+  it('does not warn for GLM placeholders, unparseable balances, or while the reminder is off', () => {
+    const invalid = glmMetrics.map((metric) =>
+      metric.key === 'wallet.CNY.balance' ? { ...metric, value: 'unknown' } : metric
+    );
+    const view = renderGlm(snapshotOf([providerStateOf('glm', invalid)]), { balanceWarningThreshold: 100 });
+    expect(screen.getByTestId('metric-glm-balance-CNY')).not.toHaveClass('is-low-balance');
+
+    view.rerender(
+      <GlmCard
+        view={providerView(snapshotOf([providerStateOf('glm', glmMetrics)]), 'glm')}
+        quotaConfigured
+        walletConfigured
+        walletEnabled
+        {...cardProps}
+        quotaDisplayMode="bar"
+        quotaValueMode="used"
+        balanceWarningThreshold={0}
+      />
+    );
+    expect(screen.getByTestId('metric-glm-balance-CNY')).not.toHaveClass('is-low-balance');
+
+    view.rerender(
+      <GlmCard
+        view={providerView(snapshotOf([providerStateOf('glm', [])]), 'glm')}
+        quotaConfigured
+        walletConfigured={false}
+        walletEnabled
+        {...cardProps}
+        quotaDisplayMode="bar"
+        quotaValueMode="used"
+        balanceWarningThreshold={100}
+      />
+    );
+    expect(screen.getByTestId('glm-wallet')).not.toHaveClass('is-low-balance');
+    expect(screen.getByText('¥ 42.60').closest('.metric-row')).not.toHaveClass('is-low-balance');
   });
 
   it('keeps Coding Plan quota primary and groups the wallet as auxiliary data', () => {
@@ -724,6 +777,58 @@ describe('DeepSeek balances and spend', () => {
     expect(screen.queryByText(/估算/)).not.toBeInTheDocument();
     expect(screen.queryByText(/98\.47/)).not.toBeInTheDocument();
     expect(screen.queryByText(/4\.00/)).not.toBeInTheDocument();
+  });
+
+  it('judges each DeepSeek currency independently by its raw amount at the inclusive boundary', () => {
+    const snapshot = snapshotOf([providerStateOf('deepseek', deepSeekMetrics)]);
+    render(
+      <DeepSeekCard
+        view={providerView(snapshot, 'deepseek')}
+        {...cardProps}
+        balanceWarningThreshold={12.05}
+      />
+    );
+
+    expect(screen.getByTestId('metric-deepseek-balance-CNY')).not.toHaveClass('is-low-balance');
+    const usd = screen.getByTestId('metric-deepseek-balance-USD');
+    expect(usd).toHaveClass('is-low-balance');
+    expect(usd).toHaveAccessibleName('剩余余额（USD） $ 12.05 低余额提醒');
+  });
+
+  it('warns for cached balances but not missing or unparseable values, and zero disables it', () => {
+    const snapshot = snapshotOf([
+      providerStateOf('deepseek', [
+        metricOf({
+          key: 'wallet.CNY.total',
+          value: 8.5,
+          unit: 'CNY',
+          direction: 'balance',
+          confidence: ['authoritative', 'stale']
+        }),
+        metricOf({ key: 'wallet.USD.total', value: 'unknown', unit: 'USD', direction: 'balance' }),
+        metricOf({ key: 'wallet.EUR.total', value: null, unit: 'EUR', direction: 'balance' })
+      ])
+    ]);
+    const view = render(
+      <DeepSeekCard
+        view={providerView(snapshot, 'deepseek')}
+        {...cardProps}
+        balanceWarningThreshold={10}
+      />
+    );
+
+    expect(screen.getByTestId('metric-deepseek-balance-CNY')).toHaveClass('is-low-balance');
+    expect(screen.getByTestId('metric-deepseek-balance-USD')).not.toHaveClass('is-low-balance');
+    expect(screen.queryByTestId('metric-deepseek-balance-EUR')).not.toBeInTheDocument();
+
+    view.rerender(
+      <DeepSeekCard
+        view={providerView(snapshot, 'deepseek')}
+        {...cardProps}
+        balanceWarningThreshold={0}
+      />
+    );
+    expect(screen.getByTestId('metric-deepseek-balance-CNY')).not.toHaveClass('is-low-balance');
   });
 
   it('keeps the balance module shaped while the key is not configured', () => {
