@@ -134,6 +134,14 @@ describe('panel width: nothing scrolls sideways', () => {
     expect(rule('.connection-details')).toMatch(/width:\s*min\(/);
   });
 
+  it('keeps connection details above card controls and below blocking dialogs', () => {
+    // The footer wrapper is itself a stacking context: a child's z-index cannot
+    // escape it to cover a quota reset line painted in the scrolling body.
+    const zIndex = (selector: string) => Number(rule(selector).match(/z-index:\s*(\d+)/)?.[1]);
+    expect(zIndex('.panel-bottom')).toBeGreaterThan(zIndex('.quota-reset'));
+    expect(zIndex('.overlay')).toBeGreaterThan(zIndex('.panel-bottom'));
+  });
+
   it('never lets a credential failure squeeze the stored state into a column', () => {
     // A rejected credential answers with a sentence, and that sentence shares a
     // row with "已保存 ····abcd" / "尚未配置". While both were flexible the state

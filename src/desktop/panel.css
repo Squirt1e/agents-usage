@@ -87,6 +87,7 @@
      the covered content itself (see `.is-covered`). */
   --cover-bg: rgba(7, 11, 17, 0.5);
   --toast-bg: rgba(17, 26, 38, 0.94);
+  --connection-detail-bg: #111a26;
   --toast-shadow: rgba(0, 0, 0, 0.38);
   --soft-button-bg: rgba(255, 255, 255, 0.03);
   --button-text: #cddcec;
@@ -189,6 +190,7 @@
   --notice-bg: rgba(255, 255, 255, 0.92);
   --cover-bg: rgba(255, 255, 255, 0.84);
   --toast-bg: rgba(255, 255, 255, 0.97);
+  --connection-detail-bg: #ffffff;
   --toast-shadow: rgba(28, 28, 30, 0.14);
   --soft-button-bg: #f2f2f7;
   --button-text: #3a3a3c;
@@ -1653,8 +1655,11 @@ button {
   /* The stack's containing block. The wrapper hugs the footer, so it adds no
      height of its own and the window's chrome measurement is unaffected. The
      body's padding owns the edge inset; this wrapper must not compensate for it
-     with a positive or negative margin. */
+     with a positive or negative margin. Its transform creates a stacking context:
+     lift the whole wrapper above card reset controls, while the blocking dialog
+     remains one level higher. A child's z-index cannot escape this context. */
   position: relative;
+  z-index: 3;
   flex: 0 0 auto;
   opacity: 1;
   visibility: visible;
@@ -1696,7 +1701,7 @@ button {
   border: 1px solid var(--line-soft);
   border-radius: 11px;
   padding: 10px;
-  background: var(--toast-bg);
+  background: var(--connection-detail-bg);
   box-shadow: 0 8px 20px var(--toast-shadow);
   color: var(--text);
   opacity: 0;

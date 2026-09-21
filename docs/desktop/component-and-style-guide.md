@@ -89,6 +89,8 @@ PanelApp                                  SettingsApp
   `.overview` 的 `gap`，而由 `.provider-card:not(:first-child)` 的 10px 上外边距分隔。
   `.panel-bottom` 自身不增加上间距，也不使用负外边距抵消正文内边距。
 - 页脚和 toast 不进入卡片高度预算；toast 以 `.panel-bottom` 为锚点浮在正文上方，不能推动内容。
+  底部浮层所在的层叠上下文高于卡片内的重置时间、低于阻断式对话层；连接详情使用不透明表面，
+  避免长错误信息与卡片读数叠字。
   标题栏隐藏时整个 `.panel-bottom` 同步淡出并退出 flex 布局，宿主沿既有高度动画收紧窗口。
 
 ## 4. 样式 Token

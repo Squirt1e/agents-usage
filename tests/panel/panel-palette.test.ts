@@ -73,6 +73,13 @@ describe('panel palette', () => {
     expect(colourVariables(light)).toEqual(colourVariables(dark));
   });
 
+  it('gives connection details an opaque surface in both themes', () => {
+    // A translucent toast tint exposes card text beneath a tall error message.
+    expect(block(clean, '.connection-details')).toMatch(/background:\s*var\(--connection-detail-bg\)/);
+    expect(variable(dark, '--connection-detail-bg')).toMatch(/^#[0-9a-f]{6}$/);
+    expect(variable(light, '--connection-detail-bg')).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
   it('announces the scheme in both palettes so native controls follow', () => {
     expect(dark).toMatch(/color-scheme:\s*dark/);
     expect(light).toMatch(/color-scheme:\s*light/);
