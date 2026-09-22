@@ -22,14 +22,14 @@ use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt as _;
 
-use usage_core::adapters::codex::{CodexCollector, CollectionContext};
+use usage_core::adapters::codex::{CodexCollector, CollectionContext, CODEX_CONNECTION};
 use usage_core::adapters::deepseek::DeepSeekCollector;
 use usage_core::adapters::deepseek_web::{web_connection, DeepSeekWebCollector};
 use usage_core::adapters::glm::{
     glm_wallet_allowed_hosts, GlmQuotaCollector, GlmRefreshContext, GlmWalletCollector,
 };
 use usage_core::contracts::{
-    DesktopSettings, IsoTimestamp, ProviderId, ProviderSnapshot, ProviderState,
+    ConnectionId, DesktopSettings, IsoTimestamp, ProviderId, ProviderSnapshot, ProviderState,
 };
 use usage_core::credentials::{
     keychain_delete_sync, keychain_get_sync, keychain_set_sync, CredentialStatus, CredentialTarget,
@@ -39,7 +39,7 @@ use usage_core::transport::SharedHttpTransport;
 use usage_core::redaction::redact;
 use usage_core::scheduler::RefreshScheduler;
 
-use crate::{run_connection, Collectors};
+use crate::{run_connection, CodexResolution, Collectors};
 
 /// A redacted event broadcast to the SSE stream.
 #[derive(Clone, Debug)]
@@ -180,17 +180,71 @@ impl AppState {
         self.publish().await;
     }
 
+    /// The Codex collector for the CLI path currently in effect.
+    ///
+    /// Every path that collects Codex goes through here, because the CLI path is a
+    /// setting the user can change while the service runs: resolving it once at
+    /// startup is what made a saved path take effect only after the whole app was
+    /// restarted. `force` is a user action's "look again" — see
+    /// [`crate::CodexSlot::resolve`] for when that is allowed to matter.
+    pub async fn codex_collector(self: &Arc<Self>, force: bool) -> Option<Arc<CodexCollector>> {
+        let stored = self.settings.read().unwrap().codex_cli_path.clone();
+        match self.collectors.codex.resolve(stored.as_deref(), force).await {
+            CodexResolution::Reused(collector) => collector,
+            CodexResolution::Fresh(collector) => {
+                // A collector that replaced a missing CLI is only reached from
+                // here, so its notification has to be wired here too.
+                self.wire_codex_rate_limits(&collector);
+                Some(collector)
+            }
+            CodexResolution::Failed(error) => {
+                // The verdict the service also records when it starts without a
+                // CLI: without a collector the connection is never attempted, so
+                // nothing else would say that the reading on the card is no longer
+                // an answer to the path in effect. Recorded against the connection
+                // the collector would have used, so the miss shows up on the card
+                // that is actually stale instead of inventing a second one beside it.
+                let connection = ConnectionId::new(ProviderId::Codex, CODEX_CONNECTION);
+                if let Ok(mut store) = self.store.lock() {
+                    let _ = store.save_failure(
+                        ProviderId::Codex,
+                        Some(&connection),
+                        &error.to_contract(IsoTimestamp::now()),
+                        1,
+                    );
+                }
+                None
+            }
+        }
+    }
+
+    /// Nudge an asynchronous refresh of the Codex connection when the CLI reports
+    /// a quota change.
+    ///
+    /// Registered on every collector the slot builds, not only the first: the
+    /// notification is a synchronous callback on that one session, so a rebuilt
+    /// collector would otherwise collect on the schedule alone and lose the push.
+    fn wire_codex_rate_limits(self: &Arc<Self>, collector: &Arc<CodexCollector>) {
+        let state = Arc::clone(self);
+        let codex = Arc::clone(collector);
+        collector.on_rate_limits_updated(Arc::new(move || {
+            let state = Arc::clone(&state);
+            let codex = Arc::clone(&codex);
+            tokio::spawn(async move { state.refresh_codex(&codex).await });
+        }));
+    }
+
     /// Refresh every connection once through the shared scheduler.
-    pub async fn refresh_all(&self) -> Result<(), crate::ServiceError> {
+    pub async fn refresh_all(self: &Arc<Self>) -> Result<(), crate::ServiceError> {
         let settings = self.settings.read().unwrap().clone();
         let timezone = settings.timezone.clone();
         let now = chrono::Utc::now();
 
-        if let Some(codex) = &self.collectors.codex {
+        if let Some(codex) = self.codex_collector(false).await {
             let context =
                 CollectionContext::new(codex_usage_day_at(now), "UTC", IsoTimestamp::now());
             let task: crate::RefreshTask<usage_core::contracts::ProviderSnapshot> = {
-                let codex = Arc::clone(codex);
+                let codex = Arc::clone(&codex);
                 Arc::new(move || {
                     let codex = Arc::clone(&codex);
                     let context = context.clone();
@@ -234,8 +288,9 @@ impl AppState {
         // opt-out is the user's choice, not a connection failure, and recording
         // it would leave a "disabled" verdict in the connection's health that
         // later reads as the latest attempt — pointing at "enable it" as the fix
-        // for a connection that is already enabled. Same rule as a missing Codex
-        // CLI: nothing is attempted, so nothing is recorded.
+        // for a connection that is already enabled. A missing Codex CLI follows
+        // the same rule in this pass: nothing is attempted here, and the miss was
+        // recorded where it was discovered (at startup, or when the path changed).
         if self.collectors.glm_wallet.is_enabled() {
             let wallet = Arc::clone(&self.collectors.glm_wallet);
             let task: crate::RefreshTask<usage_core::contracts::ProviderSnapshot> =
@@ -748,8 +803,11 @@ async fn refresh_provider(
     // a user action bypasses the cooldown.
     match provider {
         ProviderId::Codex => {
-            if let Some(codex) = &state.collectors.codex {
-                state.refresh_codex(codex).await;
+            // A manual refresh is the moment to look for the CLI again: the user
+            // may have just installed it, or just fixed the path, and pressing
+            // refresh has to mean "try now" rather than "show me the old verdict".
+            if let Some(codex) = state.codex_collector(true).await {
+                state.refresh_codex(&codex).await;
             }
         }
         ProviderId::Glm => {

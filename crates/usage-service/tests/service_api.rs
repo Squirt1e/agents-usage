@@ -659,3 +659,134 @@ async fn deepseek_web_usage_is_off_by_default_and_round_trips() {
     drop(running);
     std::fs::remove_dir_all(&data_dir).ok();
 }
+/// A stand-in for the Codex CLI: it answers the version probe discovery runs and
+/// nothing else, so a collector built from it fails while talking the app-server
+/// protocol instead of being reported as a CLI that is not there.
+fn fake_codex_cli(dir: &std::path::Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = dir.join("codex");
+    std::fs::write(
+        &path,
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"codex-cli 9.9.9\"; exit 0; fi\nexit 1\n",
+    )
+    .expect("the fake CLI must be written");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+        .expect("the fake CLI must be executable");
+    path
+}
+
+/// Put a stored CLI path in place before the service starts.
+///
+/// A *configured* path is reported as-is when it does not exist rather than
+/// falling back to another binary, which is what makes the starting verdict
+/// deterministic: auto-discovery would find whatever Codex the machine running
+/// these tests happens to have on its `PATH`.
+fn seed_stored_codex_path(data_dir: &std::path::Path, path: &str) {
+    let directory = usage_core::storage::data_dir::DataDirectory::open(data_dir)
+        .expect("the data directory must open");
+    let mut store =
+        usage_core::storage::Store::open(directory.database_path()).expect("the store must open");
+    let mut settings = store
+        .desktop_settings("Asia/Shanghai")
+        .expect("settings must load");
+    settings.codex_cli_path = Some(path.to_string());
+    store
+        .save_desktop_settings(&settings)
+        .expect("settings must save");
+}
+
+/// Saving a CLI path has to take effect on the next collection.
+///
+/// The service used to resolve the Codex CLI once at startup: with no CLI at that
+/// moment there was no collector at all, so every refresh skipped Codex and the
+/// panel's "save the path" step only worked after quitting and reopening the app —
+/// which is exactly the remedy a Finder launch cannot offer, and the only reason
+/// the setting exists.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_saved_codex_path_collects_without_restarting_the_service() {
+    let data_dir = temp_data_dir();
+    seed_stored_codex_path(&data_dir, "/definitely/missing/codex");
+    let mut service_config = config(data_dir.clone());
+    // The command line override wins over the stored path, and the stored path is
+    // the one under test here.
+    service_config.codex_cli_path = None;
+
+    let transport: std::sync::Arc<dyn HttpTransport> = Arc::new(FailingTransport);
+    let mut running = ServiceBuilder::with_transport(service_config, transport)
+        .start()
+        .await
+        .expect("service must start");
+    let origin = running.origin();
+    let http = running.take_http_server().expect("http server");
+    let server = tokio::spawn(http.serve());
+    let client = reqwest::Client::new();
+
+    let bootstrap: serde_json::Value = reqwest::get(format!("{origin}/api/bootstrap"))
+        .await
+        .expect("bootstrap")
+        .json()
+        .await
+        .expect("json");
+    let token = bootstrap["sessionToken"]
+        .as_str()
+        .expect("token")
+        .to_string();
+
+    // The service starts with a path that is not there, and says so.
+    let snapshots: serde_json::Value = reqwest::get(format!("{origin}/api/snapshots"))
+        .await
+        .expect("snapshots")
+        .json()
+        .await
+        .expect("json");
+    let before = recorded_error(&snapshots, "codex", "account").expect("a recorded Codex failure");
+    assert!(before.contains("/definitely/missing/codex"), "{before}");
+
+    // The user saves the path to a CLI that is really there and asks for a refresh.
+    let cli = fake_codex_cli(&data_dir);
+    let saved = client
+        .put(format!("{origin}/api/settings"))
+        .header("x-session-token", &token)
+        .json(&serde_json::json!({ "codexCliPath": cli.to_string_lossy() }))
+        .send()
+        .await
+        .expect("settings write");
+    assert_eq!(saved.status(), reqwest::StatusCode::OK);
+    let refreshed = client
+        .post(format!("{origin}/api/refresh/codex"))
+        .header("x-session-token", &token)
+        .send()
+        .await
+        .expect("refresh");
+    assert_eq!(refreshed.status(), reqwest::StatusCode::OK);
+
+    // Without restarting anything, the next verdict is about the new path. The
+    // stand-in cannot speak the app-server protocol, so the collection fails — with
+    // an error that is no longer "the path you configured does not exist".
+    let mut after = None;
+    for _ in 0..50 {
+        let snapshots: serde_json::Value = reqwest::get(format!("{origin}/api/snapshots"))
+            .await
+            .expect("snapshots")
+            .json()
+            .await
+            .expect("json");
+        after = recorded_error(&snapshots, "codex", "account");
+        if after
+            .as_deref()
+            .is_some_and(|message| message != before.as_str())
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let after = after.expect("a recorded Codex failure");
+    assert_ne!(after, before, "the saved path never reached the collector");
+    assert!(!after.contains("does not exist"), "{after}");
+
+    running.shutdown().await;
+    server.abort();
+    let _ = server.await;
+    drop(running);
+    std::fs::remove_dir_all(&data_dir).ok();
+}
