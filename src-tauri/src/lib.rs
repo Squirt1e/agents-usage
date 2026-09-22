@@ -33,6 +33,21 @@ pub const PANEL_VISIBILITY_EVENT: &str = "panel://visibility";
 /// focus.
 pub const PANEL_HEADER_EVENT: &str = "panel://header";
 
+/// Tray identifiers. The item ids are what the menu event handler matches on; the
+/// tray id is how a visibility change finds the item again, because Tauri has a
+/// setter for a tray's menu but no getter, so the item handle is kept in the state.
+const TRAY_ID: &str = "tray";
+const TRAY_TOGGLE_ID: &str = "toggle";
+
+/// What the tray's toggle item says.
+///
+/// A menu item is one action, so its label has to name the action *this* click
+/// performs. Naming both actions in a single label, separated by a slash, reads
+/// like a switch — out of place beside three items that are all verbs. The panel's
+/// own state decides which of the two labels is showing.
+const TRAY_SHOW_LABEL: &str = "显示面板";
+const TRAY_HIDE_LABEL: &str = "隐藏面板";
+
 /// TEMPORARY (panel-flicker diagnosis): append a timestamped line every time the
 /// host changes, or considers changing, the panel's visibility.
 ///
@@ -120,6 +135,9 @@ struct PanelState {
     /// the window left on the wrong section. The event is still the fast path, and
     /// this is what the window reads when it comes up — see `panel_settings_section`.
     settings_section: Mutex<&'static str>,
+    /// The tray item that shows or hides the panel, so its label can follow the
+    /// panel's visibility. See [`sync_tray_toggle`].
+    tray_toggle: Mutex<Option<MenuItem<tauri::Wry>>>,
 }
 
 impl PanelState {
@@ -1403,6 +1421,31 @@ fn position_near_tray(app: &AppHandle, anchor: Option<tauri::Rect>) {
     let _ = window.set_position(target);
 }
 
+/// Keep the tray's toggle item saying what a click would do next.
+///
+/// Called wherever the panel's intended visibility changes. The label is read when
+/// the user opens the menu, so a stale one from a focus-out hide would offer the
+/// wrong action: "隐藏面板" on a panel that is already gone.
+fn sync_tray_toggle(app: &AppHandle) {
+    let state = app.state::<PanelState>();
+    let visible = state
+        .visibility
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .showing;
+    let item = state
+        .tray_toggle
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(item) = item.as_ref() {
+        let _ = item.set_text(if visible {
+            TRAY_HIDE_LABEL
+        } else {
+            TRAY_SHOW_LABEL
+        });
+    }
+}
+
 /// Show the panel, cancelling any hide animation still in flight.
 fn show_panel(app: &AppHandle, anchor: Option<tauri::Rect>) {
     diag_log(&format!("show_panel anchor={}", anchor.is_some()));
@@ -1418,6 +1461,7 @@ fn show_panel(app: &AppHandle, anchor: Option<tauri::Rect>) {
         visibility.generation = visibility.generation.wrapping_add(1);
         visibility.showing = true;
     }
+    sync_tray_toggle(app);
     position_near_tray(app, anchor);
     let _ = window.show();
     let _ = window.set_focus();
@@ -1452,6 +1496,7 @@ fn hide_panel(app: &AppHandle) {
         visibility.generation = visibility.generation.wrapping_add(1);
         visibility.generation
     };
+    sync_tray_toggle(app);
     let _ = app.emit(PANEL_VISIBILITY_EVENT, json!({ "visible": false }));
 
     let app_handle = app.clone();
@@ -1512,7 +1557,7 @@ fn toggle_panel(app: &AppHandle, anchor: Option<tauri::Rect>) {
 ///
 /// The window is built once and then only shown, so this is how an entry point
 /// that names a section is served after the first time: the panel's gear, a card's
-/// gear, the empty state's "管理平台" and the tray item's "设置…" all end up in the
+/// gear, the empty state's "管理平台" and the tray item's "打开设置" all end up in the
 /// same window, and it moves to the section they asked for.
 pub const SETTINGS_SECTION_EVENT: &str = "panel://settings-section";
 
@@ -1798,6 +1843,7 @@ pub fn build(context: tauri::Context) -> tauri::App {
                 visibility: Mutex::new(VisibilityState::default()),
                 header_generation: Mutex::new(0),
                 settings_section: Mutex::new(SETTINGS_DEFAULT_SECTION),
+                tray_toggle: Mutex::new(None),
             });
 
             // The window has to agree with that first state instead of waiting
@@ -1842,16 +1888,22 @@ pub fn build(context: tauri::Context) -> tauri::App {
             // updates live without polling.
             spawn_event_forwarder(app.handle().clone());
 
+            // The toggle item's label is decided at runtime (see
+            // `sync_tray_toggle`), so it is built here and kept in the state.
+            let toggle_item =
+                MenuItem::with_id(app, TRAY_TOGGLE_ID, TRAY_SHOW_LABEL, true, None::<&str>)?;
+
             let menu = Menu::with_items(
                 app,
                 &[
-                    &MenuItem::with_id(app, "toggle", "显示/隐藏面板", true, None::<&str>)?,
-                    &MenuItem::with_id(app, "settings", "设置…", true, None::<&str>)?,
+                    &toggle_item,
+                    &MenuItem::with_id(app, "settings", "打开设置", true, None::<&str>)?,
+                    &MenuItem::with_id(app, "restart", "重启应用", true, None::<&str>)?,
                     &MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?,
                 ],
             )?;
 
-            let tray = TrayIconBuilder::new()
+            let tray = TrayIconBuilder::with_id(TRAY_ID)
                 .icon(tauri::image::Image::from_bytes(include_bytes!(
                     "../icons/tray-template.png"
                 ))?)
@@ -1866,6 +1918,13 @@ pub fn build(context: tauri::Context) -> tauri::App {
                     // window shows and the setting users reach for most.
                     "settings" => {
                         let _ = open_settings(app, None);
+                    }
+                    // Restarting is quitting and coming back, and it is the one
+                    // operation that has to release the service itself: the restart
+                    // never reaches the `ExitRequested` handler below.
+                    "restart" => {
+                        release_owned_service(app);
+                        app.restart();
                     }
                     "quit" => app.exit(0),
                     _ => {}
@@ -1884,6 +1943,15 @@ pub fn build(context: tauri::Context) -> tauri::App {
                 })
                 .build(app)?;
             let _ = tray;
+
+            // The item was created with the hidden-panel label, and a dev build has
+            // already put the panel on screen by now.
+            app.state::<PanelState>()
+                .tray_toggle
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .replace(toggle_item);
+            sync_tray_toggle(app.handle());
 
             Ok(())
         })
@@ -1910,20 +1978,36 @@ pub fn build(context: tauri::Context) -> tauri::App {
 pub fn run() {
     build(tauri::generate_context!()).run(|app, event| {
         if let tauri::RunEvent::ExitRequested { .. } = event {
-            let state = app.state::<PanelState>();
-            let connection = state
-                .service
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if connection.owned_by_desktop {
-                if let Some(child) = &connection.child {
-                    if let Ok(mut child) = child.lock() {
-                        let _ = child.kill();
-                    }
-                }
-            }
+            release_owned_service(app);
         }
     });
+}
+
+/// Kill the service this host started itself, if it started one.
+///
+/// Shared by quitting and by restarting, because they differ in exactly one way
+/// that matters here: `AppHandle::restart` re-execs the process and never emits
+/// `ExitRequested`, so the run-loop handler cannot do this for the restart path.
+///
+/// Doing it *before* the restart is also what keeps the new host off a dying
+/// service: the old one exits within two seconds of losing its parent (its own
+/// watchdog), and a host that starts inside that window reads a discovery file
+/// whose process is still alive and attaches to it. A service the user started
+/// independently is left running, as quitting leaves it.
+fn release_owned_service(app: &AppHandle) {
+    let state = app.state::<PanelState>();
+    let connection = state
+        .service
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !connection.owned_by_desktop {
+        return;
+    }
+    if let Some(child) = &connection.child {
+        if let Ok(mut child) = child.lock() {
+            let _ = child.kill();
+        }
+    }
 }
 
 /// Marker used by `cargo test` to prove the host crate links without a window
@@ -2635,6 +2719,116 @@ mod tests {
         assert!(
             !source.contains(&physical_call),
             "a physical position is read in the wrong display's scale factor"
+        );
+    }
+
+    #[test]
+    fn the_tray_item_says_what_a_click_would_do() {
+        let source = include_str!("lib.rs");
+        // One item, two actions: the label has to be whichever action this click is.
+        // The pair used to be spelled into a single label, which reads like a switch
+        // standing next to three verbs.
+        assert!(
+            source.contains("const TRAY_SHOW_LABEL: &str = \"显示面板\"")
+                && source.contains("const TRAY_HIDE_LABEL: &str = \"隐藏面板\""),
+            "the tray item needs a label for each state"
+        );
+        // Spelled in two pieces on purpose: written whole, the needle would match
+        // this test's own text (and the comment that explains why it is gone).
+        let slash_label = format!("显示{}隐藏面板", "/");
+        assert!(
+            !source.contains(&slash_label),
+            "a menu item is one action, not a slash-separated pair"
+        );
+
+        // The label is only right if it follows *every* visibility change, including
+        // the focus-out hide the user never asked for through the menu.
+        for function in ["fn show_panel", "fn hide_panel"] {
+            let body = source
+                .split(function)
+                .nth(1)
+                .unwrap_or_else(|| panic!("{function} must exist"))
+                .split("\n}")
+                .next()
+                .expect("end of the function");
+            assert!(
+                body.contains("sync_tray_toggle"),
+                "{function} must keep the tray label in step with the panel"
+            );
+        }
+    }
+
+    #[test]
+    fn the_menu_offers_a_restart_that_releases_its_own_service_first() {
+        let source = include_str!("lib.rs");
+        // The tray is built from one list, so the order in that list is the order the
+        // user reads. Restarting sits before quitting: both are final for the
+        // current process, and neither belongs in the middle of the read-only ones.
+        let menu = source
+            .split("Menu::with_items")
+            .nth(1)
+            .expect("tray menu")
+            .split(".build(app)?")
+            .next()
+            .expect("end of the tray setup");
+        // The needles are the list entries themselves: the toggle's own id lives on
+        // a const now, so the literal only appears in the event handler below.
+        let positions: Vec<usize> = ["&toggle_item", "\"settings\"", "\"restart\"", "\"quit\""]
+            .iter()
+            .map(|needle| {
+                menu.find(needle)
+                    .unwrap_or_else(|| panic!("the tray menu has no {needle} entry"))
+            })
+            .collect();
+        assert!(
+            positions.windows(2).all(|pair| pair[0] < pair[1]),
+            "tray menu entries are out of order: {positions:?}"
+        );
+        assert!(
+            menu.contains("\"重启应用\""),
+            "the restart entry has to be labelled"
+        );
+        // Every entry names an action. "打开设置" rather than a bare "设置…": a noun
+        // alone in a context menu reads as a submenu, and the ellipsis that used to
+        // mark it as a dialog reads as a promise the menu does not keep here.
+        assert!(
+            menu.contains("\"打开设置\"") && !menu.contains("设置…"),
+            "the settings entry has to name its action, without an ellipsis"
+        );
+
+        // The restart never reaches the run-loop exit handler (it re-execs the
+        // process instead of requesting an exit), so this branch is the only place
+        // that releases the service the host owns — and it has to release it
+        // *before* restarting, or the new host attaches to a service on its way out.
+        let restart = source
+            .split("\"restart\" =>")
+            .nth(1)
+            .expect("restart menu branch")
+            .split("\"quit\" =>")
+            .next()
+            .expect("end of the restart branch");
+        let release = restart
+            .find("release_owned_service")
+            .expect("the restart must release the service it owns");
+        let relaunch = restart
+            .find("app.restart()")
+            .expect("the restart entry must restart the app");
+        assert!(
+            release < relaunch,
+            "releasing the service after the restart would never run"
+        );
+
+        // Quitting goes through the same function, so the two cannot drift apart.
+        let exit = source
+            .split("RunEvent::ExitRequested")
+            .nth(1)
+            .expect("exit handler")
+            .split("});")
+            .next()
+            .expect("end of the exit handler");
+        assert!(
+            exit.contains("release_owned_service"),
+            "quitting and restarting have to release the service the same way"
         );
     }
 }

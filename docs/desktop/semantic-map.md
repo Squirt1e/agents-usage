@@ -129,7 +129,7 @@ Rust 侧由 `crates/usage-core/tests/contract_conformance.rs` 校验（`npm run 
 | 设置（顶部齿轮） | 面板 | `PanelApp` → `onOpenSettings('appearance')` → `panel_open_settings` | 打开设置窗口并切到「外观」 |
 | 配置 \<平台\>（卡片齿轮） | 面板 | `OverviewView` → `onOpenSettings(provider)` | 打开设置窗口并切到该平台分类 |
 | 管理平台（空状态） | 面板 | `EmptySelectionState` → `onOpenSettings('platforms')` | 打开设置窗口并切到「平台管理」 |
-| 设置…（菜单栏右键） | 菜单栏 | `lib.rs` 的 `on_menu_event("settings")` | 同上，无 section 时落到「平台管理」 |
+| 打开设置（菜单栏右键） | 菜单栏 | `lib.rs` 的 `on_menu_event("settings")` | 同上，无 section 时落到「平台管理」 |
 | 平台管理 / 外观 / Codex / GLM / DeepSeek | 设置窗口 | `SETTINGS_SECTIONS`（`settings/SettingsPanel.tsx`）与 `SETTINGS_SECTIONS`（`lib.rs`） | 两侧必须同名，`settings_section()` 把未知名字归到「平台管理」 |
 | 额度数值（剩余 / 已用） | 设置窗口 · 外观 | `quotaValueMode` | 作用于 Codex 与 GLM 两张卡片 |
 | 高峰时段提醒 | 设置窗口 · 平台分类 | `peakReminder` | 判定在 `lib/peak-windows.ts`，纯前端计算 |
