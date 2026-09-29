@@ -78,42 +78,31 @@ function distanceToSegment(x, y, startX, startY, endX, endY) {
   return Math.hypot(x - (startX + projection * lineX), y - (startY + projection * lineY));
 }
 
-function angleBetween(angle, start, end) {
-  const full = Math.PI * 2;
-  const normalized = ((angle % full) + full) % full;
-  return normalized >= start && normalized <= end;
-}
-
 // The 18px asset is the file embedded in the binary. Sampling each output pixel
-// on a 4×4 grid keeps the two-ring gauge legible instead of turning its diagonal
-// needle and tiny markers into staircase-shaped blobs on a Retina menu bar.
+// on a 4×4 grid softens only the contour. The broad single ring deliberately
+// leaves a solid core: a pair of thin antialiased rings looked pale beside the
+// filled system glyphs on translucent and light menu bars.
 function gaugePixels(size) {
   const samples = 4;
-  const stroke = 0.07;
-  const upperStart = (Math.PI * 13) / 12;
-  const upperEnd = (Math.PI * 23) / 12;
-  const lowerStart = Math.PI / 12;
-  const lowerEnd = (Math.PI * 11) / 12;
+  const ringRadius = 0.72;
+  const ringStroke = 0.2;
+  const arcStart = Math.PI * 0.75;
+  const arcSweep = Math.PI * 1.5;
 
   function covers(x, y) {
-    const distance = Math.hypot(x, y);
-    const angle = Math.atan2(y, x);
-    const onArc = [0.68, 0.83].some(
-      (radius) =>
-        Math.abs(distance - radius) <= stroke / 2 &&
-        (angleBetween(angle, upperStart, upperEnd) || angleBetween(angle, lowerStart, lowerEnd)),
-    );
-
     const pivotX = 0;
-    const pivotY = 0.06;
-    const onPivot = Math.abs(Math.hypot(x - pivotX, y - pivotY) - 0.12) <= stroke / 2;
-    const onNeedle =
-      distanceToSegment(x, y, 0.08, 0.02, 0.53, -0.48) <= stroke / 2 ||
-      distanceToSegment(x, y, 0.16, 0.11, 0.53, -0.48) <= stroke / 2;
-    const onMarker = [-0.39, 0.39].some(
-      (markerX) => Math.abs(Math.hypot(x - markerX, y - 0.48) - 0.075) <= stroke / 2,
-    );
-    return onArc || onPivot || onNeedle || onMarker;
+    const pivotY = 0.08;
+    const centeredX = x - pivotX;
+    const centeredY = y - pivotY;
+    const distance = Math.hypot(centeredX, centeredY);
+    const angle = Math.atan2(centeredY, centeredX);
+    const full = Math.PI * 2;
+    const relativeAngle = ((angle - arcStart) % full + full) % full;
+    const onArc = Math.abs(distance - ringRadius) <= ringStroke / 2 && relativeAngle <= arcSweep;
+
+    const onPivot = Math.hypot(centeredX, centeredY) <= 0.16;
+    const onNeedle = distanceToSegment(x, y, 0.04, 0.02, 0.5, -0.47) <= 0.085;
+    return onArc || onPivot || onNeedle;
   }
 
   return (y, x) => {

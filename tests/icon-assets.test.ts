@@ -115,15 +115,21 @@ describe('macOS icon assets', () => {
     const pixels = rgbaPixels(path);
     let clear = 0;
     let visible = 0;
+    let solid = 0;
     for (let offset = 0; offset < pixels.length; offset += 4) {
       const [red, green, blue, alpha] = pixels.subarray(offset, offset + 4);
       expect([red, green, blue]).toEqual([0, 0, 0]);
       if (alpha === 0) clear += 1;
       if (alpha > 0) visible += 1;
+      if (alpha >= 192) solid += 1;
     }
     expect(clear).toBeGreaterThan(0);
     expect(visible).toBeGreaterThan(0);
     expect(visible).toBeLessThan(size * size * 0.65);
+    // A thin supersampled outline can technically be present while macOS renders
+    // it as a pale blur. Enough near-opaque pixels keeps the 18pt glyph as strong
+    // as neighbouring menu-bar icons on translucent and light backgrounds.
+    expect(solid).toBeGreaterThan(size * size * 0.12);
   });
 
   it('loads the template icon through the macOS recolouring path', () => {
