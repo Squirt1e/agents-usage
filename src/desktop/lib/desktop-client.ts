@@ -21,6 +21,7 @@
  * | `panel_set_pinned`        | `{ pinned }`     | `boolean`                     |
  * | `panel_hide`              | —                | —                             |
  * | `panel_set_height`        | `{ height }`     | applied (clamped) height      |
+ * | `panel_set_minimal_layout` | `{ width, height, anchor }` | applied size |
  * | `panel_open_settings`     | `{ section? }`   | —                             |
  * | `panel_settings_ready`    | —                | —                             |
  * | `panel_settings_section`  | —                | current settings section      |
@@ -82,6 +83,7 @@ export const DESKTOP_COMMANDS = {
   setPinned: 'panel_set_pinned',
   hide: 'panel_hide',
   setHeight: 'panel_set_height',
+  setMinimalLayout: 'panel_set_minimal_layout',
   /** Open the settings window, or bring it forward on the given section. */
   openSettings: 'panel_open_settings',
   /** Settings window -> host: the first render is on screen, show the window. */
@@ -385,6 +387,7 @@ export interface PanelHostControls {
    * the question of how much screen it may take.
    */
   setHeight(height: number): Promise<void>;
+  setMinimalLayout(width: number, height: number, anchor: boolean): Promise<void>;
   /** Read the host's current pinned state. */
   readPinned(): Promise<boolean>;
   /** Ask the host to change the pinned state; resolves with the new state. */
@@ -427,6 +430,9 @@ export function createDesktopHostControls(bridge: DesktopCommandBridge | null = 
     },
     async setHeight(height) {
       await invoke(DESKTOP_COMMANDS.setHeight, { height }).catch(() => undefined);
+    },
+    async setMinimalLayout(width, height, anchor) {
+      await invoke(DESKTOP_COMMANDS.setMinimalLayout, { width, height, anchor }).catch(() => undefined);
     },
     async readPinned() {
       const value = await invoke<unknown>(DESKTOP_COMMANDS.pinnedState).catch(() => false);
@@ -529,6 +535,9 @@ export function createBrowserFallbackHost(openWebVersion: () => void | Promise<v
     },
     async setHeight() {
       // A browser page is sized by its own window; there is nothing to resize.
+    },
+    async setMinimalLayout() {
+      // The browser preview uses CSS width directly.
     },
     async readPinned() {
       return false;

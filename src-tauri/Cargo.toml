@@ -33,3 +33,8 @@ usage-core.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-app-kit = { version = "0.3", default-features = false, features = ["NSEvent", "NSWindow"] }
+# `MainThreadMarker` for AppKit's own hit test (`windowNumberAtPoint:`), which is what
+# tells the rail whether the pointer is really on it or on the Dock that slid out over it.
+# No features: the point comes from `NSEvent::mouseLocation`, so nothing here has to name
+# an `NSPoint`.
+objc2-foundation = { version = "0.3", default-features = false }

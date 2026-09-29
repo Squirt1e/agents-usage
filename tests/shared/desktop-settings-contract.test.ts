@@ -43,3 +43,20 @@ describe('balance warning threshold settings contract', () => {
     }
   });
 });
+
+describe('panel display mode settings contract', () => {
+  it('keeps existing installs in the full panel', () => {
+    expect(parsePanelSettings({}).panelDisplayMode).toBe('full');
+  });
+
+  it('accepts the two stored modes and rejects untrusted values without changing other settings', () => {
+    for (const mode of ['full', 'minimal'] as const) {
+      expect(parsePanelSettings({ panelDisplayMode: mode }).panelDisplayMode).toBe(mode);
+    }
+    for (const panelDisplayMode of ['compact', '', 1, null]) {
+      const settings = parsePanelSettings({ panelDisplayMode, theme: 'light' });
+      expect(settings.panelDisplayMode).toBe('full');
+      expect(settings.theme).toBe('light');
+    }
+  });
+});

@@ -52,6 +52,30 @@ import {
 import type { StatusTone } from '../components/StatusRow';
 import { GearIcon, PinIcon, RefreshIcon } from '../components/icons';
 import { formatClockTime, latestAttemptFailed, providerView, visibleSyncSummary } from '../lib/metrics';
+import { minimalSummaries } from './minimal-summary';
+import { MINIMAL_RAIL_DETAIL_WIDTH, MINIMAL_RAIL_WIDTH, minimalPanelHeight } from './minimal-layout';
+import { MinimalPanel } from './MinimalPanel';
+import { detectDesktopBridge } from '../lib/desktop-client';
+import { createProbeHover, probePoint } from './probe-hover';
+
+/**
+ * The controls the host probe paints in this document.
+ *
+ * One list for both shapes, because one painter serves both (see `probe-hover.ts`) and a
+ * control that exists in only one shape is simply never hit in the other. The platform
+ * rings are deliberately absent: their plate is the *selection's* (`is-active`), which
+ * `MinimalPanel` drives from the same pointer.
+ */
+const PROBE_HOVER_TARGETS = [
+  '.minimal-tool',
+  '.minimal-alert',
+  '.minimal-empty button',
+  '.icon-button',
+  '.connection-trigger',
+  '.gear-button',
+  '.quota-shape-button',
+  '.quota-reset-toggle'
+].join(', ');
 
 /** Tag of the live-connection warning, so reopening the stream can take it back. */
 const CONNECTION_TAG = 'connection';
@@ -74,6 +98,9 @@ export interface PanelHostProps {
   onRequestHide(): void;
   /** Ask the host to size the window to the panel's content. Must be stable. */
   onSetHeight(height: number): void;
+  onSetMinimalLayout?(width: number, height: number, anchor: boolean): void;
+  /** The native detail window owns its own content and frame. */
+  onSetMinimalDetail?(selection: ProviderId | 'connection' | null, index: number): void;
 }
 
 export interface PanelAppProps {
@@ -107,6 +134,27 @@ export function PanelApp(props: PanelAppProps) {
   });
   const store = storeRef.current;
   useEffect(() => () => store.dispose(), [store]);
+  /**
+   * The hover the host's pointer probe paints (see `probe-hover.ts`).
+   *
+   * One painter for the document, installed here because both shapes are rendered from
+   * this component: the rail's actions and the full panel's toolbar, footer and card
+   * controls all carry `:hover` rules that a window which is not key never triggers.
+   */
+  const probeHover = useRef<ReturnType<typeof createProbeHover>>(undefined);
+  probeHover.current ??= createProbeHover(PROBE_HOVER_TARGETS);
+  useEffect(() => {
+    const probe = (event: Event) => {
+      const point = probePoint(event);
+      if (!point) {
+        probeHover.current?.clear();
+        return;
+      }
+      probeHover.current?.at(point.x, point.y);
+    };
+    window.addEventListener('panel:hover-probe', probe);
+    return () => window.removeEventListener('panel:hover-probe', probe);
+  }, []);
   const [snapshot, setSnapshot] = useState<PanelSnapshot | undefined>();
   const [settings, setSettings] = useState<PanelSettings>(() => store.read());
   usePanelTheme(settings.theme);
@@ -116,6 +164,72 @@ export function PanelApp(props: PanelAppProps) {
   const [replayKeys, setReplayKeys] = useState<Partial<Record<ProviderId, number>>>({});
   const [toasts, setToasts] = useState<PanelToast[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedMinimalProvider, setSelectedMinimalProvider] = useState<ProviderId | null>(null);
+  /**
+   * How many times a ring has asked for its detail.
+   *
+   * A counter rather than a value because the rail has to be able to re-ask for the
+   * platform it already believes is open: the host clears the card on its own when the
+   * pointer leaves both windows, and a dismissal the rail did not hear left it
+   * believing the card was up — pointing at that ring again then did nothing at all.
+   * Identical state does not re-run the effect below, so the request itself is the
+   * signal. Host-side, an unchanged selection is a no-op.
+   */
+  const [minimalRequest, setMinimalRequest] = useState(0);
+  const selectMinimal = useCallback((provider: ProviderId | null) => {
+    setDetailsOpen(false);
+    setSelectedMinimalProvider(provider);
+    setMinimalRequest((current) => current + 1);
+  }, []);
+  /**
+   * The pointer is on the rail but not on a platform.
+   *
+   * The card is about a platform, so it goes — but the connection view does not: that is
+   * a click the reader made on the rail, not a hover, and it stays until they dismiss it.
+   * The request counter carries the "nothing to show" answer to the host even when the
+   * selection was already empty, which is what makes the card window close rather than sit
+   * there for as long as the pointer stays on the rail.
+   */
+  const leavePlatform = useCallback(() => {
+    setSelectedMinimalProvider(null);
+    setMinimalRequest((current) => current + 1);
+  }, []);
+  useEffect(() => {
+    const dismiss = (payload: unknown) => {
+      setSelectedMinimalProvider((current) => {
+        if ((payload as { focus?: boolean } | null)?.focus && current) {
+          document.querySelector<HTMLElement>(`.minimal-item[data-provider="${current}"]`)?.focus();
+        }
+        return null;
+      });
+      setDetailsOpen(false);
+    };
+    const pushed = (event: Event) => dismiss((event as CustomEvent).detail);
+    window.addEventListener('panel:minimal-detail-dismiss', pushed);
+    const unlisten = detectDesktopBridge()?.listen?.('panel://minimal-detail-dismiss', dismiss);
+    return () => { window.removeEventListener('panel:minimal-detail-dismiss', pushed); unlisten?.(); };
+  }, []);
+  /**
+   * The rail is a desktop-only shape, and this is what makes it one.
+   *
+   * The companion web page is *this same document*, served over loopback by the
+   * Rust service, so a persisted "极简" would otherwise follow the reader into the
+   * browser and put a 58-point rail in the middle of a full-size page — where
+   * there is no host window to narrow and no left side to expand into. Reshaping
+   * a window is the capability that decides it: only the app's host implements
+   * `onSetMinimalLayout` (see `createBrowserFallbackHost`), so without it the page
+   * stays on the cards whatever the stored preference says.
+   */
+  const minimalMode =
+    settings.panelDisplayMode === 'minimal' && props.host.onSetMinimalLayout !== undefined;
+  useEffect(() => {
+    if (!minimalMode) setSelectedMinimalProvider(null);
+  }, [minimalMode]);
+  useEffect(() => {
+    const close = () => { setSelectedMinimalProvider(null); setDetailsOpen(false); };
+    window.addEventListener('panel:reopened', close);
+    return () => window.removeEventListener('panel:reopened', close);
+  }, []);
   const [clock, setClock] = useState<Date>(() => props.now ?? new Date());
 
   /** Ids for the message stack; a ref because an id is not part of the view. */
@@ -245,11 +359,16 @@ export function PanelApp(props: PanelAppProps) {
         setDetailsOpen(false);
         return;
       }
+      if (selectedMinimalProvider !== null) {
+        setSelectedMinimalProvider(null);
+        document.querySelector<HTMLElement>(`.minimal-item[data-provider="${selectedMinimalProvider}"]`)?.focus();
+        return;
+      }
       host.onRequestHide();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [host, detailsOpen]);
+  }, [host, detailsOpen, selectedMinimalProvider]);
 
   const describeError = useCallback((error: unknown, fallback: string) => {
     if (error instanceof UsageClientError && error.kind === 'session') return error.message;
@@ -387,14 +506,123 @@ export function PanelApp(props: PanelAppProps) {
   // inside it; they are their own window now, with a fixed height of their own, so
   // the panel's height is only ever the overview's business (see panel-height.ts).
   usePanelHeight({
-    onSetHeight: props.host.onSetHeight
+    onSetHeight: props.host.onSetHeight,
+    enabled: !minimalMode
   });
 
   const syncSummary = visibleSyncSummary(displayed.map((provider) => providerView(snapshot, provider)));
   const issues = useMemo(() => connectionIssues(snapshot, settings), [snapshot, settings]);
+  useEffect(() => {
+    if (issues.length === 0 && minimalMode) setDetailsOpen(false);
+  }, [issues.length, minimalMode]);
+  // Deliberately no `blur` handler. A focus change is not a dismissal: pointing at a
+  // ring is what opens the card and leaving the panel is what closes it, so closing
+  // on blur made the card vanish whenever the window lost focus and come straight back
+  // when it was clicked again — a disappear-and-reappear with no input behind it. The
+  // card is closed by leaving the panel, by Escape, by a tap outside, and by the
+  // `panel:reopened` handler below when the host shows a fresh panel.
+  const minimal = useMemo(() => minimalSummaries(snapshot, settings, clock), [snapshot, settings, clock]);
+  /**
+   * The in-document fallback card's measured height.
+   *
+   * `MinimalPanel` measures the card and hands it over; the window is then sized to
+   * hold it. The comparison guard matters more than it looks: a fresh number every
+   * render would re-run the layout effect below forever.
+   */
+  const [detailHeight, setDetailHeight] = useState<number | null>(null);
+  const onDetailHeight = useCallback((height: number | null) => {
+    setDetailHeight((current) => (current === height ? current : height));
+  }, []);
+  /**
+   * Whether a card is on screen, including the tail of its exit fade.
+   *
+   * The fallback window must stay wide until the card has finished fading, so this is the
+   * *rendered* fact rather than the measured height: the measurement is absent until
+   * the card has been laid out, and a clipped frame reports zero.
+   */
+  const [detailPresent, setDetailPresent] = useState(false);
+  const onDetailPresence = useCallback((present: boolean) => {
+    setDetailPresent((current) => (current === present ? current : present));
+  }, []);
+  /**
+   * Whether the fallback window needs the detail's space right now.
+   *
+   * `detailPresent` is the term that outlives the selection. Closing the detail does
+   * not unmount the card: it fades out for `DETAIL_FADE_MS`, and narrowing the window
+   * the instant the selection cleared would clip the very fade the reader is watching —
+   * the fixed-width card sits to the left of the rail, so a rail-width window shows
+   * none of it. `MinimalPanel` clears the flag when the card unmounts, which is what
+   * makes the one-frame step to the rail happen after the fade rather than under it.
+   */
+  const expanded = selectedMinimalProvider !== null || detailsOpen || detailPresent;
+  useEffect(() => {
+    if (!props.host.onSetMinimalDetail) return;
+    const selection = minimalMode ? (detailsOpen ? 'connection' : selectedMinimalProvider) : null;
+    const index = selection && selection !== 'connection'
+      ? Math.max(0, minimal.findIndex((entry) => entry.provider === selection))
+      : 0;
+    props.host.onSetMinimalDetail(selection, index);
+    // `minimalRequest` is a dependency on purpose: it is what lets a second hover of
+    // the same ring reach the host, which is how a card the host closed behind the
+    // rail's back comes back.
+  }, [props.host, minimalMode, detailsOpen, selectedMinimalProvider, minimal, minimalRequest]);
+  const wasMinimal = useRef(false);
+  useEffect(() => {
+    if (!minimalMode) {
+      // The next switch into minimal mode anchors again, as a fresh shape should.
+      wasMinimal.current = false;
+      return;
+    }
+    props.host.onSetMinimalLayout?.(
+      props.host.onSetMinimalDetail ? MINIMAL_RAIL_WIDTH : expanded ? MINIMAL_RAIL_DETAIL_WIDTH : MINIMAL_RAIL_WIDTH,
+      minimalPanelHeight(
+        minimal.length,
+        props.host.onSetMinimalDetail ? null : expanded ? detailHeight : null,
+        props.host.headerVisible !== false,
+        // The connection badge is rail furniture, so the window has to hold it too —
+        // and it is on screen whether or not the pointer is.
+        issues.length > 0
+      ),
+      !wasMinimal.current
+    );
+    wasMinimal.current = true;
+  }, [minimalMode, expanded, detailHeight, minimal.length, props.host, issues.length]);
+  useEffect(() => {
+    if (selectedMinimalProvider && !minimal.some((entry) => entry.provider === selectedMinimalProvider)) setSelectedMinimalProvider(null);
+  }, [minimal, selectedMinimalProvider]);
   // The bottom status module is frame furniture: it neither scrolls with the body
   // nor changes with the page (there is only one). A missing sync time is reported
   // as missing, never as a zero or a time.
+  /**
+   * The card hooks both surfaces need.
+   *
+   * The minimal rail renders the very same platform cards in its detail, so a ring
+   * tapped there flips the same setting a ring tapped in the overview does. Sharing
+   * the handlers (rather than re-deriving them per surface) is what keeps the two
+   * presentations of one card from drifting apart.
+   */
+  const openAppSettings = useCallback(() => props.onOpenSettings('platforms'), [props]);
+  const toggleResetTimeFormat = useCallback(
+    (provider: ProviderId) => {
+      void updateSettings(
+        provider === 'codex'
+          ? { codexResetFormat: settings.codexResetFormat === 'countdown' ? 'absolute' : 'countdown' }
+          : { glmResetFormat: settings.glmResetFormat === 'countdown' ? 'absolute' : 'countdown' }
+      );
+    },
+    [settings.codexResetFormat, settings.glmResetFormat, updateSettings]
+  );
+  const toggleQuotaDisplay = useCallback(
+    (provider: ProviderId) => {
+      void updateSettings(
+        provider === 'codex'
+          ? { codexQuotaDisplay: settings.codexQuotaDisplay === 'ring' ? 'bar' : 'ring' }
+          : { glmQuotaDisplay: settings.glmQuotaDisplay === 'ring' ? 'bar' : 'ring' }
+      );
+    },
+    [settings.codexQuotaDisplay, settings.glmQuotaDisplay, updateSettings]
+  );
+
   const syncText = loading && !snapshot
     ? '正在读取本地缓存'
     : syncSummary.state === 'none'
@@ -402,6 +630,35 @@ export function PanelApp(props: PanelAppProps) {
       : syncSummary.state === 'partial'
         ? '部分平台尚未同步'
         : `全部同步于 ${formatClockTime(syncSummary.oldestSuccessAt, settings.timezone) ?? '时间未知'}`;
+
+  if (minimalMode) {
+    return (
+      <MinimalPanel
+        summaries={minimal}
+        snapshot={snapshot}
+        settings={settings}
+        now={clock}
+        selected={selectedMinimalProvider}
+        onSelect={selectMinimal}
+        onLeavePlatform={leavePlatform}
+        onOpenSettings={props.onOpenSettings}
+        onRefresh={refreshDisplayed}
+        refreshing={refreshingAll}
+        pinned={host.pinned}
+        focused={host.headerVisible !== false}
+        onTogglePin={host.onTogglePin}
+        issues={issues}
+        connectionOpen={detailsOpen}
+        externalDetail={props.host.onSetMinimalDetail !== undefined}
+        onToggleConnection={() => { setSelectedMinimalProvider(null); setDetailsOpen((current) => !current); }}
+        onDetailHeight={onDetailHeight}
+        onDetailPresence={onDetailPresence}
+        onToggleResetTimeFormat={toggleResetTimeFormat}
+        onToggleQuotaDisplay={toggleQuotaDisplay}
+        onOpenAppSettings={openAppSettings}
+      />
+    );
+  }
 
   return (
     <Panel
@@ -459,21 +716,9 @@ export function PanelApp(props: PanelAppProps) {
           now={clock}
           loading={loading}
           onOpenSettings={(provider) => props.onOpenSettings(provider)}
-          onOpenAppSettings={() => props.onOpenSettings('platforms')}
-          onToggleResetTimeFormat={(provider) =>
-            void updateSettings(
-              provider === 'codex'
-                ? { codexResetFormat: settings.codexResetFormat === 'countdown' ? 'absolute' : 'countdown' }
-                : { glmResetFormat: settings.glmResetFormat === 'countdown' ? 'absolute' : 'countdown' }
-            )
-          }
-          onToggleQuotaDisplay={(provider) =>
-            void updateSettings(
-              provider === 'codex'
-                ? { codexQuotaDisplay: settings.codexQuotaDisplay === 'ring' ? 'bar' : 'ring' }
-                : { glmQuotaDisplay: settings.glmQuotaDisplay === 'ring' ? 'bar' : 'ring' }
-            )
-          }
+          onOpenAppSettings={openAppSettings}
+          onToggleResetTimeFormat={toggleResetTimeFormat}
+          onToggleQuotaDisplay={toggleQuotaDisplay}
         />
       )}
     </Panel>

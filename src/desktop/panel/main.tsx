@@ -28,7 +28,7 @@ import { PanelApp, type PanelHostProps } from './PanelApp';
 import { SettingsPanel, type SettingsSection } from '../settings/SettingsPanel';
 import { useSettingsWindow } from '../settings/settings-window';
 import { usePanelTheme } from '../lib/theme';
-import { createBrowserFallbackHost, createDesktopHostControls, createDesktopUsageClient } from '../lib/desktop-client';
+import { createBrowserFallbackHost, createDesktopHostControls, createDesktopUsageClient, detectDesktopBridge } from '../lib/desktop-client';
 import type { UsageClient } from '../../shared/usage-client';
 
 /**
@@ -68,12 +68,24 @@ function SettingsSheet(props: {
   );
 }
 
+/**
+ * How long the rail's window takes to reach a new height, in milliseconds.
+ *
+ * Only the rail height travels. Its width stays at 58 points while the separate
+ * detail window owns its own frame. The duration follows the size motion budget.
+ */
+const MINIMAL_LAYOUT_ANIMATION_MS = 220;
+
 function mount(): void {
   const container = document.getElementById('panel-root');
   if (!container) return;
 
   const client = createDesktopUsageClient();
   const controls = createDesktopHostControls();
+  const detailBridge = detectDesktopBridge();
+  const setMinimalDetail: NonNullable<PanelHostProps['onSetMinimalDetail']> = (selection, index) => {
+    void detailBridge?.invoke('panel_set_minimal_detail', { selection, index });
+  };
   // Outside Tauri there is nothing to hide or pin; the panel stays fully usable
   // (this is also the path the panel tests and the browser preview take).
   const host = controls ?? createBrowserFallbackHost(() => client.openWebVersion());
@@ -88,7 +100,51 @@ function mount(): void {
   // Stable across renders: the panel's height effect re-attaches when this
   // identity changes, and re-rendering must not restart the measurement.
   const setHeight = (height: number) => {
+    if (layoutAnimation !== 0) window.cancelAnimationFrame(layoutAnimation);
+    layoutAnimation = 0;
     void host.setHeight(height);
+  };
+  let layoutAnimation = 0;
+  const setMinimalLayout = (width: number, height: number, anchor: boolean) => {
+    if (layoutAnimation !== 0) window.cancelAnimationFrame(layoutAnimation);
+    layoutAnimation = 0;
+    /**
+     * Where the window is *now*, read from the document rather than remembered.
+     *
+     * These were shadow variables seeded with the full panel's own size (350 × 560),
+     * on the assumption that a `visibility` event had corrected them. A panel the host
+     * shows before this document loads — every dev session, and any packaged start
+     * where the window is already up — never gets that event, so the first animation
+     * of the session began from a size the window had never been: the host was asked
+     * for 350 × 560 on its anchoring frame, threw the window open to that, and then
+     * animated back down to the rail. The viewport cannot be stale in the same way —
+     * the webview *is* the window — so it is read here, per animation.
+     */
+    const fromHeight = window.innerHeight;
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+    // Nothing to travel: the width steps here regardless, and a height that barely
+    // moved does not deserve an animation that repaints the same frame for its whole
+    // duration. `reduced` takes the same branch, so the preference drops the movement
+    // rather than the size change.
+    if (reduced || Math.abs(height - fromHeight) < 1) {
+      void host.setMinimalLayout(width, height, anchor);
+      return;
+    }
+    // The width is the whole of the "reveal": one frame at the target, anchored if
+    // this call is the one that brought the rail into existence. Only the height below
+    // is reported again.
+    void host.setMinimalLayout(width, fromHeight, anchor);
+    const started = window.performance.now();
+    const step = () => {
+      const progress = Math.min(1, (window.performance.now() - started) / MINIMAL_LAYOUT_ANIMATION_MS);
+      // Ease-out, not ease-in-out: this is a reveal. The window's right edge is
+      // pinned by the anchor, so what the reader sees is the card being uncovered
+      // from the left — and that reads as arriving, not as travelling away and back.
+      const eased = 1 - (1 - progress) ** 3;
+      void host.setMinimalLayout(width, fromHeight + (height - fromHeight) * eased, false);
+      layoutAnimation = progress === 1 ? 0 : window.requestAnimationFrame(step);
+    };
+    layoutAnimation = window.requestAnimationFrame(step);
   };
 
   /** Which settings section the sheet is showing, or `undefined` when it is closed. */
@@ -119,7 +175,11 @@ function mount(): void {
       onRequestHide: () => {
         void host.hide();
       },
-      onSetHeight: setHeight
+      onSetHeight: setHeight,
+      // Absent outside the app, and that absence is the whole signal: the companion
+      // web page serves this same document, where a 58-point rail would be a column
+      // in the middle of a full-size page. `PanelApp` reads this to stay on the cards.
+      ...(controls ? { onSetMinimalLayout: setMinimalLayout, onSetMinimalDetail: setMinimalDetail } : {})
     };
     const onSheet = !controls && sheetSection !== undefined;
     root.render(
@@ -177,6 +237,9 @@ function mount(): void {
     if (next === visible) return;
     visible = next;
     if (visible) {
+      if (layoutAnimation !== 0) window.cancelAnimationFrame(layoutAnimation);
+      layoutAnimation = 0;
+      window.dispatchEvent(new Event('panel:reopened'));
       container.dataset.anim = 'enter';
       // Two frames: let the browser paint the "enter" state before removing it,
       // otherwise the transition is skipped.

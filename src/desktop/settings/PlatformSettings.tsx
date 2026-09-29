@@ -44,10 +44,9 @@ import {
   type PanelSettings
 } from '../../shared/desktop-contract';
 import type { ProviderId } from '../../shared/contracts';
+import { BrandMark } from '../components/BrandMark';
 import { GripIcon } from '../components/icons';
 import { statusFor } from '../components/StatusRow';
-
-const MONOGRAMS: Record<ProviderId, string> = { codex: 'CX', glm: 'GL', deepseek: 'DS' };
 
 /** Shared by the FLIP animation and the release settle, so both feel the same. */
 const ROW_TRANSITION = 'transform 140ms cubic-bezier(0.22, 0.8, 0.24, 1)';
@@ -447,7 +446,7 @@ export function PlatformSettings(props: PlatformSettingsProps) {
                 <GripIcon />
               </span>
               <span className={`brand-badge brand-${provider}`} aria-hidden="true">
-                {MONOGRAMS[provider]}
+                <BrandMark provider={provider} />
               </span>
               <span className="manage-text">
                 <strong>{name}</strong>

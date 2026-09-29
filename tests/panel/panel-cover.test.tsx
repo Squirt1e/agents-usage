@@ -163,7 +163,7 @@ describe('frosted cover wiring', () => {
     const wallet = screen.getByTestId('glm-wallet');
     expect(wallet.className).toContain('is-covered');
     expect(wallet.querySelector('.frost-hint')).not.toBeNull();
-    expect(wallet).toHaveTextContent('¥ 42.60');
+    expect(wallet).toHaveTextContent('¥42.60');
   });
 
   it('opens GLM settings from a wallet cover waiting for its credential', () => {
@@ -199,8 +199,8 @@ describe('frosted cover wiring', () => {
 
     expect(screen.queryByTestId('glm-wallet')).not.toBeInTheDocument();
     expect(screen.queryByTestId('glm-wallet-mask')).not.toBeInTheDocument();
-    expect(screen.queryByText('¥ 12.50')).not.toBeInTheDocument();
-    expect(screen.queryByText('¥ 42.60')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥12.50')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥42.60')).not.toBeInTheDocument();
     expect(quotaList()).toHaveTextContent('63%');
   });
 
@@ -209,7 +209,7 @@ describe('frosted cover wiring', () => {
     const wallet = screen.getByTestId('glm-wallet');
     expect(wallet.className).not.toContain('is-covered');
     expect(wallet.querySelector('.frost-hint')).toBeNull();
-    expect(wallet).toHaveTextContent('¥ 12.50');
+    expect(wallet).toHaveTextContent('¥12.50');
   });
 });
 
@@ -228,7 +228,7 @@ describe('DeepSeek balance cover wiring', () => {
     // The template stays: label plus a realistic amount, blurred on the first
     // frame by the cover — never a bare card with only its header.
     expect(module).toHaveTextContent('剩余余额');
-    expect(module).toHaveTextContent('¥ 86.42');
+    expect(module).toHaveTextContent('¥86.42');
 
     const cover = screen.getByTestId('deepseek-balance-mask');
     expect(cover).toHaveTextContent('配置 API Key 后显示余额');
@@ -263,7 +263,7 @@ describe('DeepSeek balance cover wiring', () => {
     const module = screen.getByTestId('deepseek-balance');
     expect(module.className).not.toContain('is-covered');
     expect(module.querySelector('.frost-hint')).toBeNull();
-    expect(module).toHaveTextContent('¥ 21.52');
+    expect(module).toHaveTextContent('¥21.52');
     expect(screen.queryByTestId('deepseek-balance-mask')).not.toBeInTheDocument();
   });
 });
@@ -287,7 +287,7 @@ describe('a deleted credential turns its module back into a template', () => {
     // The wallet credential is gone too, so that module is a template as well.
     const wallet = screen.getByTestId('glm-wallet');
     expect(wallet.className).toContain('is-covered');
-    expect(wallet).not.toHaveTextContent('¥ 12.50');
+    expect(wallet).not.toHaveTextContent('¥12.50');
     expect(screen.getByTestId('glm-wallet-mask')).toHaveTextContent('配置钱包凭据后显示用量');
   });
 
@@ -303,8 +303,8 @@ describe('a deleted credential turns its module back into a template', () => {
 
     const module = screen.getByTestId('deepseek-balance');
     expect(module.className).toContain('is-covered');
-    expect(module).not.toHaveTextContent('¥ 21.52');
-    expect(module).toHaveTextContent('¥ 86.42');
+    expect(module).not.toHaveTextContent('¥21.52');
+    expect(module).toHaveTextContent('¥86.42');
     expect(screen.getByTestId('deepseek-balance-mask')).toHaveTextContent('配置 API Key 后显示余额');
   });
 
@@ -325,6 +325,6 @@ describe('a deleted credential turns its module back into a template', () => {
 
     const module = screen.getByTestId('deepseek-balance');
     expect(module.className).not.toContain('is-covered');
-    expect(module).toHaveTextContent('¥ 21.52');
+    expect(module).toHaveTextContent('¥21.52');
   });
 });

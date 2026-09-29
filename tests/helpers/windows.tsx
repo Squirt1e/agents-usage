@@ -24,6 +24,12 @@ export interface PanelHarnessOptions {
   settings?: Partial<PanelSettings>;
   onRequestHide?: () => void;
   now?: Date;
+  /**
+   * Whether this host can reshape its window. The app's host can; the companion
+   * web page's cannot, and `PanelApp` uses exactly that difference to keep the
+   * desktop-only rail out of the browser (see its `minimalMode`).
+   */
+  canReshapeWindow?: boolean;
 }
 
 /**
@@ -40,7 +46,8 @@ export function renderPanel(options: PanelHarnessOptions = {}) {
     pinned: false,
     onTogglePin: vi.fn(),
     onRequestHide: options.onRequestHide ?? vi.fn(),
-    onSetHeight: vi.fn()
+    onSetHeight: vi.fn(),
+    ...(options.canReshapeWindow === false ? {} : { onSetMinimalLayout: vi.fn() })
   };
   const view = render(
     <PanelApp client={client} host={host} now={options.now ?? NOW} onOpenSettings={onOpenSettings} />

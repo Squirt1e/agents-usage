@@ -31,6 +31,11 @@ const THEME_OPTIONS: Array<{ value: PanelSettings['theme']; label: string }> = [
   { value: 'system', label: '跟随系统' }
 ];
 
+const PANEL_MODE_OPTIONS: Array<{ value: PanelSettings['panelDisplayMode']; label: string }> = [
+  { value: 'full', label: '标准' },
+  { value: 'minimal', label: '极简' }
+];
+
 const QUOTA_VALUE_OPTIONS: Array<{ value: PanelSettings['quotaValueMode']; label: string }> = [
   { value: 'remaining', label: '剩余' },
   { value: 'used', label: '已用' }
@@ -46,6 +51,7 @@ export interface AppSettingsProps {
   onToggleVisibility(provider: ProviderId, visible: boolean): void;
   onReorder(order: ProviderId[]): void;
   onThemeChange(theme: PanelSettings['theme']): Promise<void>;
+  onPanelDisplayModeChange(mode: PanelSettings['panelDisplayMode']): Promise<void>;
   onQuotaValueModeChange(mode: PanelSettings['quotaValueMode']): Promise<void>;
   onQuotaWarningThresholdChange(threshold: number): Promise<void>;
   onBalanceWarningThresholdChange(threshold: number): Promise<void>;
@@ -65,7 +71,8 @@ export function AppSettings(props: AppSettingsProps) {
    * state is the real one, and it disables both groups while either is saving:
    * something visibly unavailable beats something silently ignored.
    */
-  const [savingAppearance, setSavingAppearance] = useState<'theme' | 'quota' | null>(null);
+  const [savingAppearance, setSavingAppearance] = useState<'theme' | 'quota' | 'panel' | null>(null);
+  const [modeFeedback, setModeFeedback] = useState('');
   const [thresholdDraft, setThresholdDraft] = useState(String(props.settings.quotaWarningThreshold));
   const [savingThreshold, setSavingThreshold] = useState(false);
   const [thresholdFeedback, setThresholdFeedback] = useState('');
@@ -96,12 +103,14 @@ export function AppSettings(props: AppSettingsProps) {
     if (!savingBalanceThreshold) setBalanceThresholdDraft(String(props.settings.balanceWarningThreshold));
   }, [props.settings.balanceWarningThreshold, savingBalanceThreshold]);
 
-  const saveAppearance = async (kind: 'theme' | 'quota', save: () => Promise<void>) => {
+  const saveAppearance = async (kind: 'theme' | 'quota' | 'panel', save: () => Promise<void>) => {
     if (savingAppearance !== null) return;
     setSavingAppearance(kind);
     try {
       await save();
+      if (kind === 'panel') setModeFeedback('');
     } catch {
+      if (kind === 'panel') setModeFeedback('面板模式保存失败，已保留原设置');
       // A failed appearance write is said where the message stack lives — the panel
       // owns it, and this window's half of the contract is only "the selection does
       // not take". Swallowing it here is the point: the store keeps the persisted
@@ -177,6 +186,24 @@ export function AppSettings(props: AppSettingsProps) {
            two rows are for. The heading used to repeat the title verbatim, three
            lines apart. */
         <section className="config-block" data-testid="appearance-settings">
+          <div className="setting-row">
+            <span className="setting-label">面板模式</span>
+            <SegmentedGroup label="面板模式">
+              {PANEL_MODE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`segmented-option${props.settings.panelDisplayMode === option.value ? ' is-active' : ''}`}
+                  aria-pressed={props.settings.panelDisplayMode === option.value}
+                  disabled={savingAppearance !== null}
+                  onClick={() => void saveAppearance('panel', () => props.onPanelDisplayModeChange(option.value))}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </SegmentedGroup>
+            <span className="quota-threshold-feedback" role="status">{modeFeedback}</span>
+          </div>
           <div className="setting-row">
             <span className="setting-label">主题</span>
             <SegmentedGroup label="主题">

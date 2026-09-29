@@ -41,6 +41,26 @@ function settingsWith(patch: Partial<PanelSettings> = {}): PanelSettings {
 }
 
 describe('the card period row', () => {
+  it('tints only the peak provider ring in minimal mode and clears at off-peak', async () => {
+    const client = createFakeUsageClient({
+      snapshot: deepseekSnapshot(),
+      settings: settingsWith({ panelDisplayMode: 'minimal', peakReminder: { deepseek: { mode: 'builtin' } } })
+    });
+    const host: PanelHostProps = {
+      pinned: false, onTogglePin: vi.fn(), onRequestHide: vi.fn(),
+      onSetHeight: vi.fn(), onSetMinimalDetail: vi.fn(), onSetMinimalLayout: vi.fn()
+    };
+    const view = render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={noop} />);
+    const ring = await waitFor(() => {
+      const item = document.querySelector('.minimal-item[data-provider="deepseek"]');
+      expect(item).toHaveAttribute('data-period', 'peak');
+      return item;
+    });
+    expect(document.querySelector('.minimal-item[data-provider="codex"]')).not.toHaveAttribute('data-period');
+    view.rerender(<PanelApp client={client} host={host} now={NOW_OFFPEAK} onOpenSettings={noop} />);
+    await waitFor(() => expect(ring).not.toHaveAttribute('data-period'));
+  });
+
   it('marks the card with the period and names the next boundary in the corner', () => {
     const snapshot = deepseekSnapshot();
     render(

@@ -73,9 +73,9 @@ describe('the settings window and its sections', () => {
     expect(within(nav).getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       '▦平台管理',
       '◐外观',
-      'CXCodex',
-      'GLGLM',
-      'DSDeepSeek'
+      'Codex',
+      'GLM',
+      'DeepSeek'
     ]);
     // One scrolling area, and it is the content — the title bar belongs to the host
     // and the nav is a fixed column.
@@ -95,6 +95,10 @@ describe('the settings window and its sections', () => {
       const badge = within(nav).getByRole('tab', { name }).firstElementChild;
       expect(badge).toHaveClass('brand-badge', `brand-${provider}`);
       expect(badge).not.toHaveClass('settings-nav-badge');
+      // The platform's own mark instead of the `CX`／`GL`／`DS` letter that used to
+      // stand here: the badge holds an icon and no text of its own.
+      expect(badge?.textContent).toBe('');
+      expect(badge?.querySelector('.brand-mark')).not.toBeNull();
     }
   });
 
@@ -473,7 +477,7 @@ describe('a change here lands on the panel', () => {
     const client = clientWith({ glmWalletEnabled: true, balanceWarningThreshold: 40 });
     const { panel } = renderBothWindows({ client, section: 'appearance' });
     const input = await screen.findByRole('spinbutton', { name: '低余额提醒' });
-    const row = (await panel.findByText('¥ 42.60')).closest('.metric-row');
+    const row = (await panel.findByText('¥42.60')).closest('.metric-row');
     expect(row).not.toHaveClass('is-low-balance');
 
     fireEvent.change(input, { target: { value: '42.6' } });
@@ -485,6 +489,42 @@ describe('a change here lands on the panel', () => {
 });
 
 describe('per-platform settings stay out of the global ones', () => {
+  it('switches panel mode from appearance and retains the saved selection on reopening', async () => {
+    const client = clientWith();
+    const first = renderSettings({ client, section: 'appearance' });
+    const mode = await screen.findByRole('group', { name: '面板模式' });
+    expect(within(mode).getByRole('button', { name: '标准' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(mode).getByRole('button', { name: '极简' }));
+    await waitFor(() => expect(within(mode).getByRole('button', { name: '极简' })).toHaveAttribute('aria-pressed', 'true'));
+    expect(client.methodCalls('updateSettings')).toEqual([[{ panelDisplayMode: 'minimal' }]]);
+    expect(client.methodCalls('refresh')).toEqual([]);
+    first.unmount();
+    renderSettings({ client, section: 'appearance' });
+    const reopened = await screen.findByRole('group', { name: '面板模式' });
+    expect(within(reopened).getByRole('button', { name: '极简' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('changes the open panel mode immediately without collecting', async () => {
+    const client = clientWith();
+    const { panel } = renderBothWindows({ client, section: 'appearance' });
+    await panel.findByTestId('overview');
+    const mode = await screen.findByRole('group', { name: '面板模式' });
+    fireEvent.click(within(mode).getByRole('button', { name: '极简' }));
+    await panel.findByTestId('minimal-rail');
+    fireEvent.click(within(mode).getByRole('button', { name: '标准' }));
+    await panel.findByTestId('overview');
+    expect(client.methodCalls('refresh')).toEqual([]);
+  });
+
+  it('keeps the previous mode when the write fails', async () => {
+    const client = clientWith();
+    vi.spyOn(client, 'updateSettings').mockRejectedValueOnce(new Error('offline'));
+    renderSettings({ client, section: 'appearance' });
+    const mode = await screen.findByRole('group', { name: '面板模式' });
+    fireEvent.click(within(mode).getByRole('button', { name: '极简' }));
+    await waitFor(() => expect(within(mode).getByRole('button', { name: '标准' })).toHaveAttribute('aria-pressed', 'true'));
+    expect(await screen.findByText('面板模式保存失败，已保留原设置')).toBeInTheDocument();
+  });
   it('keeps quota value mode out of a platform section', async () => {
     renderSettings({ client: clientWith(), section: 'glm' });
     await screen.findByTestId('settings-glm');

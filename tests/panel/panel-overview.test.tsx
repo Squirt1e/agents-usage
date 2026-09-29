@@ -162,6 +162,15 @@ describe('panel overview', () => {
     expect(screen.getByRole('button', { name: '配置 GLM' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '配置 DeepSeek' })).toBeInTheDocument();
 
+    // And identifies its platform with the platform's own mark: the badge holds an
+    // icon and no `CX`／`GL`／`DS` letter, in either form.
+    for (const provider of ['codex', 'glm', 'deepseek'] as const) {
+      const badge = screen.getByTestId(`card-${provider}`).querySelector('.brand-badge');
+      expect(badge, `${provider} has no badge`).not.toBeNull();
+      expect(badge?.textContent).toBe('');
+      expect(badge?.querySelector('.brand-mark')).not.toBeNull();
+    }
+
     // The overview never shows a platform picker.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '设置' })).toBeInTheDocument();

@@ -198,6 +198,7 @@ export function useSettingsWindow(options: SettingsWindowOptions): SettingsPanel
     onToggleVisibility: setVisibility,
     onReorder: (order) => void updateSettings({ platformOrder: order }),
     onThemeChange: (theme) => updateSettings({ theme }),
+    onPanelDisplayModeChange: (panelDisplayMode) => updateSettings({ panelDisplayMode }),
     onQuotaValueModeChange: (quotaValueMode) => updateSettings({ quotaValueMode }),
     onQuotaWarningThresholdChange: (quotaWarningThreshold) => updateSettings({ quotaWarningThreshold }),
     onBalanceWarningThresholdChange: (balanceWarningThreshold) => updateSettings({ balanceWarningThreshold }),

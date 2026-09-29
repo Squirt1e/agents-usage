@@ -170,6 +170,7 @@ export interface PanelCredentials {
  */
 export interface PanelSettings {
   theme: ThemePreference;
+  panelDisplayMode: PanelDisplayMode;
   timezone: string;
   glmRegion: GlmRegion;
   /** Whether the experimental GLM wallet connection is enabled at all. On means
@@ -216,6 +217,8 @@ export type QuotaValueMode = 'remaining' | 'used';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export const THEME_PREFERENCES: readonly ThemePreference[] = ['light', 'dark', 'system'];
+export type PanelDisplayMode = 'full' | 'minimal';
+export const PANEL_DISPLAY_MODES: readonly PanelDisplayMode[] = ['full', 'minimal'];
 
 export const QUOTA_DISPLAY_MODES: readonly QuotaDisplayMode[] = ['ring', 'bar'];
 export const QUOTA_VALUE_MODES: readonly QuotaValueMode[] = ['remaining', 'used'];
@@ -298,6 +301,7 @@ export type PanelSettingsPatch = Partial<
     PanelSettings,
     | 'timezone'
     | 'theme'
+    | 'panelDisplayMode'
     | 'glmRegion'
     | 'glmWalletEnabled'
     | 'deepseekWebEnabled'
@@ -695,6 +699,7 @@ export function parsePanelSettings(value: unknown): PanelSettings {
   return {
     timezone: text(record.timezone) ?? 'UTC',
     theme: isOneOf(THEME_PREFERENCES, record.theme) ? record.theme : 'dark',
+    panelDisplayMode: isOneOf(PANEL_DISPLAY_MODES, record.panelDisplayMode) ? record.panelDisplayMode : 'full',
     glmRegion: isOneOf(GLM_REGIONS, record.glmRegion) ? record.glmRegion : 'china',
     glmWalletEnabled: record.glmWalletEnabled === true,
     deepseekWebEnabled: record.deepseekWebEnabled === true,

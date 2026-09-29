@@ -452,10 +452,10 @@ describe('GLM quota and wallet', () => {
     expect(screen.getByText('5 天 6 小时后重置')).toBeInTheDocument();
     expect(screen.getByTestId('glm-wallet')).toBeInTheDocument();
     expect(screen.getByText('钱包余额')).toBeInTheDocument();
-    expect(screen.getByText('¥ 42.60')).toBeInTheDocument();
+    expect(screen.getByText('¥42.60')).toBeInTheDocument();
     expect(screen.getByText('实验数据源')).toBeInTheDocument();
     expect(screen.getByText('今日钱包消费')).toBeInTheDocument();
-    expect(screen.getByText('¥ 1.28')).toBeInTheDocument();
+    expect(screen.getByText('¥1.28')).toBeInTheDocument();
     expect(screen.getByText('估算')).toBeInTheDocument();
     expect(screen.getByText('估算')).toHaveClass('tag-estimate');
     // Real data: no frosted cover anywhere.
@@ -474,7 +474,7 @@ describe('GLM quota and wallet', () => {
     const row = screen.getByTestId('metric-glm-balance-CNY');
     expect(row).toHaveClass('is-low-balance');
     expect(row).toHaveAttribute('data-low-balance', 'true');
-    expect(row).toHaveAccessibleName('钱包余额 ¥ 42.60 低余额提醒');
+    expect(row).toHaveAccessibleName('钱包余额 ¥42.60 低余额提醒');
   });
 
   it('does not warn for GLM placeholders, unparseable balances, or while the reminder is off', () => {
@@ -511,7 +511,7 @@ describe('GLM quota and wallet', () => {
       />
     );
     expect(screen.getByTestId('glm-wallet')).not.toHaveClass('is-low-balance');
-    expect(screen.getByText('¥ 42.60').closest('.metric-row')).not.toHaveClass('is-low-balance');
+    expect(screen.getByText('¥42.60').closest('.metric-row')).not.toHaveClass('is-low-balance');
   });
 
   it('keeps Coding Plan quota primary and groups the wallet as auxiliary data', () => {
@@ -542,7 +542,7 @@ describe('GLM quota and wallet', () => {
     expect(screen.queryByTestId('glm-quota-empty')).not.toBeInTheDocument();
     expect(screen.queryByText('套餐额度未返回')).not.toBeInTheDocument();
     // The wallet has data, so it is not covered and shows no placeholder rows.
-    expect(screen.getByText('¥ 42.60')).toBeInTheDocument();
+    expect(screen.getByText('¥42.60')).toBeInTheDocument();
     expect(screen.queryByTestId('glm-wallet-mask')).not.toBeInTheDocument();
   });
 
@@ -598,8 +598,8 @@ describe('GLM quota and wallet', () => {
     const walletState = providerStateOf('glm', glmMetrics.slice(4), { connection: { provider: 'glm', connection: 'wallet' } });
     renderGlm(snapshotOf([quotaState, walletState]));
 
-    expect(screen.getByText('¥ 42.60')).toBeInTheDocument();
-    expect(screen.getByText('¥ 1.28')).toBeInTheDocument();
+    expect(screen.getByText('¥42.60')).toBeInTheDocument();
+    expect(screen.getByText('¥1.28')).toBeInTheDocument();
     // The empty quota module gets the frosted hint with the localized failure;
     // the formal window layout stays underneath over placeholder data.
     const mask = screen.getByTestId('glm-quota-mask');
@@ -647,8 +647,8 @@ describe('GLM quota and wallet', () => {
     // neutral cover is the settings entry, without an additional link label.
     expect(screen.getByTestId('glm-wallet')).toBeInTheDocument();
     expect(screen.getByText('钱包余额')).toBeInTheDocument();
-    expect(screen.getByText('¥ 42.60')).toBeInTheDocument();
-    expect(screen.getByText('¥ 1.28')).toBeInTheDocument();
+    expect(screen.getByText('¥42.60')).toBeInTheDocument();
+    expect(screen.getByText('¥1.28')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '前往配置' })).not.toBeInTheDocument();
     // The quota connection is unaffected.
     expect(screen.getByText('28%')).toBeInTheDocument();
@@ -688,9 +688,9 @@ describe('GLM quota and wallet', () => {
     );
 
     expect(screen.queryByTestId('glm-wallet')).not.toBeInTheDocument();
-    expect(screen.queryByText('¥ 12.50')).not.toBeInTheDocument();
-    expect(screen.queryByText('¥ 9.75')).not.toBeInTheDocument();
-    expect(screen.queryByText('¥ 42.60')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥12.50')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥9.75')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥42.60')).not.toBeInTheDocument();
     // The wallet switch never touches the quota connection.
     expect(screen.getByText('28%')).toBeInTheDocument();
     expect(screen.queryByTestId('glm-quota-mask')).not.toBeInTheDocument();
@@ -767,11 +767,11 @@ describe('DeepSeek balances and spend', () => {
     render(<DeepSeekCard view={providerView(snapshot, 'deepseek')} {...cardProps} />);
 
     expect(screen.getByText('剩余余额（CNY）')).toBeInTheDocument();
-    expect(screen.getByText('¥ 86.42')).toBeInTheDocument();
+    expect(screen.getByText('¥86.42')).toBeInTheDocument();
     expect(screen.getByText('剩余余额（USD）')).toBeInTheDocument();
     expect(screen.getByText(/12\.05/)).toBeInTheDocument();
     expect(screen.queryByText('今日消费（CNY）')).not.toBeInTheDocument();
-    expect(screen.queryByText('¥ 3.58')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥3.58')).not.toBeInTheDocument();
     expect(screen.queryByText('今日消费（USD）')).not.toBeInTheDocument();
     expect(screen.queryByText(/0\.42/)).not.toBeInTheDocument();
     expect(screen.queryByText(/估算/)).not.toBeInTheDocument();
@@ -792,7 +792,7 @@ describe('DeepSeek balances and spend', () => {
     expect(screen.getByTestId('metric-deepseek-balance-CNY')).not.toHaveClass('is-low-balance');
     const usd = screen.getByTestId('metric-deepseek-balance-USD');
     expect(usd).toHaveClass('is-low-balance');
-    expect(usd).toHaveAccessibleName('剩余余额（USD） $ 12.05 低余额提醒');
+    expect(usd).toHaveAccessibleName('剩余余额（USD） $12.05 低余额提醒');
   });
 
   it('warns for cached balances but not missing or unparseable values, and zero disables it', () => {
@@ -848,7 +848,7 @@ describe('DeepSeek balances and spend', () => {
 
     const module = screen.getByTestId('deepseek-balance');
     expect(module).toHaveTextContent('剩余余额');
-    expect(module).toHaveTextContent('¥ 86.42');
+    expect(module).toHaveTextContent('¥86.42');
     expect(module.className).toContain('is-covered');
     expect(screen.getByTestId('deepseek-balance-mask')).toHaveTextContent('配置 API Key 后显示余额');
   });
@@ -896,7 +896,7 @@ describe('DeepSeek balances and spend', () => {
     // response is not filled from the balance-delta estimator — and the card says
     // nothing about the source being experimental: the connection is opted into on
     // its own settings page.
-    expect(screen.getByText('¥ 49.06')).toBeInTheDocument();
+    expect(screen.getByText('¥49.06')).toBeInTheDocument();
     expect(screen.queryByText('实验数据源')).not.toBeInTheDocument();
     expect(screen.queryByText('实验功能')).not.toBeInTheDocument();
     expect(screen.queryByText(/估算/)).not.toBeInTheDocument();
@@ -927,8 +927,8 @@ describe('DeepSeek balances and spend', () => {
     const card = screen.getByTestId('card-deepseek');
     const primary = within(card).getByRole('region', { name: '主要指标' });
     const today = within(card).getByRole('region', { name: '今日用量' });
-    expect(within(primary).getByTestId('deepseek-balance')).toHaveTextContent('¥ 86.42');
-    expect(within(today).getByTestId('metric-deepseek-spend-CNY')).toHaveTextContent('¥ 49.06');
+    expect(within(primary).getByTestId('deepseek-balance')).toHaveTextContent('¥86.42');
+    expect(within(today).getByTestId('metric-deepseek-spend-CNY')).toHaveTextContent('¥49.06');
     expect(within(today).queryByRole('heading', { name: '今日用量' })).not.toBeInTheDocument();
     expect(primary.compareDocumentPosition(today) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -974,7 +974,7 @@ describe('DeepSeek balances and spend', () => {
     render(<DeepSeekCard view={view} {...cardProps} />);
 
     // Balance remains useful; all web-only rows and reminders disappear.
-    expect(screen.getByText('¥ 86.42')).toBeInTheDocument();
+    expect(screen.getByText('¥86.42')).toBeInTheDocument();
     expect(screen.queryByText(/估算/)).not.toBeInTheDocument();
     expect(screen.queryByTestId('metric-deepseek-spend-CNY')).not.toBeInTheDocument();
     expect(screen.queryByText(/experimental DeepSeek web usage/)).not.toBeInTheDocument();
@@ -1051,7 +1051,7 @@ describe('DeepSeek balances and spend', () => {
     expect(screen.queryByText('前往配置')).not.toBeInTheDocument();
     expect(screen.queryByText(/credential is not configured/)).not.toBeInTheDocument();
     expect(screen.queryByText(/估算/)).not.toBeInTheDocument();
-    expect(screen.queryByText('¥ 49.06')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥49.06')).not.toBeInTheDocument();
   });
 
   it('does not print the generic missing-configuration status on a card without credentials', () => {
@@ -1078,7 +1078,7 @@ describe('DeepSeek balances and spend', () => {
     );
     render(<DeepSeekCard view={providerView(snapshotOf([state]), 'deepseek')} {...cardProps} />);
 
-    expect(screen.getByText('¥ 45.34')).toBeInTheDocument();
+    expect(screen.getByText('¥45.34')).toBeInTheDocument();
     expect(screen.getByTestId('card-deepseek')).not.toHaveTextContent('需要配置');
   });
 
@@ -1090,7 +1090,7 @@ describe('DeepSeek balances and spend', () => {
     ]);
     render(<DeepSeekCard view={providerView(snapshot, 'deepseek')} {...cardProps} />);
 
-    expect(screen.getByText('¥ 0.00')).toBeInTheDocument();
+    expect(screen.getByText('¥0.00')).toBeInTheDocument();
   });
 });
 
@@ -1196,8 +1196,8 @@ describe('local failures stay local', () => {
     expect(await screen.findByRole('button', { name: '连接异常 1' })).toBeInTheDocument();
     expect(within(screen.getByTestId('card-codex')).queryByText('Codex is not signed in')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('card-glm')).getByRole('group', { name: '5小时 剩余 72%' })).toBeInTheDocument();
-    expect(screen.getByText('¥ 42.60')).toBeInTheDocument();
-    expect(screen.getByText('¥ 86.42')).toBeInTheDocument();
+    expect(screen.getByText('¥42.60')).toBeInTheDocument();
+    expect(screen.getByText('¥86.42')).toBeInTheDocument();
     // The existing card gear remains; no failure-specific recovery entry is added.
     const codexCard = screen.getByTestId('card-codex');
     expect(within(codexCard).queryByRole('button', { name: '前往配置' })).not.toBeInTheDocument();
@@ -1309,7 +1309,7 @@ describe('local failures stay local', () => {
     const host: PanelHostProps = { pinned: false, onTogglePin: noop, onRequestHide: noop, onSetHeight: noop };
     render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
 
-    expect(await screen.findByText('¥ 86.42')).toBeInTheDocument();
+    expect(await screen.findByText('¥86.42')).toBeInTheDocument();
     // The cached balance is shown, and the state that made it stale is named by the
     // failure itself rather than by a notice about time passing.
     expect(screen.getAllByText(/网络异常/).length).toBeGreaterThan(0);

@@ -266,6 +266,45 @@ interface TransitionSwitch {
 }
 
 const TRANSITION_SWITCHES: TransitionSwitch[] = [
+  { what: 'minimal rail platform selection and hover', selector: '.minimal-item', properties: ['background', 'color'] },
+  {
+    // The rail used to grow its own padding while the actions, pinned to its bottom
+    // corner, faded in over the rings. It is the action column that makes the room
+    // now, so it is the column that travels: it unrolls from nothing, and the rail's
+    // height follows as the layout consequence of that one animated box.
+    what: 'the rail’s action column unrolls for the shared focus state',
+    selector: '.minimal-tools',
+    properties: ['height', 'padding', 'opacity', 'visibility']
+  },
+  {
+    // Both feedback paths land here: the control's own `:hover`, and the `.is-hover` the
+    // host's pointer probe paints, because a webview in a window that is not key receives
+    // no pointer events at all (see `panel/probe-hover.ts`).
+    what: 'minimal action hover and pin state',
+    selector: '.minimal-tool',
+    properties: ['background', 'color']
+  },
+  {
+    what: 'minimal connection badge hover and open state',
+    selector: '.minimal-alert',
+    properties: ['background', 'color']
+  },
+  { what: 'minimal quota and balance value warning', selector: '.minimal-item-value', properties: ['color'] },
+  { what: 'minimal quota arc follows the value and warning', selector: '.minimal-ring-arc', properties: ['stroke-dasharray', 'stroke'] },
+  { what: 'minimal ring fill changes with peak state', selector: '.minimal-ring::before', properties: ['opacity'] },
+  { what: 'minimal brand original fades when peak ends', selector: '.minimal-brand-original', properties: ['opacity'] },
+  { what: 'minimal brand peak overlay fades when peak ends', selector: '.minimal-brand-peak', properties: ['opacity'] },
+  { what: 'minimal empty state action hover', selector: '.minimal-empty button', properties: ['color'] },
+  {
+    what: 'minimal platform card arrives, leaves, and follows the ring it belongs to',
+    selector: '.minimal-detail',
+    properties: ['opacity', 'transform', 'top']
+  },
+  {
+    what: 'minimal detail content switches between already mounted cards',
+    selector: '.minimal-detail-scroll',
+    properties: ['opacity', 'visibility']
+  },
   { what: 'panel fades in and out with the window', selector: '#panel-root', properties: ['opacity', 'transform'] },
   {
     what: 'toolbar icon buttons: hover, pressed pin, disabled',
@@ -548,6 +587,16 @@ const ANIMATION_SWITCHES: AnimationSwitch[] = [
     selectors: ['.peak-window-card', '.peak-empty'],
     animation: 'peak-window-in'
   },
+  {
+    // The badge mounts with the state that made it true — a connection that is failing
+    // — so its travel is an animation rather than a transition (AGENTS.md §1.1).
+    what: 'the rail’s connection badge arrives',
+    selectors: ['.minimal-alert'],
+    animation: 'minimal-alert-in'
+  },
+  { what: 'minimal peak fill breathes', selectors: ['.minimal-item.is-peak .minimal-ring::before'], animation: 'minimal-peak-fill-breathe' },
+  { what: 'minimal original logo yields to peak colour', selectors: ['.minimal-item.is-peak .minimal-brand-original'], animation: 'minimal-peak-original-breathe' },
+  { what: 'minimal peak logo returns to original colour', selectors: ['.minimal-item.is-peak .minimal-brand-peak'], animation: 'minimal-peak-color-breathe' },
   { what: 'the loading spinner turns', selectors: ['.spinner'], animation: 'panel-spin' }
 ];
 
@@ -584,6 +633,14 @@ const EXCEPTIONS: Exception[] = [
       'The dragged row is moved by the drag code writing transform every frame. A transition on transform would make it trail the cursor, so only its tint and shadow travel.',
     whileHolds: /will-change:\s*transform/,
     where: 'src/desktop/panel.css'
+  },
+  {
+    what: 'the rail window widening beside its detail',
+    selector: '.minimal-panel',
+    reason:
+      'The rail\'s frame is set by the host, not by the sheet, and the host keeps the rail\'s right edge fixed while the width changes: a width travelled frame by frame therefore reads as the whole panel sliding sideways rather than as the detail arriving. The panel reports the target width once and animates only the height — tests/panel/minimal-rail.test.ts pins that pairing.',
+    whileHolds: /resized_native_origin_x_keep_right/,
+    where: 'src-tauri/src/lib.rs'
   },
   {
     what: 'focus rings',

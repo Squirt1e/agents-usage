@@ -131,6 +131,7 @@
   --ring-deepseek: rgba(154, 166, 255, 0.32);
   --active-ring: rgba(119, 230, 216, 0.35);
   --warning-border: rgba(242, 192, 105, 0.4);
+  --warning-bg: rgba(242, 192, 105, 0.12);
   /* Traffic amber ("slow", not "stop"): the peak card must read at a glance,
      so this is its own saturated hue rather than the pale --warning. */
   --peak: #ffb020;
@@ -142,6 +143,10 @@
   --drag-bg: rgba(119, 230, 216, 0.09);
   --drag-ring: rgba(119, 230, 216, 0.28);
   --drag-shadow: rgba(0, 0, 0, 0.22);
+  --minimal-selection: #2a3e55;
+  --minimal-ring-track: #35465b;
+  --minimal-codex-ring: #77e6d8;
+  --minimal-glm-ring: #a4a9f5;
 }
 
 
@@ -185,6 +190,10 @@
   --badge-bg: #f2f2f7;
   --detail-border: #dedee3;
   --ring-track: #e5e5ea;
+  --minimal-selection: #dce7f3;
+  --minimal-ring-track: #dbe5f1;
+  --minimal-codex-ring: #69d1cd;
+  --minimal-glm-ring: #9697eb;
   --bar-track: #e5e5ea;
   --status-border: #d8d8dd;
   --notice-bg: rgba(255, 255, 255, 0.92);
@@ -224,6 +233,7 @@
   --ring-deepseek: rgba(88, 86, 214, 0.18);
   --active-ring: rgba(0, 102, 204, 0.2);
   --warning-border: rgba(133, 91, 11, 0.25);
+  --warning-bg: rgba(133, 91, 11, 0.08);
   --peak: #8f5a00;
   --peak-bg: rgba(143, 90, 0, 0.07);
   --peak-border: rgba(143, 90, 0, 0.5);
@@ -503,6 +513,13 @@ button {
   color: var(--control-hover-text);
 }
 
+/* The host probe's twin of `:hover` (see `panel/probe-hover.ts`): a webview in a window
+   that is not key receives no pointer events, so the paint carries the state instead. */
+.icon-button.is-hover:not(:disabled) {
+  border-color: var(--control-hover-border);
+  color: var(--control-hover-text);
+}
+
 .icon-button:disabled {
   opacity: 0.45;
   cursor: default;
@@ -635,6 +652,11 @@ button {
   border-color: var(--line-soft);
 }
 
+.connection-trigger.is-visible.is-hover {
+  background: var(--control-bg);
+  border-color: var(--line-soft);
+}
+
 .link-button {
   position: relative;
   border: 0;
@@ -724,10 +746,26 @@ button {
   width: 22px;
   height: 22px;
   border-radius: 7px;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.2px;
   background: var(--badge-bg);
+}
+
+/* The mark is the platform's own SVG used as a mask and filled with the badge's
+   colour, so the accent the old `CX`／`GL`／`DS` letter drew still paints it and both
+   themes keep sharing one set of variables. The three assets carry fixed colours of
+   their own (a gradient, a blue close to the badge ring, and `currentColor`), which
+   is why the shape travels instead of the file: a pasted logo would fight the tile
+   in one theme and vanish in the other. */
+.brand-mark {
+  display: block;
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 .brand-codex {
@@ -779,6 +817,10 @@ button {
 }
 
 .gear-button:hover {
+  color: var(--action);
+}
+
+.gear-button.is-hover {
   color: var(--action);
 }
 
@@ -905,6 +947,10 @@ button {
 }
 
 .quota-reset-toggle:hover:not(:disabled) {
+  color: var(--action);
+}
+
+.quota-reset-toggle.is-hover:not(:disabled) {
   color: var(--action);
 }
 
@@ -2672,6 +2718,10 @@ button {
   background: var(--soft-button-bg);
 }
 
+.quota-shape-button.is-hover:not(:disabled) {
+  background: var(--soft-button-bg);
+}
+
 .quota-shape-button:active:not(:disabled) {
   background: var(--active-bg);
 }
@@ -2883,6 +2933,590 @@ button {
   color: var(--low-value-warning);
 }
 
+/* ------------------------------------------------------------- minimal rail */
+
+/* The panel's other shape: one 58-point column of platform rings, with a card that
+   follows the pointer. Every size here is read by `panel/minimal-layout.ts`, whose
+   guard (`tests/panel/minimal-rail.test.ts`) checks the pairing in both directions —
+   the host is *told* a window size rather than measuring one, so a rule that drifts
+   from that arithmetic shows up only as a rail that scrolls or a clipped card. */
+
+html:has(.minimal-panel),
+body:has(.minimal-panel),
+#panel-root:has(.minimal-panel) {
+  width: 100%;
+}
+
+.minimal-panel {
+  position: relative;
+  display: flex;
+  width: 100%;
+  /* The window *is* this panel's box, and the one term that must not be a percentage.
+     `height: 100%` resolves against the node React mounts into — a bare `div` in
+     `main.tsx` with no height of its own — so it collapsed to `auto`, which for this
+     flex row is the rail's height. Everything below the rail's bottom was then clipped
+     by the `overflow` below: the detail card lost its last 15 points and the window's
+     lower strip showed nothing but the desktop behind it. The viewport is the same
+     number without the chain. */
+  height: 100vh;
+  justify-content: flex-end;
+  align-items: flex-start;
+  /* The rail clips its own document; the card is painted in a separate window. */
+  overflow: hidden;
+}
+
+.minimal-rail {
+  position: relative;
+  flex: 0 0 58px;
+  width: 58px;
+  box-sizing: border-box;
+  /* On its own composited layer, for the window it lives in.
+   *
+   * This is the only surface the reader can see while a card is closed, so anything
+   * that makes the transparent window re-composite its surface shows up here — as the
+   * focused platform's plate blinking. A promoted layer keeps the rail's pixels in a
+   * backing of their own, so a re-composite (or a natively resized window, which the
+   * host drives frame by frame) re-uses them instead of repainting the column. It has
+   * no transform of its own: this is the hint, not an effect. */
+  will-change: transform;
+  /* The vertical padding is the drag band: a pointer on it is on the rail itself,
+     and a pointer on a ring is on a button, which Tauri lets block the drag. Both
+     ends are the same four points (`MINIMAL_RAIL_PADDING_TOP` / `…_BOTTOM`): the
+     frame reads lopsided when the foot is twice the head, and the action column
+     already brings its own room when it unrolls. */
+  padding: 4px 0 4px;
+  /* The rail wears the panel's own surface — the same gradient and the same edge the
+     full panel draws — so the two shapes read as one material. It used to keep a
+     second palette of its own (`--minimal-rail-bg`), which is exactly the kind of
+     copy that drifts: the two backgrounds never matched. */
+  border: 1px solid var(--line-soft);
+  /* The panel's own frame radius (`MINIMAL_RAIL_RADIUS`). It was 22 — nearly half the
+     column's width, which rounded the rail's ends into a capsule and gave it corners
+     rounder than the card it opens. */
+  border-radius: 14px;
+  background: linear-gradient(158deg, var(--tile-top) 0%, var(--tile) 58%, var(--tile-bottom) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Only as tall as its rings. The window is taller whenever a card is open, and a
+     stretched rail would stretch its pill into a column of empty outline. */
+  align-self: flex-start;
+  /* Nothing to transition here any more: the focus state used to grow this padding
+     while the actions faded in on top of it, which is exactly what swept the buttons
+     across the rings on their way to the bottom. The room now comes from the action
+     column's own height (`.minimal-tools`), so the rail is only the box around it. */
+}
+
+/* The platform slots, one gap apart.
+   They used to be direct children of the rail with no gap at all, so one item's
+   reading sat on the next item's ring — and at six the gap read as a break between
+   separate platforms rather than as one column of them. */
+.minimal-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.minimal-item {
+  /* Ring plus one value line, and nothing under it: the window short name and the
+     balance caption live in the accessible name and the detail, because a second
+     text line at this width reads as noise rather than as information. 64 is the
+     44-point target with room to spare, and it is the number `minimal-layout.ts`
+     asks the host for. */
+  flex: 0 0 64px;
+  width: 52px;
+  min-height: 64px;
+  border: 0;
+  /* The tile is the hit area's content box: `background-clip` keeps the 52x64 target
+     and insets the highlight by the padding, so the tile reads as a rounded plate
+     inside its slot rather than a full-bleed block. */
+  padding: 3px;
+  /* The frame's radius less the three points this plate is inset inside it, so the
+     two corners nest (`MINIMAL_ITEM_RADIUS`). */
+  border-radius: 11px;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  color: var(--text);
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.minimal-item.is-active {
+  background: var(--minimal-selection);
+}
+
+/*
+ * The action column.
+ *
+ * It used to be pinned to the rail's bottom-right corner while the rail grew its
+ * padding, so for the length of the transition the buttons were drawn over the rings
+ * and the balance under them — the flash the panel showed when the pointer arrived.
+ * As a child of the column it can only ever stand *below* the platforms, and the
+ * direction it appears from is the one it grows into: it unrolls.
+ *
+ * `overflow: hidden` is what makes the unroll a reveal rather than buttons painted
+ * outside the rail, and the padding is the room their focus ring needs — four points
+ * on every side, which is why the closed box is 0 tall with no vertical padding at
+ * all. Both travel on the dimension budget, in step with the host's window.
+ */
+.minimal-tools {
+  display: grid;
+  grid-template-rows: repeat(3, 24px);
+  gap: 2px;
+  justify-items: center;
+  box-sizing: border-box;
+  width: 48px;
+  height: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    height 220ms ease,
+    padding 220ms ease,
+    opacity 200ms ease,
+    visibility 0s linear 220ms;
+}
+
+.minimal-panel.is-focused .minimal-tools {
+  height: 88px;
+  padding: 8px 4px 4px;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    height 220ms ease,
+    padding 220ms ease,
+    opacity 200ms ease,
+    visibility 0s linear 0s;
+}
+
+.minimal-tool {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 24px;
+  padding: 3px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.minimal-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.minimal-tool:hover, .minimal-tool.is-active { background: var(--minimal-selection); color: var(--text); }
+
+/* The host probe's twin of `:hover` (see `MinimalPanel`).
+ *
+ * A webview only receives pointer events while its window is key, and a pinned rail
+ * usually is not: without this the three actions, the connection badge and the
+ * empty-state links stayed flat under the pointer until the reader clicked the panel
+ * first. The probe knows where the pointer is, so the rail paints that state itself; the
+ * declarations are the `:hover` ones, and `minimal-rail.test.ts` reads both sides so the
+ * pair cannot drift. */
+.minimal-tool.is-hover { background: var(--minimal-selection); color: var(--text); }
+
+.minimal-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+}
+
+.minimal-ring::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  /* The fill owns the breath; the SVG progress arc above it never changes. */
+  background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--peak) 23%, var(--tile)), color-mix(in srgb, var(--peak) 9%, var(--tile)) 82%);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.minimal-item.is-peak .minimal-ring::before { opacity: 1; animation: minimal-peak-fill-breathe 3600ms ease-in-out infinite; }
+
+.minimal-ring-progress {
+  position: absolute;
+  inset: 0;
+  width: 40px;
+  height: 40px;
+  transform: rotate(-90deg);
+  fill: none;
+  stroke-width: 3px;
+}
+
+.minimal-ring-track { stroke: var(--minimal-ring-track); }
+
+.minimal-ring-arc {
+  stroke: var(--minimal-codex-ring);
+  stroke-linecap: round;
+  transition: stroke-dasharray 240ms ease, stroke 150ms ease;
+}
+
+.minimal-item[data-provider='glm'] .minimal-ring-arc { stroke: var(--minimal-glm-ring); }
+
+.minimal-item.is-warning .minimal-ring-arc { stroke: var(--low-value-warning); }
+
+/* The mark sits inside the ring, so it is sized to leave the stroke its own room.
+   Codex has no brand colour of its own: it travels as a mask filled with the text
+   colour, which is the only form that survives both themes. */
+.minimal-brand {
+  display: block;
+  position: relative;
+  z-index: 1;
+  width: 19px;
+  height: 19px;
+  object-fit: contain;
+}
+
+.minimal-brand-original { transition: opacity 150ms ease; }
+
+.minimal-brand-peak {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--peak);
+  opacity: 0;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  transition: opacity 150ms ease;
+}
+
+.minimal-item.is-peak .minimal-brand-original { animation: minimal-peak-original-breathe 3600ms ease-in-out infinite; }
+.minimal-item.is-peak .minimal-brand-peak { animation: minimal-peak-color-breathe 3600ms ease-in-out infinite; }
+
+@keyframes minimal-peak-fill-breathe { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+@keyframes minimal-peak-original-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes minimal-peak-color-breathe { 0%, 100% { opacity: 0; } 50% { opacity: 0.78; } }
+
+.minimal-brand-codex {
+  background: var(--text);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.minimal-item-value {
+  max-width: 50px;
+  overflow: hidden;
+  white-space: nowrap;
+  font: 600 var(--text-md) var(--mono);
+  /* Explicit, because the rail's window height is arithmetic over this box and
+     `normal` is a per-font guess. */
+  line-height: 15px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+  transition: color 150ms ease;
+}
+
+.minimal-item.is-warning .minimal-item-value { color: var(--low-value-warning); }
+
+.minimal-empty {
+  width: 56px;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 0;
+  text-align: center;
+  font-size: var(--text-2xs);
+}
+
+.minimal-empty button {
+  border: 0;
+  padding: 3px 0;
+  background: transparent;
+  color: var(--action);
+  transition: color 150ms ease;
+}
+
+.minimal-empty button:hover { color: var(--text); }
+
+.minimal-empty button.is-hover { color: var(--text); }
+
+/* ----------------------------------------------------------- minimal detail */
+
+/* Fixed width keeps card wrapping stable in either document. In the rail's
+   in-document fallback it is out of flow so its height can be measured. */
+.minimal-detail {
+  position: absolute;
+  right: 65px;
+  /* 330 for the card + this border twice: the card's own box from the overview, so the
+     reused card wraps exactly as it does there. There is no padding here — the card's
+     own 10 points are the only inset between its content and this border, which is what
+     keeps the peak rail on the card's edge rather than ten points inside it (see
+     `MINIMAL_DETAIL_PADDING`). `MINIMAL_DETAIL_WIDTH` in `panel/minimal-layout.ts` is
+     the same number, and the guard reads both. */
+  width: 332px;
+  box-sizing: border-box;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  /* The detail *is* the card, so it has to carry the card's whole fill and not just
+     its top layer. The window is transparent and the rail is the only surface in it,
+     so a bare `--card` had nothing opaque underneath: in the dark theme that colour is
+     a 3.5% white, and the desktop showed straight through the open card. Compositing
+     the same two layers the overview composites — the card colour over the panel's
+     gradient — keeps the flattened card identical to the one in the overview while
+     staying opaque. */
+  --detail-surface:
+    linear-gradient(var(--card), var(--card)),
+    linear-gradient(158deg, var(--tile-top) 0%, var(--tile) 58%, var(--tile-bottom) 100%);
+  background: var(--detail-surface);
+  box-shadow: 0 6px 18px var(--card-shadow);
+  /* The detail remains mounted between selections so its fade starts from a
+     painted layer. This does not address the native width-change blink. */
+  will-change: transform, opacity;
+  opacity: 0;
+  transform: translateX(6px);
+  /* The empty frame must not be able to take the pointer: it lies over the same
+     transparent strip the rail's own drag band is in, and the reader has to be able to
+     reach whatever is under it while no card is shown. `inert` (see the component)
+     covers the tab order and the accessibility tree. */
+  pointer-events: none;
+  transition:
+    opacity 170ms ease,
+    transform 170ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    top 170ms cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+
+.minimal-detail.is-visible {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* The caret. A rotated square keeps the card's own border colour on the two edges
+   that show, so it reads as part of the card rather than a stuck-on triangle. It
+   tracks `--caret`, which the component keeps on the item the card belongs to even
+   when the card itself had to be slid back inside the window. */
+.minimal-detail::after {
+  content: "";
+  position: absolute;
+  top: var(--caret, 50%);
+  right: -5px;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-top: 1px solid var(--card-border);
+  border-right: 1px solid var(--card-border);
+  /* The caret pokes out of the card into the same empty window, so it needs the card's
+     own fill rather than the translucent card colour it used to take. */
+  background: var(--detail-surface);
+  transform: rotate(45deg);
+}
+
+/* The card is never cut off, so this box never scrolls: the window itself grows to
+   the card's natural height (see `minimalPanelHeight`), and a scrollbar here was the
+   window's size lagging behind the card rather than a real lack of room. A long label
+   still ellipsizes (`.minimal-detail .metric-label`); `overflow` stays `visible` on
+   purpose, since `overflow-x: hidden` alone would compute `overflow-y` back to `auto`
+   and re-introduce the scrollbar.
+ *
+ * No padding of its own: the card inside carries its own 10 points, so the card's box
+ * starts at the detail's border and its peak rail lands on that edge — the same place
+ * it takes in the overview. A padding here inset the whole card by a second 10 points. */
+.minimal-detail-scroll {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 100%;
+  will-change: opacity;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 150ms ease, visibility 0s linear 150ms;
+}
+
+.minimal-detail-scroll.is-current {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 150ms ease, visibility 0s linear 0s;
+}
+
+/* The native detail has its own transparent webview. Its card starts at the
+   document origin; the host positions that window beside the fixed-width rail. */
+html:has(.minimal-detail-window),
+body:has(.minimal-detail-window),
+#minimal-detail-root:has(.minimal-detail-window) {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.minimal-detail-window {
+  width: 100%;
+  height: 100%;
+}
+
+.minimal-detail-window .minimal-detail {
+  position: relative;
+  top: 0;
+  right: auto;
+  max-width: calc(100% - 7px);
+  height: 100vh;
+}
+
+.minimal-detail-window .minimal-detail-scroll {
+  height: 100%;
+  overflow-y: hidden;
+  overflow-x: hidden;
+}
+
+.minimal-detail-window.is-clipped .minimal-detail-scroll {
+  overflow-y: auto;
+}
+
+/* The detail *is* the card, so the card's own frame is switched off here: a border,
+   a background and a shadow around a card that already sits in the detail's own
+   border, background and shadow is a doubled edge with a visible seam. The peak
+   rail stays — it is information the card carries, not part of its frame. */
+.minimal-detail .provider-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 10px;
+}
+
+/* Rows are sized for the overview's 330; inside the detail they get the same 330,
+   but a long label still gives way rather than pushing the value out of the card. */
+.minimal-detail .metric-row { min-width: 0; }
+
+.minimal-detail .metric-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.minimal-detail .metric-label .tag { margin-left: 4px; }
+
+/* The measured box: the platform's card and the action row together, at their own
+   natural height. The scroller above it is what scrolls; this is what the window is
+   sized to hold, and what the resize observer watches for late-settling content. */
+.minimal-detail-content {
+  display: block;
+}
+
+.minimal-detail-head { margin-bottom: 8px; }
+
+/* The connection view is not a platform card, so it wears the card's inset itself.
+   `.minimal-detail .provider-card` gives a platform card its ten points, and the detail
+   container pads nothing — it is the frame, not a second inset. Without this the
+   connection view's heading and rows sat flush against that frame. */
+.minimal-detail-connection { padding: 10px; }
+
+.minimal-detail-body { min-width: 0; }
+
+.minimal-detail-metric {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* The card's rows are built for 328 points; here they get 252. The label gives way
+   first — the value is the reading, and a truncated number would be a wrong one. */
+.minimal-detail-metric .metric-row { min-width: 0; }
+
+/* `display: block`, not the card's `inline-flex`: an ellipsis needs a block box,
+   and a clipped label beats one that pushes the value out of the card. */
+.minimal-detail-metric .metric-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * The rail's connection badge.
+ *
+ * A failed connection is not one of a platform's metrics and must never be drawn
+ * inside a platform's card, so it lives on the rail. It is there whenever a connection
+ * is failing, pointed at or not — the detail is where it leads, not where it lives. The
+ * shape it replaced was a lone `!` under a full-width divider inside the open card,
+ * which read as the card having a stray, unfinished row.
+ *
+ * It wears the items' own plate — the same 52 points, the same nesting radius they take
+ * from the frame (`MINIMAL_ITEM_RADIUS`), and a tint of its own — because a bare dot
+ * and a number floating under the column read as debris rather than as the rail's own
+ * row. The tint is the whole plate: an outline on top of it drew a second, brighter
+ * edge around a row that already reads as one plate among plates. The gap above it is
+ * the platforms' gap, so the whole column keeps one rhythm.
+ */
+.minimal-alert {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 24px;
+  margin-top: 4px;
+  padding: 0;
+  /* Explicit, not omitted: this is a `<button>`, and the UA's own border would show
+     through the moment this declaration is deleted — a grey `outset` edge under a
+     tint that is meant to be the whole plate. */
+  border: 0;
+  border-radius: 11px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.minimal-alert:hover,
+.minimal-alert.is-active { background: var(--minimal-selection); }
+
+.minimal-alert.is-hover { background: var(--minimal-selection); }
+
+.minimal-alert-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.minimal-alert-count {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* The badge mounts with the state that made it true, so its travel is an animation
+   rather than a transition (AGENTS.md §1.1). It arrives the way the rest of the
+   rail's content does — the panel's own entry curve, rising the last few points —
+   instead of a lone fade that popped a dot into the column. */
+.minimal-alert { animation: minimal-alert-in 170ms cubic-bezier(0.22, 0.8, 0.24, 1) both; }
+
+@keyframes minimal-alert-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* ---------------------------------------------------------------- motion off */
 
 /*
@@ -2905,4 +3539,8 @@ button {
     transition: none !important;
     animation: none !important;
   }
+
+  .minimal-item.is-peak .minimal-ring::before { opacity: 0.7; }
+  .minimal-item.is-peak .minimal-brand-original { opacity: 0; }
+  .minimal-item.is-peak .minimal-brand-peak { opacity: 0.78; }
 }

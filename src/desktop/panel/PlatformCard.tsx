@@ -1,5 +1,5 @@
 /**
- * The compact platform card frame: monogram badge, platform name, plan tag and
+ * The compact platform card frame: the platform's own mark, its name, plan tag and
  * the tune entry that opens *that* platform's configuration.
  *
  * The card owns no data rules; the platform cards only fill `children`.
@@ -9,9 +9,8 @@ import type { ReactNode } from 'react';
 import type { ProviderId } from '../../shared/contracts';
 import { providerDisplayName } from '../../shared/desktop-contract';
 import type { PeakPeriod } from '../lib/peak-windows';
+import { BrandMark } from '../components/BrandMark';
 import { TuneIcon } from '../components/icons';
-
-const MONOGRAMS: Record<ProviderId, string> = { codex: 'CX', glm: 'GL', deepseek: 'DS' };
 
 export interface PlatformCardProps {
   provider: ProviderId;
@@ -42,7 +41,7 @@ export function PlatformCard(props: PlatformCardProps) {
     >
       <header className="provider-head">
         <span className={`brand-badge brand-${props.provider}`} aria-hidden="true">
-          {MONOGRAMS[props.provider]}
+          <BrandMark provider={props.provider} />
         </span>
         <h2 className="provider-name" id={`card-title-${props.provider}`}>
           {name}

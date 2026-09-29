@@ -518,10 +518,19 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   SGD: 'S$'
 };
 
-export function formatMoney(value: number, currency: string): string {
+/**
+ * One money figure, e.g. `¥9.80`.
+ *
+ * `decimals` exists for the surfaces whose column is too narrow for cents (the minimal
+ * rail's 58 points); the full cards keep the default, because a figure they have room
+ * for should not lose its last two digits.
+ */
+export function formatMoney(value: number, currency: string, decimals = 2): string {
   const symbol = CURRENCY_SYMBOLS[currency];
-  const amount = value.toFixed(2);
-  return symbol === undefined ? `${currency} ${amount}` : `${symbol} ${amount}`;
+  const amount = value.toFixed(decimals);
+  // No space after the symbol: `¥9.80` is one figure, and the currency code already
+  // gets its own separator when there is no symbol to carry it.
+  return symbol === undefined ? `${currency} ${amount}` : `${symbol}${amount}`;
 }
 
 /** Compact token counts, e.g. `86.2 K`. */

@@ -20,6 +20,8 @@
 | url | 2.5.8 | 端点来源校验（HTTPS、禁止跨域重定向转发凭据） |
 | sha2 | 0.10.9 | 服务发现与握手校验摘要 |
 | rand | 0.9.5 | 实例标识与会话凭证 |
+| objc2-app-kit | 0.3.2 | macOS 窗口细节：`NSWindow` 的原生 frame、鼠标按键采样与指针命中测试（`windowNumberAtPoint:`） |
+| objc2-foundation | 0.3.2 | 上一项所需的 `MainThreadMarker`，用来调用 AppKit 自己的指针命中测试 |
 
 Vite 7.1.4、React 19.1.1、Node 24.19.0 是面板前端的构建与测试依赖；打包后的 app 不需要
 Node 运行。

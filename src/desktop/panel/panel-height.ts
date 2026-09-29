@@ -171,6 +171,7 @@ export function desiredPanelHeight(input: PanelHeightInput): number {
 export interface PanelHeightOptions {
   /** Report a new desired height. Expected to be stable across renders. */
   onSetHeight(height: number): void;
+  enabled?: boolean;
   /** The tallest the host will make the window, when the caller knows it. */
   maxHeight?: number;
 }
@@ -188,6 +189,7 @@ export interface PanelHeightOptions {
  */
 export function usePanelHeight(options: PanelHeightOptions): void {
   const { onSetHeight, maxHeight } = options;
+  const enabled = options.enabled !== false;
   /**
    * The height the host last applied, or `null` before the first report.
    *
@@ -205,6 +207,10 @@ export function usePanelHeight(options: PanelHeightOptions): void {
   ceiling.current = maxHeight;
 
   useEffect(() => {
+    if (!enabled) {
+      reported.current = null;
+      return;
+    }
     const panel = document.querySelector<HTMLElement>('.panel');
     const body = document.querySelector<HTMLElement>('.panel-body');
     if (!panel || !body) return;
@@ -341,5 +347,5 @@ export function usePanelHeight(options: PanelHeightOptions): void {
       animation.current = 0;
       if (requestMeasure === schedule) requestMeasure = null;
     };
-  }, [onSetHeight]);
+  }, [onSetHeight, enabled]);
 }

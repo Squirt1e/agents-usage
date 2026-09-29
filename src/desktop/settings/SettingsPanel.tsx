@@ -45,6 +45,7 @@ import {
 } from '../../shared/desktop-contract';
 import { AppSettings } from './AppSettings';
 import { ProviderSettings } from './ProviderSettings';
+import { BrandMark } from '../components/BrandMark';
 import { providerView } from '../lib/metrics';
 
 /** The sections the settings window can show, in nav order. */
@@ -57,13 +58,17 @@ export function parseSettingsSection(raw: unknown): SettingsSection {
   return SETTINGS_SECTIONS.includes(raw as SettingsSection) ? (raw as SettingsSection) : 'platforms';
 }
 
-/** The badge a nav row shows: the platform's monogram, or a glyph for a global section. */
-const SECTION_BADGES: Record<SettingsSection, string> = {
+/**
+ * The glyph a global section's nav row shows.
+ *
+ * Platform rows draw the platform's own brand mark instead, which is why this map is
+ * partial: a full `Record` would demand a letter entry per provider — exactly the
+ * `CX`／`GL`／`DS` badges this replaces — and the three provider rows are covered by
+ * `BrandMark` below.
+ */
+const SECTION_GLYPHS: Partial<Record<SettingsSection, string>> = {
   platforms: '▦',
-  appearance: '◐',
-  codex: 'CX',
-  glm: 'GL',
-  deepseek: 'DS'
+  appearance: '◐'
 };
 
 const PROVIDER_SECTIONS = ['codex', 'glm', 'deepseek'] as const;
@@ -87,7 +92,7 @@ export const SECTION_TITLES: Record<SettingsSection, string> = {
  */
 const SECTION_NOTES: Record<SettingsSection, string> = {
   platforms: '选择总览展示哪些平台、以什么顺序展示（拖住左侧把手排序）。隐藏只影响显示，账号配置与采集都保留。',
-  appearance: '主题、额度数值与低值提醒，两个窗口共用同一份偏好。',
+  appearance: '面板模式、主题、额度数值与低值提醒，两个窗口共用同一份偏好。',
   codex: 'Codex 使用本机已有登录，这里调整可执行文件路径与高峰时段提醒。',
   glm: 'Coding Plan 与钱包连接各自独立保存凭据，共用下面的高峰时段提醒。',
   deepseek: '钱包与网页用量连接各自独立（网页用量需粘贴 Token），共用下面的高峰时段提醒。'
@@ -109,6 +114,7 @@ export interface SettingsPanelProps {
   onToggleVisibility(provider: ProviderId, visible: boolean): void;
   onReorder(order: ProviderId[]): void;
   onThemeChange(theme: PanelSettings['theme']): Promise<void>;
+  onPanelDisplayModeChange(mode: PanelSettings['panelDisplayMode']): Promise<void>;
   onQuotaValueModeChange(mode: PanelSettings['quotaValueMode']): Promise<void>;
   onQuotaWarningThresholdChange(threshold: number): Promise<void>;
   onBalanceWarningThresholdChange(threshold: number): Promise<void>;
@@ -192,7 +198,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
         onClick={() => onSelectSection(id)}
       >
         <span className={provider ? `brand-badge brand-${provider}` : 'settings-nav-badge'} aria-hidden="true">
-          {SECTION_BADGES[id]}
+          {provider ? <BrandMark provider={provider} /> : SECTION_GLYPHS[id]}
         </span>
         <span className="settings-nav-label">{SECTION_TITLES[id]}</span>
       </button>
@@ -236,6 +242,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
               onToggleVisibility={props.onToggleVisibility}
               onReorder={props.onReorder}
               onThemeChange={props.onThemeChange}
+              onPanelDisplayModeChange={props.onPanelDisplayModeChange}
               onQuotaValueModeChange={props.onQuotaValueModeChange}
               onQuotaWarningThresholdChange={props.onQuotaWarningThresholdChange}
               onBalanceWarningThresholdChange={props.onBalanceWarningThresholdChange}

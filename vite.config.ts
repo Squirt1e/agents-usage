@@ -49,7 +49,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         desktop: resolve(__dirname, 'src/desktop/index.html'),
-        settings: resolve(__dirname, 'src/desktop/settings.html')
+        settings: resolve(__dirname, 'src/desktop/settings.html'),
+        minimalDetail: resolve(__dirname, 'src/desktop/minimal-detail.html')
       }
     },
     // The output directory is cleared by `scripts/clear-dir.mjs` before the build.
