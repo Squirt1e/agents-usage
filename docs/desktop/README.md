@@ -65,16 +65,20 @@ npm run dev:desktop         # 热更新模式：构建 service 后交给宿主�
 
 ### 发布（交给 GitHub Actions）
 
-推 `main` 由 `.github/workflows/release.yml` 的三个作业接手，本地不再手工打包上传：
+发版是三步：升版本号 + 写 `docs/release-notes/v<version>.md`，提交并推 `main`；打标签
+`git tag v<version>`；推标签 `git push origin v<version>`。只有第三步会出包，前两步随便推——
+`.github/workflows/release.yml` 的三个作业接手，本地不再手工打包上传：
 
-1. `plan`（ubuntu，几秒）：读 `package.json` 的版本号，判断 `v<version>` 是不是已经发过——
-   远端有同名 tag，或者 `gh release view` 找得到那个 release（手工建的 draft 也算，所以别人先
-   建了草稿时重复推送不会再打一次包）。没发过才把 `pack=true` 交给后面的作业；这个结论同时
-   写进 run summary，跳过时一眼看得出为什么没打包。这一阶段还要检查
-   `docs/release-notes/v<version>.md` 在不在，缺了就地失败——正文缺失是提交时就能发现的问题，
-   没理由让它先花掉 macOS 上一整轮构建；失败不留半成品，补上文件再推一次就行。
-2. `verify`（ubuntu）：`npm ci` + `typecheck` + `lint` + `test`，每次都跑——它是 main 的常规
-   门禁，与出不出包无关。Rust 侧的 `rust:check` / `rust:test` / `rust:clippy` **仍留在本地**：
+1. `plan`（ubuntu，几秒）：读 `package.json` 的版本号，再依次判断三件事——这次推送的是标签吗
+   （分支推送到此为止，直接 `pack=false`）、标签名等于 `v<package.json 的版本号>` 吗（不等就报错
+   退出：照版本号打包会发出一份张冠李戴的 release）、`v<version>` 是不是已经发过（远端有同名 tag，
+   或者 `gh release view` 找得到那个 release——手工建的 draft 也算，所以别人先建了草稿时重复推送
+   不会再打一次包）。三关都过才把 `pack=true` 交给后面的作业；这个结论同时写进 run summary，
+   跳过时一眼看得出为什么没打包。这一阶段还要检查 `docs/release-notes/v<version>.md` 在不在，
+   缺了就地失败——正文缺失是提交时就能发现的问题，没理由让它先花掉 macOS 上一整轮构建；失败不留
+   半成品，补上文件再推一次标签就行。
+2. `verify`（ubuntu）：`npm ci` + `typecheck` + `lint` + `test`。分支推送靠它当 main 的门禁，
+   标签推送靠它当出包前的最后一道，所以两个入口都跑。Rust 侧的 `rust:check` / `rust:test` / `rust:clippy` **仍留在本地**：
    宿主依赖 macOS 专有框架，Linux runner 跑不了，而放到 macOS 上等于为同一份 workspace 再编译
    一遍——`release` 作业本来就会编译 release 二进制，编译错误在那里一定会暴露。
 3. `release`（macos-latest，`if: needs.plan.outputs.pack == 'true'`）：`npm run build:desktop --
@@ -83,7 +87,8 @@ npm run dev:desktop         # 热更新模式：构建 service 后交给宿主�
    缓存落在工作区的 `.cargo-home`（覆盖 `tools/cargo.sh` 默认的 `.dsh/cargo-home`），
    `actions/cache` 按 `Cargo.lock` 缓存 registry 与 `target`——release 构建是 `lto` +
    `codegen-units = 1`，不缓存就要整轮重编。最后 `gh release create` 用 `--notes-file` 把仓库里
-   那份已提交的正文贴上去并建公开的 `v<version>` release；Tauri 原始 dmg 在上传前统一改名为
+   那份已提交的正文贴上去并建公开的 `v<version>` release；不带 `--target`——标签是推上来的、
+   已经指向这次提交，release 挂在它上面即可。Tauri 原始 dmg 在上传前统一改名为
    `Agents-Usage_v<version>-macos.dmg`——一次建成，之后不再碰它。
 
 **release 正文写在仓库里**：`docs/release-notes/v<version>.md`，与该版本的版本号在同一条提交，

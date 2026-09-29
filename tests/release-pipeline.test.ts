@@ -1,11 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-// 发布流水线是本仓库唯一的出包入口：main 一推先判断这个版本发过没有，没发过才打包通用 dmg，
-// 再用仓库里那份已提交的正文建一个公开的 release。它的接线全是文本，没有类型系统守着，改错了
-// 要等下一次发版（甚至只会在 GitHub 上）才暴露，所以在这里把契约钉死：触发时机、版本号来源、
-// 打包目标、同一个版本只打一次、正文来自已提交的文件、正文缺失即失败、出包即发布、已发出的
-// 资产与正文不再变动。仓库里不额外引 YAML 解析器，断言按行读取，只依赖键名不依赖缩进。
+// 发布流水线是本仓库唯一的出包入口：推一个 `v<version>` 标签，先判断这个版本发过没有，没发过才
+// 打包通用 dmg，再用仓库里那份已提交的正文建一个公开的 release；推 main 只跑门禁。它的接线全是
+// 文本，没有类型系统守着，改错了要等下一次发版（甚至只会在 GitHub 上）才暴露，所以在这里把契约
+// 钉死：触发时机、标签与版本号必须一致、版本号来源、打包目标、同一个版本只打一次、正文来自已提交
+// 的文件、正文缺失即失败、出包即发布、已发出的资产与正文不再变动。仓库里不额外引 YAML 解析器，
+// 断言按行读取，只依赖键名不依赖缩进。
 
 /** 取某个顶层键下面的非注释行（到下一个顶层键为止），用来读 `on:` 这种小块。 */
 function blockAfter(source: string, key: string): string[] {
@@ -67,8 +68,25 @@ const tauriConfig = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8')
 const cargoManifest = readFileSync('Cargo.toml', 'utf8');
 
 describe('发布流水线', () => {
-  it('只在 main 的推送上升起，别的分支与标签都不出包', () => {
-    expect(blockAfter(workflow, 'on')).toEqual(['push:', 'branches: [main]']);
+  it('只监听 main 与版本标签两个入口', () => {
+    expect(blockAfter(workflow, 'on')).toEqual(['push:', 'branches: [main]', "tags: ['v*']"]);
+  });
+
+  it('推 main 不出包：分支推送直接判 pack=false', () => {
+    // 「提交」与「发布」是两件事：版本号与正文可以先落进 main，打不打标签由人决定。
+    const plan = jobBlock(workflow, 'plan');
+    expect(plan).toContain('"$GITHUB_REF_TYPE" != "tag"');
+    expect(plan).toMatch(/pack=false/);
+    // 出包作业仍挂在 plan 的结论上，所以分支推送连 macOS runner 都不会起。
+    expect(workflow).toContain("needs.plan.outputs.pack == 'true'");
+  });
+
+  it('标签必须与 package.json 的版本号一致，否则在打包前失败', () => {
+    // 标签打错版本时照 package.json 打包，会发出一份张冠李戴的 release（资产名与 tag 对不上）。
+    const plan = jobBlock(workflow, 'plan');
+    expect(plan).toContain('"$GITHUB_REF_NAME" != "$tag"');
+    expect(plan).toMatch(/::error::/);
+    expect(plan).toContain('exit 1');
   });
 
   it('版本号只从 package.json 读，流水线里不留第二份', () => {
@@ -81,6 +99,11 @@ describe('发布流水线', () => {
   it('打的正是对外承诺的通用 dmg', () => {
     expect(workflow).toContain('npm run build:desktop -- --target universal-apple-darwin');
     expect(workflow).toContain('target/universal-apple-darwin/release/bundle/dmg/*.dmg');
+  });
+
+  it('release 挂在推上来的标签上，不再另指 target', () => {
+    // 标签本来就指向这次提交；再写 --target 等于给「标签指向哪」多出第二个说法。
+    expect(jobBlock(workflow, 'release')).not.toContain('--target "$GITHUB_SHA"');
   });
 
   it('把 Tauri 产物规范成版本化的 macOS 文件名后再上传', () => {

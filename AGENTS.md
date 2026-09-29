@@ -139,13 +139,15 @@
   `../package.json`，打包时 Tauri 现读它；`Cargo.toml` 的 `[workspace.package] version` 必须与
   `package.json` 相同。判定标准是这两处接线不变、两个版本字符串相等，由
   `tests/release-pipeline.test.ts` 守住。
-- **打包与发布交给 GitHub**：`main` 的推送触发 `.github/workflows/release.yml`——先判断这个
-  版本发过没有（`v<version>` 的 tag 或 release 存在就算发过），没发过才打 universal dmg 并用
-  仓库里那份已提交的正文建 release；上传前统一把 Tauri 产物命名为
-  `Agents-Usage_v<version>-macos.dmg`，发过就只跑门禁；本地不再手工打包上传。**同一个版本只打一次包**，
-  已发出的资产不再替换，所以 dmg 与它 tag 指向的提交是同一份代码。判定标准是触发时机、版本号来源、
-  打包目标、产物命名、只打一次、已发出的资产不再变动这些接线，由
-  `tests/release-dmg-name.test.ts` 与 `tests/release-pipeline.test.ts` 守住。
+- **打包与发布交给 GitHub，且只由版本标签发起**：推送 `v<version>` 标签触发
+  `.github/workflows/release.yml`——先判断这个版本发过没有（`v<version>` 的 tag 或 release 存在就算
+  发过），没发过才打 universal dmg 并用仓库里那份已提交的正文建 release；上传前统一把 Tauri 产物
+  命名为 `Agents-Usage_v<version>-macos.dmg`，发过就只跑门禁；本地不再手工打包上传。标签名必须与
+  `package.json` 的版本号一致，不一致在 `plan` 阶段失败，不打包也不建 release；推送 `main`（或其它
+  分支）只跑门禁，SHALL NOT 出包。**同一个版本只打一次包**，已发出的资产不再替换，所以 dmg 与它 tag
+  指向的提交是同一份代码。发版因此是三步：升版本号 + 写正文并推 main，打标签，推标签。判定标准是
+  触发时机、标签与版本号一致、分支不出包、版本号来源、打包目标、产物命名、只打一次、已发出的资产
+  不再变动这些接线，由 `tests/release-dmg-name.test.ts` 与 `tests/release-pipeline.test.ts` 守住。
 - **release 正文随版本号提交在仓库里**：正文写成 `docs/release-notes/v<version>.md`，与该版本的
   版本号在同一条提交里，骨架沿用 `docs/release-notes/TEMPLATE.md`；「这个版本里有什么」只写一句话，
   从用户视角说这个版本与上一个版本的区别，不列提交。流水线只把这份已提交的正文贴上去并直接发布，

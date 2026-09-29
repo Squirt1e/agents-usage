@@ -1,4 +1,6 @@
-# main 的每次推送先判断「这个版本是不是已经发过包」：没发过才打包，发过就只跑门禁。
+# 出包由推送版本标签发起：`git push origin v1.4.1` 先判断「这个版本是不是已经发过包」，
+# 没发过才打包，发过就只跑门禁。推 main（或其它分支）只跑门禁，一行都不打包——「提交」与
+# 「发布」因此是两件事，版本号与正文可以先落进 main，想发的时候再打标签。
 # 一个版本只出一次包，release 上的 dmg 与它 tag 指向的提交从此是对得上的同一份代码。
 #
 # 为什么只在 macOS 上跑：交付物只有 .app 与 .dmg，Tauri 只能在 macOS 上出这两种包。
@@ -17,7 +19,9 @@ name: release
 
 on:
   push:
+    # 两个入口各司其职：分支推送只过门禁（plan 直接判 pack=false），标签推送才可能出包。
     branches: [main]
+    tags: ['v*']
 
 # 发布必须串行：两个并发 run 会同时判断同一个版本，再同时去建同名 release。
 concurrency:
@@ -27,10 +31,11 @@ concurrency:
 jobs:
   plan:
     # 读 package.json 的版本号，并决定这次推送要不要出包。
-    # 判据是这个版本有没有发过：`v<version>` 这个 tag 或被它标着的 release 已经存在，
-    # 就说明发过了。`gh release view` 连手工建的 draft 也看得见，所以别人先建了草稿时
-    # 重复推送不会再打一次包。要出包还得有正文：`docs/release-notes/v<version>.md` 缺了就
-    # 在这里失败，不往下走。
+    # 三个条件缺一不可：这次推送的是标签（分支推送到此为止）、标签名与版本号一致
+    # （不一致说明标签打错了版本，照 package.json 打包会发出一份张冠李戴的 release）、
+    # 这个版本还没发过（`v<version>` 这个 tag 或被它标着的 release 已经存在就算发过；
+    # `gh release view` 连手工建的 draft 也看得见）。要出包还得有正文：
+    # `docs/release-notes/v<version>.md` 缺了就这里失败，不往下走。
     #
     # 修一个发出去了但有问题的版本：删掉它的 release 与 tag 再重跑本次 run
     # （`gh release delete vX.Y.Z --cleanup-tag --yes`），判断会重新变回「要打包」。
@@ -55,7 +60,14 @@ jobs:
           version=$(node -p "require('./package.json').version")
           tag="v$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if gh release view "$tag" >/dev/null 2>&1 ||
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            # 分支推送只跑门禁：发布要人明确打标签，提交本身不构成「发这个版本」。
+            echo "pack=false" >> "$GITHUB_OUTPUT"
+            echo "### 分支推送（$GITHUB_REF_NAME）：只跑门禁，不出包；发版请推 $tag 标签" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$GITHUB_REF_NAME" != "$tag" ]]; then
+            echo "::error::标签 $GITHUB_REF_NAME 与 package.json 的版本号 $version 不一致；改对版本号或标签后再推" >&2
+            exit 1
+          elif gh release view "$tag" >/dev/null 2>&1 ||
             git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
             echo "pack=false" >> "$GITHUB_OUTPUT"
             echo "### \`$tag\` 已经存在：这个版本发过包了，这次推送不出包" >> "$GITHUB_STEP_SUMMARY"
@@ -68,12 +80,12 @@ jobs:
               exit 1
             fi
             echo "pack=true" >> "$GITHUB_OUTPUT"
-            echo "### \`$tag\` 还不存在：这次推送会打包，并用 $notes 当正文直接发布" >> "$GITHUB_STEP_SUMMARY"
+            echo "### \`$tag\` 还不存在：这次标签推送会打包，并用 $notes 当正文直接发布" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   verify:
-    # main 的常规门禁：类型、风格与测试全过才允许出包（AGENTS.md 要求的三条命令）。
-    # 出不出包与它无关，所以每次都跑。
+    # 常规门禁：类型、风格与测试（AGENTS.md 要求的三条命令）。分支推送跑它当 main 的门禁，
+    # 标签推送跑它当出包前的最后一道，所以两个入口都跑。
     #
     # Rust 侧的检查（rust:check / rust:test / rust:clippy）仍留在本地：宿主依赖 macOS 专有
     # 框架，Linux runner 上跑不了；放到 macOS 上又要为同一份 workspace 再编译一遍，而下面的
@@ -133,6 +145,8 @@ jobs:
       - name: 建这个版本的 release（正文用仓库里那份已提交的）
         # 这里刻意不生成正文：正文由人写、随版本号一起提交，流水线只负责贴上去并发布。
         # plan 已经确认过正文文件在这个 commit 上存在。
+        # 也不写 --target：标签是推上来的、已经指向这次提交，release 挂在它上面即可，
+        # 再指定 target 只会让「标签指向哪」多出第二个说法。
         run: |
           set -eo pipefail
           tag="v${{ needs.plan.outputs.version }}"
@@ -153,6 +167,6 @@ jobs:
           fi
           asset=$(node scripts/desktop/prepare-release-dmg.mjs "${dmgs[0]}" "${{ needs.plan.outputs.version }}")
           # 一次建成发布版：正文已经随版本提交了，没有第二步等人补写，之后再回来改它。
-          gh release create "$tag" --title "$tag" --target "$GITHUB_SHA" \
+          gh release create "$tag" --title "$tag" \
             --notes-file "$notes" "$asset"
           echo "created $tag with $(basename "$asset")"
