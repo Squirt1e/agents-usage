@@ -1,50 +1,22 @@
 # agents-usage
 
-一个常驻 macOS 菜单栏的**本地用量面板**：把 Codex 订阅额度、GLM Coding Plan 配额、GLM 钱包余额、
-DeepSeek 余额与今日消费集中在一块紧凑面板里。所有数据只在本机采集与展示，面板不会调用模型、
-不会购买额度，也不会修改任何订阅。
+常驻 macOS 菜单栏的**本地用量面板**：把 Codex 订阅额度、GLM Coding Plan 配额、GLM 钱包余额与
+DeepSeek 余额／今日消费集中在一块紧凑面板里。数据只在本机采集与展示，面板不调用模型、不购买额度、
+也不修改任何订阅。
 
-> A local-first usage panel that lives in your macOS menu bar. It reads the quota of your Codex
-> subscription, GLM Coding Plan, GLM wallet and DeepSeek balance through read-only endpoints on your
-> own machine, stores them in a local SQLite file, keeps credentials in the macOS Keychain, and talks
-> to nothing except the providers you configure. No telemetry, no account, no model calls.
-
-<p align="center">
-  <img src="assets/screenshots/overview.png" width="350" alt="用量总览">
-</p>
-
-## 功能
-
-- **一眼看清每个平台还能用多少**：总览卡片按平台分区，套餐额度与钱包余额互不折算。
-- **配额有形状**：Codex 与 GLM 支持圆环／进度条两种展示，点击即可切换；数值可选“剩余”或“已用”。
-- **重置时间双读法**：倒计时与绝对时间随点随切，归零后显示“等待刷新”，不会假装额度已恢复。
-- **连接独立**：GLM 套餐、GLM 钱包、DeepSeek 余额、DeepSeek 网页用量各自采集、各自报错，
-  一个连接失败不会遮住另一个的数据。
-- **无数据时不撒谎**：没有可靠读数就保留模块轮廓并盖上毛玻璃提示，不用 `0` 或占位数字冒充真实
-  读数；有缓存时继续显示并标记“已过期”。
-- **实验连接一个开关到底**：打开即采集并出现在卡片上，关闭即停止并从卡片消失（凭据保留），
-  撤销凭据只由凭据表单里的“删除”按钮完成。
-- **高峰时段提醒**：按平台指定高峰时段（内置表或自己定义），命中高峰时那张卡片自己亮出警示描边，
-  错峰保持普通外观；自定义编辑器按当前草稿给出“现在 高峰 · 距错峰 2 小时 30 分钟”的判定预览。
-- **失败详情在卡片外**：底部连接状态浮层按平台与连接列出失败原因，卡片布局不因错误改变；
-  连接自己的状态行就在它的配置区块里，并且每种失败都带一句出路。
-- **设置是独立的窗口**：面板顶部的齿轮、卡片上的配置图标、空状态的“管理平台”与菜单栏图标菜单里的
-  “打开设置”都打开同一个 `600×400` 窗口并直接落在对应分区；改一项，面板当场跟着变。
-- **面板窗口跟着内容走**：高度按内容动画调整、超出上限后内部滚动，钉住后可留在所有 Space。
-- **想要一条更小的竖栏**：外观里的“面板模式”可切到**极简**——贴屏幕右边缘的一条 58 点竖栏只画每个
-  平台的读数，指针停在圆环上就在左侧展开一张独立详情卡（卡片用悬停打开、`Escape` 或点外部关闭），
-  指针停在竖栏自己的按钮上则收起；两种模式共用同一份数据、显隐与主题。
+> A local-first usage panel for the macOS menu bar: it reads your own Codex, GLM and DeepSeek quotas
+> through read-only endpoints on your machine. No telemetry, no account, no model calls.
 
 ## 截图
 
-标准模式的面板只剩总览一页，约 350 逻辑像素宽、高度由内容决定：
+标准模式只有总览一页，约 350 逻辑像素宽、高度由内容决定：
 
 <p align="center">
   <img src="assets/screenshots/overview.png" width="350" alt="用量总览">
 </p>
 
 极简模式（外观 → 面板模式 → 极简）把面板收成屏幕右边缘的一条竖栏：圆环里是平台图标、圆环下只有读数，
-指针停在圆环上时卡片从左侧展开（左边是卡片、右边是竖栏与展开后的刷新／设置／置顶）：
+指针停在圆环上时卡片从左侧展开：
 
 <p align="center">
   <img src="assets/screenshots/minimal-rail.png" width="397" alt="极简模式：竖栏与详情卡">
@@ -55,11 +27,7 @@ DeepSeek 余额与今日消费集中在一块紧凑面板里。所有数据只�
 | | |
 | --- | --- |
 | <img src="assets/screenshots/settings-platforms.png" width="420" alt="平台管理"> | <img src="assets/screenshots/settings-appearance.png" width="420" alt="外观"> |
-| **平台管理**：显隐与排序（拖住左侧把手上下移动），隐藏只影响显示。 | **外观**：面板模式（标准／极简）、主题与全局额度数值、低额度与低余额提醒。 |
-| <img src="assets/screenshots/settings-glm.png" width="420" alt="GLM 配置"> | <img src="assets/screenshots/settings-deepseek.png" width="420" alt="DeepSeek 配置"> |
-| **GLM**：服务区域、Coding Plan 密钥、实验钱包连接。 | **DeepSeek**：余额密钥与实验网页用量连接。 |
-| <img src="assets/screenshots/settings-deepseek-peak.png" width="420" alt="高峰时段提醒"> | <img src="assets/screenshots/settings-peak-editor.png" width="420" alt="自定义时段编辑器"> |
-| **高峰时段提醒**：时段来源、内置时段表与判定结果。 | **自定义编辑器**：一条时段一张卡片，底下是判定预览与修改状态。 |
+| **平台管理**：显隐与排序（拖住左侧把手上下移动），隐藏只影响显示。 | **外观**：面板模式、主题与额度数值、低额度与低余额提醒。 |
 
 截图取自真实运行的 app（凭据本身在 Keychain 里，末四位掩码在截图中也已抹掉）。
 
@@ -73,128 +41,52 @@ DeepSeek 余额与今日消费集中在一块紧凑面板里。所有数据只�
 | DeepSeek | 各币种总余额／赠送／充值余额 | 官方 `/user/balance` 只读接口 |
 | DeepSeek 网页用量（实验，默认关闭） | 今日账单消费、Tokens、请求次数 | 你粘贴的网页登录 Token 对应的后台用量页 |
 
-## 安装
+## 安装与使用
 
-从 [Releases](https://github.com/Squirt1e/agents-usage/releases) 下载最新的 universal 版 dmg
-（例如 `Agents.Usage_1.1.0_universal.dmg`；GitHub 会把文件名里的空格写成点）。它是 Intel 与
-Apple Silicon 通用的单一安装包。
+从 [Releases](https://github.com/Squirt1e/agents-usage/releases) 下载 universal 版 dmg（Intel 与
+Apple Silicon 通用的单一安装包），拖进“应用程序”。发布包**未做 Apple 公证**，首次启动任选一种放行：
 
-1. 打开 dmg，把 `Agents Usage.app` 拖进“应用程序”。
-2. 首次启动会被 Gatekeeper 拦下：当前发布包**未做 Apple 公证**。任选一种放行方式：
-   ```bash
-   xattr -dr com.apple.quarantine "/Applications/Agents Usage.app"
-   ```
-   或双击后到 **系统设置 → 隐私与安全性**，在底部点 **仍要打开**。
-3. 启动后**不会出现在 Dock**：看菜单栏右上角的图标，点击它（左右键都行）打开菜单——显示／隐藏面板、
-   切换标准／极简模式与主题、打开设置、重启或退出都在这个菜单里。
+```bash
+xattr -dr com.apple.quarantine "/Applications/Agents Usage.app"
+```
 
-## 首次配置
+或双击后到 **系统设置 → 隐私与安全性** 底部点 **仍要打开**。启动后不会出现在 Dock：点击菜单栏图标
+（左右键都行）打开菜单——显示／隐藏面板、切换标准／极简模式与主题、打开设置、重启或退出都在那里。
 
-每个平台卡片上都有配置图标，点开就在设置窗口里打开那个平台的分类（面板顶部的齿轮进“外观”，
-空状态的“管理平台”和菜单栏图标菜单里的“打开设置”进“平台管理”）。窗口里改一项，面板当场跟着变。
+## 配置
 
-- **Codex**：先在 Codex 应用或 CLI 里登录。面板把认证完全交给本机的 `codex app-server`，
-  不读取也不复制认证文件；找不到 CLI 时可以在配置页填写绝对路径。
-- **GLM**：选对中国区／国际区，再粘贴 Coding Plan API Key。新密钥会先用只读请求验证，
-  通过后才替换旧值。
-- **DeepSeek**：粘贴 API Key，验证只调用官方余额读取接口。
-- **高峰时段提醒**（每个平台各自设置）：可以选内置时段表、自己定义时段，或关闭。自定义时段
-  一条一张卡片（星期多选 + `开始 → 结束`），跨午夜的那条自己标出“跨天”，底部按当前草稿给出
-  此刻是高峰还是错峰。
-- **实验连接**（GLM 钱包、DeepSeek 网页用量）：默认关闭，需要自己确认端点可用性再打开。
-  打开即采集并出现在卡片上；关闭即停止采集并隐藏模块，**凭据保留**；要撤销凭据用凭据表单里的
-  “删除”按钮（点击后先在原地确认一次，确认文案说明后果）。它们使用非公开稳定接口，可能随时失效，
-  故障不会影响同平台的稳定连接。
+每个平台卡片上都有配置图标，点开就在设置窗口里打开那个平台的分类（面板顶部齿轮进“外观”，空状态的
+“管理平台”进“平台管理”）。Codex 需要本机登录 CLI——面板把认证完全交给 `codex app-server`，不读取也
+不复制认证文件，找不到 CLI 时可以填绝对路径；GLM 选对中国区／国际区再粘贴 Coding Plan Key；DeepSeek
+粘贴 API Key。GLM 钱包与 DeepSeek 网页用量是**实验连接**：默认关闭，需要自己确认端点可用性再打开，
+它们走非公开稳定接口、可能随时失效，故障不影响同平台的稳定连接。
 
-保存凭据或打开实验连接后，面板会立刻重新采集该平台，不需要手动刷新。
+## 隐私
 
-## 隐私与安全
-
-- **凭据只进 Keychain**：GLM / DeepSeek 的密钥与实验连接凭据存在 macOS Keychain
-  （服务名 `agents-usage.*`），界面只能看到“是否已配置”和末四位掩码。
-- **只监听回环地址**：面板数据由一个本地服务提供，只接受 IPv4/IPv6 回环连接，并要求会话令牌。
-- **不读浏览器 Cookie**：实验连接需要你自己粘贴凭据，面板不会去翻浏览器的登录态。
-- **日志与诊断脱敏**：错误文案、诊断接口与事件推送在离开服务前统一脱敏，原始密钥不会进入日志、
-  数据库或面板。
-- **没有遥测**：不发送任何统计数据，不请求任何第三方服务；数据目录
-  （`~/Library/Application Support/agents-usage/desktop/`）可以随时删除。
-
-## 数据标签
-
-- **平台数据**：来自平台拥有或正式文档描述的只读接口。
-- **实验数据源**：来自没有公开稳定契约的接口，可能突然不可用。
-- **估算**：由本机观测推导，不等同于账单。
-- **部分数据**：当天并非从本地零点开始持续观测，可能漏算离线期间的消费。
-- **已过期**：最新采集失败，当前仍展示上一次成功快照。
-
-额度同时保留“已用”和“剩余”语义，不会互相推算。重置时间可以显示为倒计时或绝对时间。
-不同币种不会相加或换算，缺失值不会被写成 `0`。
-
-### DeepSeek 今日消费是估算
-
-今日消费等于同一币种当天相邻余额样本正向下降之和；充值、赠送或退款造成的余额上升被当作调整
-边界，不产生负消费。服务未运行、网络中断或当天中途才启动，都会漏掉一部分消费，因此该值始终
-标记为“估算”，覆盖不完整时再叠加“部分数据”。它适合做预算提醒，不适合作为发票或对账依据。
-如果启用了实验的网页用量连接，卡片会优先展示后台账单口径的今日消费。
+凭据只进 Keychain（服务名 `agents-usage.*`，界面只能看到“是否已配置”与末四位）；数据服务只监听回环
+地址并要求会话令牌；不读浏览器 Cookie、不发送遥测，数据目录
+`~/Library/Application Support/agents-usage/desktop/` 可以随时删除；错误文案、诊断与事件推送在离开
+服务前统一脱敏。指标语义（估算、部分数据、已过期等）见
+[`docs/desktop/semantic-map.md`](docs/desktop/semantic-map.md)。
 
 ## 从源码构建
 
-需要 macOS、Node.js 24+、Rust 1.98+（用 `rustup` 安装）与 Xcode Command Line Tools。
-Node 只用于前端构建与测试，最终的 app 不依赖 Node 运行。
+需要 macOS、Node.js 24+、Rust 1.98+（`rustup`）与 Xcode Command Line Tools。Node 只用于前端构建与
+测试，最终的 app 不依赖 Node 运行。
 
 ```bash
 npm install
-npm test               # 前端与共享契约的测试
-npm run typecheck && npm run lint
-
-npm run build:desktop  # 打包 .app 与 .dmg（默认当前架构）
+npm test && npm run typecheck && npm run lint
+npm run build:desktop                                       # 当前架构
+npm run build:desktop -- --target universal-apple-darwin    # 通用二进制（Intel + Apple Silicon）
 ```
 
-打通用二进制（Intel + Apple Silicon）：
+Rust 侧的检查与测试：`npm run rust:check` / `rust:test` / `rust:clippy`。产物在
+`target/<target>/release/bundle/`，发布包使用 ad-hoc 签名（`bundle.macOS.signingIdentity = "-"`）。
 
-```bash
-rustup target add aarch64-apple-darwin          # x86_64-apple-darwin 通常已装
-npm run build:desktop -- --target universal-apple-darwin
-```
-
-产物在 `target/universal-apple-darwin/release/bundle/`。打包流程先构建面板前端
-（`dist/desktop-client`，Vite），再编译 `usage-service` 作为 sidecar（`universal` 构建会同时编译
-两个架构并用 `lipo` 合并），最后由 Tauri 出包。发布包使用 ad-hoc 签名
-（`bundle.macOS.signingIdentity = "-"`），因此对方仍需过一次 Gatekeeper。
-
-### 发布由 GitHub Actions 完成
-
-本地不需要再手工打包上传。推到 `main` 会触发
-[`.github/workflows/release.yml`](.github/workflows/release.yml)，它先看 `package.json` 里的
-版本发过没有：没发过就用同一条 universal 命令打包，并用仓库里那份已提交的正文建一个公开的
-`v<version>` release 挂上 dmg；发过就只跑门禁（`typecheck` / `lint` / `test`），既不出包也不碰
-那个 release。
-
-- **一个版本只打一次包**：`v<version>` 这个 tag 或 release 已经存在就算发过，之后的推送只会跑
-  门禁。所以 release 上的 dmg 与它 tag 指向的提交是同一份代码，正文里的说明也不会被后来的
-  构建悄悄改掉（GitHub 的 immutable releases 开关正是这条规矩的强制版，现在两者不冲突）。
-- **版本号只有一处**：`src-tauri/tauri.conf.json` 的 `version` 指向 `../package.json`，打包时
-  Tauri 现读它。升版本要改两个文件——`package.json` 与 `Cargo.toml` 的
-  `[workspace.package] version`（后者与前者一致由 `tests/release-pipeline.test.ts` 守住）。
-- **新版本要连正文一起提交**：正文写在 `docs/release-notes/v<version>.md`，与该版本的版本号在
-  同一条提交里，骨架见 [`TEMPLATE.md`](docs/release-notes/TEMPLATE.md)；「这个版本里有什么」只写
-  一句话，站在用户视角说这个版本与上一个版本的区别，不列提交。缺了这份文件，流水线在打包之前
-  就失败。
-- **正文由人写、流水线不写**：流水线只把仓库里那份贴上去，不生成变更列表、不留 draft。也不要写
-  校验和——资产页上的 SHA-256 是 GitHub 现算的，写进正文只会多一份会过期的副本。
-- **要重发某个版本**（包本身有问题）：`gh release delete v1.2.0 --cleanup-tag --yes` 删掉它的
-  release 与 tag，再重跑那次 run，判断会重新变回“要打包”。
-
-Rust 侧的检查与测试：
-
-```bash
-npm run rust:check     # cargo check --workspace --all-targets
-npm run rust:test      # cargo test --workspace
-npm run rust:clippy    # 警告视为错误
-```
-
-> `tools/cargo.sh` 把 cargo 缓存指向仓库内的 `.dsh/cargo-home`，在受限环境下也能构建；
-> 直接调用 `cargo` 可能因 `~/.cargo` 不可写而失败。
+**发版由标签触发**：升 `package.json` 的版本号（`Cargo.toml` 的 workspace 版本跟着改）并写
+`docs/release-notes/v<version>.md` 一起推 `main`，再 `git tag v<version> && git push origin v<version>`
+才打包发布；推分支只跑门禁。本地不手工打包上传，接线与规矩见 [AGENTS.md](AGENTS.md) §4。
 
 ## 项目结构
 
@@ -208,17 +100,17 @@ src/shared/            前端与服务共享的契约与脱敏（TypeScript）
 docs/desktop/          桌面版工程说明：构建、语义对照、组件与样式约定、验收记录
 ```
 
-工程入口与命令见 [`docs/desktop/README.md`](docs/desktop/README.md)，界面与语义约定见
+工程入口与命令见 [`docs/desktop/README.md`](docs/desktop/README.md)，界面与样式约定见
 [`docs/desktop/component-and-style-guide.md`](docs/desktop/component-and-style-guide.md)。
 
 ## 已知限制
 
 - 只支持 macOS（菜单栏应用，依赖 Keychain 与 Tauri 宿主）。
-- 发布包未做 Apple 公证，首次启动需要手动放行（见“安装”）。
-- 实验连接依赖非公开接口，可能随时失效；面板会在对应模块上如实报错，不会伪装成正常数据。
+- 发布包未做 Apple 公证，首次启动需要手动放行。
+- 实验连接依赖非公开接口，可能随时失效；面板会如实报错，不会伪装成正常数据。
 - Codex 卡片需要本机安装并登录 Codex CLI。
 - 菜单栏应用不占 Dock，因此设置窗口拿不到键盘焦点，窗口内的键盘操作（时间框的 `↑↓` 步进、
-  Escape 取消删除确认）在当前激活策略下可能收不到按键；修它需要先决定是否让菜单栏应用抢占焦点。
+  Escape 取消删除确认）在当前激活策略下可能收不到按键。
 
 ## 许可证
 
