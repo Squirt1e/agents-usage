@@ -124,6 +124,12 @@ strings -a "$BIN" | grep -E '^/(index|settings)\.html$'   # 两个文档都在
 截图存于本节同级的 [`verification/`](verification/)：`settings-window-dark.png` 是设置窗口的
 深色渲染，`settings-and-panel.png` 是它与面板并排（面板在右、设置在左）。
 
+README 里的 `assets/screenshots/` 用同一套办法刷新：跑着开发构建，用 `screencapture -x -o -l <窗口号>`
+逐窗口取图（`-o` 去掉阴影、`-l` 只取该窗口，于是圆角处保留透明），面板与详情卡是两块窗口，按它们在屏
+上的相对位置拼成一张。窗口号来自 `CGWindowListCopyWindowInfo`；需要指针停在某个圆环上时用
+`CGWarpMouseCursorPosition` 移动指针，等宿主轮询（150 ms）把卡片放出来再截。截图只来自真实运行中的
+应用，不画示意图。
+
 | 检查 | 结果 | 证据 |
 | --- | --- | --- |
 | 窗口尺寸与装饰 | 通过 | AX 读到 `[设置] size=560380`；截图显示系统标题栏（红黄绿三键）＋标题「设置」（见 `verification/settings-window-dark.png`） |
