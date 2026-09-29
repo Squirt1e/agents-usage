@@ -35,9 +35,9 @@ use usage_core::credentials::{
     keychain_delete_sync, keychain_get_sync, keychain_set_sync, CredentialStatus, CredentialTarget,
 };
 use usage_core::estimate::Timezone;
-use usage_core::transport::SharedHttpTransport;
 use usage_core::redaction::redact;
 use usage_core::scheduler::RefreshScheduler;
+use usage_core::transport::SharedHttpTransport;
 
 use crate::{run_connection, CodexResolution, Collectors};
 
@@ -189,7 +189,12 @@ impl AppState {
     /// [`crate::CodexSlot::resolve`] for when that is allowed to matter.
     pub async fn codex_collector(self: &Arc<Self>, force: bool) -> Option<Arc<CodexCollector>> {
         let stored = self.settings.read().unwrap().codex_cli_path.clone();
-        match self.collectors.codex.resolve(stored.as_deref(), force).await {
+        match self
+            .collectors
+            .codex
+            .resolve(stored.as_deref(), force)
+            .await
+        {
             CodexResolution::Reused(collector) => collector,
             CodexResolution::Fresh(collector) => {
                 // A collector that replaced a missing CLI is only reached from
@@ -492,6 +497,7 @@ async fn settings(State(state): State<Arc<AppState>>) -> Response {
 #[serde(rename_all = "camelCase")]
 struct SettingsPatch {
     theme: Option<String>,
+    panel_display_mode: Option<String>,
     timezone: Option<String>,
     glm_region: Option<String>,
     glm_wallet_enabled: Option<bool>,
@@ -547,24 +553,27 @@ async fn update_settings(
         Some(value) => match value.as_u64().filter(|value| *value <= 100) {
             Some(value) => Some(value as u8),
             None => {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "Invalid quota warning threshold",
-                )
+                return error_response(StatusCode::BAD_REQUEST, "Invalid quota warning threshold")
             }
         },
         None => None,
     };
     let balance_warning_threshold = match patch.balance_warning_threshold.as_ref() {
-        Some(value) => match value.as_f64().filter(|value| value.is_finite() && *value >= 0.0) {
+        Some(value) => match value
+            .as_f64()
+            .filter(|value| value.is_finite() && *value >= 0.0)
+        {
             Some(value) => Some(value),
             None => {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "Invalid balance warning threshold",
-                )
+                return error_response(StatusCode::BAD_REQUEST, "Invalid balance warning threshold")
             }
         },
+        None => None,
+    };
+    let panel_display_mode = match patch.panel_display_mode.as_deref() {
+        Some("full") => Some(usage_core::contracts::PanelDisplayMode::Full),
+        Some("minimal") => Some(usage_core::contracts::PanelDisplayMode::Minimal),
+        Some(_) => return error_response(StatusCode::BAD_REQUEST, "Invalid panel display mode"),
         None => None,
     };
     // Apply the patch under a scoped write lock, then release it before the
@@ -579,6 +588,9 @@ async fn update_settings(
                 "system" => usage_core::contracts::ThemePreference::System,
                 _ => return error_response(StatusCode::BAD_REQUEST, "Invalid theme"),
             };
+        }
+        if let Some(mode) = panel_display_mode {
+            settings.panel_display_mode = mode;
         }
         if let Some(timezone) = patch.timezone {
             if Timezone::parse(&timezone).is_err() {
@@ -725,7 +737,9 @@ fn normalize_credential(secret: &str) -> String {
     // Compare bytes so a pasted value that is not valid UTF-8 at that offset
     // cannot panic on a slice; the matched prefix is ASCII, so the index below is
     // a character boundary.
-    if trimmed.len() >= BEARER.len() && trimmed.as_bytes()[..BEARER.len()].eq_ignore_ascii_case(BEARER) {
+    if trimmed.len() >= BEARER.len()
+        && trimmed.as_bytes()[..BEARER.len()].eq_ignore_ascii_case(BEARER)
+    {
         return trimmed[BEARER.len()..].trim().to_string();
     }
     trimmed.to_string()
@@ -973,7 +987,10 @@ mod tests {
         // Users copy the whole header value; the collectors add `Bearer `
         // themselves, so the scheme must not survive into what is stored.
         assert_eq!(normalize_credential("Bearer sk-abc123"), "sk-abc123");
-        assert_eq!(normalize_credential("bearer\tsk-abc123"), "bearer\tsk-abc123");
+        assert_eq!(
+            normalize_credential("bearer\tsk-abc123"),
+            "bearer\tsk-abc123"
+        );
         assert_eq!(normalize_credential("Bearer   sk-abc123  "), "sk-abc123");
         assert_eq!(normalize_credential("BEARER sk-abc123"), "sk-abc123");
         // A token is only stripped when the scheme is really a prefix.

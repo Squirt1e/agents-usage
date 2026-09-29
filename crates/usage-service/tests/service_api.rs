@@ -114,12 +114,7 @@ fn recorded_connections(snapshots: &serde_json::Value, provider: &str) -> Vec<St
         .expect("providers")
         .iter()
         .filter(|state| state["provider"] == provider)
-        .flat_map(|state| {
-            state["connections"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-        })
+        .flat_map(|state| state["connections"].as_array().cloned().unwrap_or_default())
         .filter_map(|connection| connection["connection"].as_str().map(str::to_string))
         .collect()
 }
@@ -135,9 +130,9 @@ fn recorded_error(
         .iter()
         .find(|state| {
             state["provider"] == provider
-                && state["connections"].as_array().is_some_and(|list| {
-                    list.iter().any(|entry| entry["connection"] == connection)
-                })
+                && state["connections"]
+                    .as_array()
+                    .is_some_and(|list| list.iter().any(|entry| entry["connection"] == connection))
         })
         .and_then(|state| state["error"]["message"].as_str())
         .map(str::to_string)
@@ -391,6 +386,81 @@ async fn an_invalid_timezone_is_rejected() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn panel_display_mode_is_validated_and_survives_restart() {
+    let data_dir = temp_data_dir();
+    let mut running =
+        ServiceBuilder::with_transport(config(data_dir.clone()), Arc::new(FailingTransport))
+            .start()
+            .await
+            .expect("service");
+    let origin = running.origin();
+    let server = tokio::spawn(running.take_http_server().unwrap().serve());
+    let client = reqwest::Client::new();
+    let bootstrap: serde_json::Value = client
+        .get(format!("{origin}/api/bootstrap"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(bootstrap["settings"]["panelDisplayMode"], "full");
+    let token = bootstrap["sessionToken"].as_str().unwrap();
+    let saved = client
+        .put(format!("{origin}/api/settings"))
+        .header("x-session-token", token)
+        .json(&serde_json::json!({"panelDisplayMode": "minimal"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), reqwest::StatusCode::OK);
+    let body: serde_json::Value = saved.json().await.unwrap();
+    assert_eq!(body["panelDisplayMode"], "minimal");
+    let rejected = client
+        .put(format!("{origin}/api/settings"))
+        .header("x-session-token", token)
+        .json(&serde_json::json!({"panelDisplayMode": "tiny", "theme": "light"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), reqwest::StatusCode::BAD_REQUEST);
+    let current: serde_json::Value = client
+        .get(format!("{origin}/api/settings"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(current["panelDisplayMode"], "minimal");
+    assert_eq!(current["theme"], "dark");
+    running.shutdown().await;
+    server.abort();
+    let _ = server.await;
+    drop(running);
+
+    let mut restarted =
+        ServiceBuilder::with_transport(config(data_dir.clone()), Arc::new(FailingTransport))
+            .start()
+            .await
+            .expect("restart");
+    let origin = restarted.origin();
+    let server = tokio::spawn(restarted.take_http_server().unwrap().serve());
+    let settings: serde_json::Value = client
+        .get(format!("{origin}/api/settings"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(settings["panelDisplayMode"], "minimal");
+    restarted.shutdown().await;
+    server.abort();
+    std::fs::remove_dir_all(data_dir).ok();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn theme_settings_are_validated_and_survive_restart() {
     let data_dir = temp_data_dir();
     let mut running =
@@ -526,7 +596,8 @@ async fn quota_warning_threshold_is_validated_without_losing_the_saved_value() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn balance_warning_threshold_accepts_decimals_and_preserves_the_saved_value_after_rejection() {
+async fn balance_warning_threshold_accepts_decimals_and_preserves_the_saved_value_after_rejection()
+{
     let data_dir = temp_data_dir();
     let mut running =
         ServiceBuilder::with_transport(config(data_dir.clone()), Arc::new(FailingTransport))
@@ -607,7 +678,10 @@ async fn deepseek_web_usage_is_off_by_default_and_round_trips() {
         .json()
         .await
         .expect("json");
-    let token = bootstrap["sessionToken"].as_str().expect("token").to_string();
+    let token = bootstrap["sessionToken"]
+        .as_str()
+        .expect("token")
+        .to_string();
     let client = reqwest::Client::new();
 
     // The experimental connection ships disabled: no collector may touch the

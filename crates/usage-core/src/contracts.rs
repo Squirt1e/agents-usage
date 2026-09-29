@@ -601,6 +601,7 @@ pub struct ProviderState {
 #[serde(rename_all = "camelCase", default)]
 pub struct DesktopSettings {
     pub theme: ThemePreference,
+    pub panel_display_mode: PanelDisplayMode,
     pub timezone: String,
     pub glm_region: GlmRegion,
     /// Whether the GLM wallet connection is enabled at all. One switch: on means
@@ -645,7 +646,11 @@ pub struct DesktopSettings {
     /// judgement live in the panel, this only persists the choice. A stored
     /// value that cannot be trusted degrades to absent instead of failing the
     /// record, matching how the panel's own parser treats it.
-    #[serde(default, deserialize_with = "deserialize_peak_reminder", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_peak_reminder",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub peak_reminder: Option<BTreeMap<ProviderId, PeakReminderSetting>>,
 }
 
@@ -657,6 +662,15 @@ pub enum ThemePreference {
     #[default]
     Dark,
     System,
+}
+
+/// The desktop panel's stored presentation. Older records retain the full view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PanelDisplayMode {
+    #[default]
+    Full,
+    Minimal,
 }
 
 /// Visual treatment used for quota windows in the compact panel.
@@ -726,8 +740,8 @@ pub struct PeakReminderSetting {
 }
 
 fn peak_window_is_valid(window: &PeakWindow) -> bool {
-    let weekdays_ok = !window.weekdays.is_empty()
-        && window.weekdays.iter().all(|day| (1..=7).contains(day));
+    let weekdays_ok =
+        !window.weekdays.is_empty() && window.weekdays.iter().all(|day| (1..=7).contains(day));
     let times_ok = is_hh_mm(&window.start) && is_hh_mm(&window.end) && window.start != window.end;
     weekdays_ok && times_ok
 }
@@ -815,14 +829,23 @@ pub fn peak_reminder_from_value(
         if mode == PeakReminderMode::Custom && (windows.is_empty() || timezone.is_none()) {
             continue;
         }
-        parsed.insert(*provider, PeakReminderSetting { mode, windows, timezone });
+        parsed.insert(
+            *provider,
+            PeakReminderSetting {
+                mode,
+                windows,
+                timezone,
+            },
+        );
     }
     (!parsed.is_empty()).then_some(parsed)
 }
 
 /// Field-level deserializer: any unparsable stored value becomes `None`
 /// ("not customized") instead of failing the whole settings record.
-fn deserialize_peak_reminder<'de, D>(deserializer: D) -> Result<Option<BTreeMap<ProviderId, PeakReminderSetting>>, D::Error>
+fn deserialize_peak_reminder<'de, D>(
+    deserializer: D,
+) -> Result<Option<BTreeMap<ProviderId, PeakReminderSetting>>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -865,6 +888,7 @@ impl Default for DesktopSettings {
     fn default() -> Self {
         Self {
             theme: ThemePreference::Dark,
+            panel_display_mode: PanelDisplayMode::Full,
             timezone: "UTC".to_string(),
             glm_region: GlmRegion::China,
             glm_wallet_enabled: false,
@@ -907,6 +931,29 @@ impl GlmRegion {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn panel_display_mode_defaults_and_round_trips() {
+        let old: DesktopSettings =
+            serde_json::from_value(serde_json::json!({"theme": "light"})).unwrap();
+        assert_eq!(old.panel_display_mode, PanelDisplayMode::Full);
+        for (raw, expected) in [
+            ("full", PanelDisplayMode::Full),
+            ("minimal", PanelDisplayMode::Minimal),
+        ] {
+            let settings: DesktopSettings =
+                serde_json::from_value(serde_json::json!({"panelDisplayMode": raw})).unwrap();
+            assert_eq!(settings.panel_display_mode, expected);
+            assert_eq!(
+                serde_json::to_value(settings).unwrap()["panelDisplayMode"],
+                raw
+            );
+        }
+        assert!(serde_json::from_value::<DesktopSettings>(
+            serde_json::json!({"panelDisplayMode": "tiny"})
+        )
+        .is_err());
+    }
 
     #[test]
     fn missing_value_is_not_zero() {
@@ -1087,10 +1134,7 @@ mod tests {
             ..settings
         };
         let encoded = serde_json::to_value(&updated).expect("settings must serialize");
-        assert_eq!(
-            encoded["codexResetFormat"],
-            serde_json::json!("absolute")
-        );
+        assert_eq!(encoded["codexResetFormat"], serde_json::json!("absolute"));
         assert_eq!(encoded["glmResetFormat"], serde_json::json!("countdown"));
         assert_eq!(encoded["codexQuotaDisplay"], serde_json::json!("ring"));
         assert_eq!(encoded["glmQuotaDisplay"], serde_json::json!("bar"));
@@ -1146,7 +1190,10 @@ mod tests {
             }))
             .expect("legal threshold must load");
             let encoded = serde_json::to_value(settings).expect("settings must serialize");
-            assert_eq!(encoded["balanceWarningThreshold"], serde_json::json!(expected));
+            assert_eq!(
+                encoded["balanceWarningThreshold"],
+                serde_json::json!(expected)
+            );
         }
     }
 
@@ -1189,17 +1236,22 @@ mod tests {
             ..DesktopSettings::default()
         };
         let encoded = serde_json::to_value(&settings).expect("settings must serialize");
-        assert_eq!(encoded["peakReminder"]["codex"]["mode"], serde_json::json!("custom"));
+        assert_eq!(
+            encoded["peakReminder"]["codex"]["mode"],
+            serde_json::json!("custom")
+        );
         assert_eq!(
             encoded["peakReminder"]["codex"]["windows"][0]["weekdays"],
             serde_json::json!([1, 2, 3, 4, 5])
         );
-        assert_eq!(encoded["peakReminder"]["codex"]["windows"][0]["start"], serde_json::json!("09:00"));
+        assert_eq!(
+            encoded["peakReminder"]["codex"]["windows"][0]["start"],
+            serde_json::json!("09:00")
+        );
         // The provider the user switched off carries no windows on the wire.
         assert!(encoded["peakReminder"]["deepseek"].get("windows").is_none());
 
-        let decoded: DesktopSettings =
-            serde_json::from_value(encoded).expect("settings must load");
+        let decoded: DesktopSettings = serde_json::from_value(encoded).expect("settings must load");
         assert_eq!(decoded.peak_reminder, Some(peak_reminder));
     }
 
@@ -1215,11 +1267,13 @@ mod tests {
                 "deepseek": { "mode": "off", "windows": [{ "weekdays": [1], "start": "22:00", "end": "01:00" }] }
             }
         });
-        let settings: DesktopSettings =
-            serde_json::from_value(raw).expect("settings must load");
+        let settings: DesktopSettings = serde_json::from_value(raw).expect("settings must load");
         let peak_reminder = settings.peak_reminder.expect("valid entries must survive");
         assert_eq!(peak_reminder.len(), 1);
-        assert_eq!(peak_reminder[&ProviderId::Deepseek].mode, PeakReminderMode::Off);
+        assert_eq!(
+            peak_reminder[&ProviderId::Deepseek].mode,
+            PeakReminderMode::Off
+        );
         assert_eq!(settings.timezone, "UTC");
     }
 }
