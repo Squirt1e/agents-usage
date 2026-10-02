@@ -130,6 +130,16 @@ describe('panel palette', () => {
     expect(contrast(variable(light, '--action')!, card)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('keeps dark grouped cards and their readings legible', () => {
+    const card = variable(dark, '--card')!;
+    expect(card).toMatch(/^#[0-9a-f]{6}$/);
+    expect(contrast(variable(dark, '--text')!, card)).toBeGreaterThanOrEqual(7);
+    expect(contrast(variable(dark, '--text-dim')!, card)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(variable(dark, '--text-faint')!, card)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(variable(dark, '--mint')!, variable(dark, '--ring-track')!)).toBeGreaterThanOrEqual(3);
+    expect(contrast(variable(dark, '--minimal-codex-ring')!, variable(dark, '--minimal-ring-track')!)).toBeGreaterThanOrEqual(3);
+  });
+
   it('routes low quota and low balance through one theme warning colour', () => {
     expect(variable(dark, '--low-value-warning')).toMatch(/^#/);
     expect(variable(light, '--low-value-warning')).toMatch(/^#/);

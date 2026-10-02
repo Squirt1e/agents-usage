@@ -1,8 +1,7 @@
 /*
- * Compact Chinese "tech" theme for the macOS menubar panel — the confirmed
- * design (compact C): ~350 logical pixels wide, near-black tile on a darker page,
- * mint #77e6d8 and lime #c8ff4d accents, small monospaced numerics, no decorative
- * background and no hero typography.
+ * Compact macOS menubar panel: ~350 logical pixels wide, a neutral dark surface
+ * with elevated grouped cards and a restrained blue quota accent. Text contrast
+ * carries the hierarchy; colour identifies a reading or an action.
  *
  * Layout rules that matter:
  * - `.panel` is a full-height flex column, so the host can size the window
@@ -25,20 +24,20 @@
 
 :root {
   color-scheme: dark;
-  --page: #080a0d;
-  --tile: #0b0f18;
-  --tile-top: #111a26;
-  --card: rgba(255, 255, 255, 0.035);
-  --card-strong: rgba(255, 255, 255, 0.055);
-  --line: #22303f;
-  --line-soft: rgba(255, 255, 255, 0.07);
-  --text: #e6ebf5;
-  --text-dim: #93a6bd;
-  --text-faint: #7b8ca1;
-  --action: #77e6d8;
-  --mint: #77e6d8;
-  --lime: #c8ff4d;
-  --indigo: #9aa6ff;
+  --page: #141519;
+  --tile: #202126;
+  --tile-top: #26272d;
+  --card: #2d2f36;
+  --card-strong: #353740;
+  --line: #42444d;
+  --line-soft: rgba(255, 255, 255, 0.11);
+  --text: #f5f6f8;
+  --text-dim: #c6c8d0;
+  --text-faint: #a5a8b2;
+  --action: #74b6ff;
+  --mint: #74b6ff;
+  --lime: #78c6a5;
+  --indigo: #b7c3d8;
   --danger: #ff9090;
   --low-value-warning: #ff6b70;
   --warning: #f2c069;
@@ -66,37 +65,37 @@
   --text-lg: 13.5px;
   --text-xl: 15px;
   --text-display: 19px;
-  --tile-bottom: #090d15;
-  --control-border: #33465b;
-  --control-bg: rgba(255, 255, 255, 0.02);
-  --control-text: #b6c8dc;
-  --control-hover-border: #47607a;
-  --control-hover-text: #d8e6f6;
-  --active-border: #39695f;
-  --active-bg: #17423c;
-  --card-border: #2b3a4c;
-  --card-shadow: rgba(0, 0, 0, 0);
+  --tile-bottom: #1d1e23;
+  --control-border: #4a4d58;
+  --control-bg: rgba(255, 255, 255, 0.03);
+  --control-text: #c6c8d0;
+  --control-hover-border: #737784;
+  --control-hover-text: #f5f6f8;
+  --active-border: #638ebd;
+  --active-bg: #314661;
+  --card-border: #454852;
+  --card-shadow: rgba(0, 0, 0, 0.2);
   --settings-sheet-shadow: rgba(0, 0, 0, 0.34);
-  --badge-bg: rgba(255, 255, 255, 0.06);
-  --detail-border: #2f4055;
-  --ring-track: #24313f;
-  --bar-track: #1d2a38;
-  --status-border: #35455a;
-  --notice-bg: rgba(8, 12, 18, 0.42);
+  --badge-bg: rgba(255, 255, 255, 0.05);
+  --detail-border: #555965;
+  --ring-track: #50535e;
+  --bar-track: #50535e;
+  --status-border: #525560;
+  --notice-bg: rgba(32, 33, 38, 0.7);
   /* The frosted cover's own tint. It dims; the blur that hides the values is on
      the covered content itself (see `.is-covered`). */
-  --cover-bg: rgba(7, 11, 17, 0.5);
-  --toast-bg: rgba(17, 26, 38, 0.94);
-  --connection-detail-bg: #111a26;
+  --cover-bg: rgba(20, 21, 25, 0.56);
+  --toast-bg: rgba(45, 47, 54, 0.97);
+  --connection-detail-bg: #2d2f36;
   --toast-shadow: rgba(0, 0, 0, 0.38);
-  --soft-button-bg: rgba(255, 255, 255, 0.03);
-  --button-text: #cddcec;
-  --primary-border: #2f6a60;
-  --primary-bg: #17423c;
-  --primary-text: #8fe8d6;
-  --input-border: #2d3d50;
-  --input-bg: #080d14;
-  --placeholder: #55657a;
+  --soft-button-bg: rgba(255, 255, 255, 0.04);
+  --button-text: #e0e2e7;
+  --primary-border: #638ebd;
+  --primary-bg: #314661;
+  --primary-text: #c4ddfb;
+  --input-border: #4a4d58;
+  --input-bg: #202126;
+  --placeholder: #a5a8b2;
   /* A control that cannot be used right now. This is a surface, not a fade: the
      disabled state used to be `opacity: 0.5` on the whole control, which on the
      light theme left a white label on a half-opacity blue (2.5:1) — a primary
@@ -108,28 +107,28 @@
      pure re-entrancy block for the length of one write (a segmented group
      mid-save) keeps its old dimming — that one must not read as "this control is
      off". */
-  --disabled-bg: rgba(255, 255, 255, 0.03);
-  --disabled-border: #2a3846;
-  --disabled-text: #7b8ca1;
-  --overlay-bg: rgba(4, 7, 11, 0.86);
-  --dialog-top: #131d2a;
-  --dialog-bottom: #0c1219;
-  --switch-bg: #16202c;
-  --switch-thumb: #7d8ea3;
+  --disabled-bg: rgba(255, 255, 255, 0.04);
+  --disabled-border: #42444d;
+  --disabled-text: #a5a8b2;
+  --overlay-bg: rgba(20, 21, 25, 0.86);
+  --dialog-top: #303139;
+  --dialog-bottom: #222329;
+  --switch-bg: #3b3e47;
+  --switch-thumb: #b9bbc4;
   /* No edge: on a near-black track the knob is the brighter shape already. The
      light theme is the one that needs it (see its own value). */
   --switch-thumb-shadow: rgba(0, 0, 0, 0);
-  --switch-on-border: #39695f;
-  --switch-on-bg: #17423c;
-  --switch-on-thumb: #77e6d8;
-  --config-border: #273647;
-  /* Accent tints that must follow the theme: a bright mint at low alpha reads on
-     a near-black panel and vanishes on a white one, so each tint has a light
+  --switch-on-border: #638ebd;
+  --switch-on-bg: #314661;
+  --switch-on-thumb: #74b6ff;
+  --config-border: #454852;
+  /* Accent tints must follow the theme: a pale blue at low alpha reads on
+     a dark panel and vanishes on a white one, so each tint has a light
      value of its own instead of a hardcoded dark-theme colour. */
-  --ring-codex: rgba(119, 230, 216, 0.35);
-  --ring-glm: rgba(200, 255, 77, 0.3);
-  --ring-deepseek: rgba(154, 166, 255, 0.32);
-  --active-ring: rgba(119, 230, 216, 0.35);
+  --ring-codex: rgba(116, 182, 255, 0.35);
+  --ring-glm: rgba(120, 198, 165, 0.35);
+  --ring-deepseek: rgba(183, 195, 216, 0.35);
+  --active-ring: rgba(116, 182, 255, 0.35);
   --warning-border: rgba(242, 192, 105, 0.4);
   --warning-bg: rgba(242, 192, 105, 0.12);
   /* Traffic amber ("slow", not "stop"): the peak card must read at a glance,
@@ -139,14 +138,14 @@
   --peak-border: rgba(255, 176, 32, 0.6);
   --estimate-border: rgba(255, 166, 107, 0.4);
   --danger-border: rgba(255, 144, 144, 0.4);
-  --spinner-track: rgba(119, 230, 216, 0.3);
-  --drag-bg: rgba(119, 230, 216, 0.09);
-  --drag-ring: rgba(119, 230, 216, 0.28);
+  --spinner-track: rgba(116, 182, 255, 0.3);
+  --drag-bg: rgba(116, 182, 255, 0.09);
+  --drag-ring: rgba(116, 182, 255, 0.28);
   --drag-shadow: rgba(0, 0, 0, 0.22);
-  --minimal-selection: #2a3e55;
-  --minimal-ring-track: #35465b;
-  --minimal-codex-ring: #77e6d8;
-  --minimal-glm-ring: #a4a9f5;
+  --minimal-selection: #344b66;
+  --minimal-ring-track: #545866;
+  --minimal-codex-ring: #74b6ff;
+  --minimal-glm-ring: #78c6a5;
 }
 
 
