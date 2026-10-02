@@ -52,6 +52,7 @@ export function MinimalDetailWindow(props: { client: UsageClient; bridge: Deskto
   const [settings, setSettings] = useState<PanelSettings>(() => parsePanelSettings({}));
   const [now, setNow] = useState(() => new Date());
   const [caret, setCaret] = useState(37);
+  const [right, setRight] = useState(false);
   const content = useRef<HTMLDivElement>(null);
   /** The document's one probe painter (see `probe-hover.ts`). */
   const probeHover = useRef<ReturnType<typeof createProbeHover>>(undefined);
@@ -85,8 +86,10 @@ export function MinimalDetailWindow(props: { client: UsageClient; bridge: Deskto
 
   useEffect(() => {
     const follow = (event: Event) => {
-      const next = Number((event as CustomEvent).detail);
+      const detail = (event as CustomEvent<{ caret: number; right: boolean }>).detail;
+      const next = Number(detail?.caret);
       if (Number.isFinite(next)) setCaret((current) => current === next ? current : next);
+      if (typeof detail?.right === 'boolean') setRight(detail.right);
     };
     window.addEventListener('panel:minimal-detail-caret', follow);
     return () => window.removeEventListener('panel:minimal-detail-caret', follow);
@@ -261,7 +264,7 @@ export function MinimalDetailWindow(props: { client: UsageClient; bridge: Deskto
     const send = (value: number) => {
       currentHeight.current = value;
       const request = ++layoutRequest.current;
-      void bridge.invoke<{ caret: number; height: number }>('panel_detail_layout', { height: value }).then((frame) => {
+      void bridge.invoke<{ caret: number; height: number; right?: boolean }>('panel_detail_layout', { height: value }).then((frame) => {
         if (!frame) return;
         // The window is on screen by the time this answer exists — the host shows it
         // while it answers. Checked before the supersede guard below: an answer that a
@@ -270,6 +273,7 @@ export function MinimalDetailWindow(props: { client: UsageClient; bridge: Deskto
         reveal();
         if (request !== layoutRequest.current) return;
         setCaret(frame.caret);
+        if (typeof frame.right === 'boolean') setRight(frame.right);
         currentHeight.current = frame.height;
         setClipped(frame.height + 0.5 < value);
       });
@@ -323,7 +327,7 @@ export function MinimalDetailWindow(props: { client: UsageClient; bridge: Deskto
   const style = { '--caret': `${caret}px` } as CSSProperties;
 
   return (
-    <div className={`minimal-detail-window${clipped ? ' is-clipped' : ''}`}>
+    <div className={`minimal-detail-window${clipped ? ' is-clipped' : ''}${right ? ' is-right' : ''}`}>
       <section className={`minimal-detail${visible ? ' is-visible' : ''}`} role="dialog" aria-label={label} aria-hidden={rendered === null} style={style}>
         <div className="minimal-detail-scroll is-current">
           <div className="minimal-detail-content" ref={content}>

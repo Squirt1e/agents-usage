@@ -187,6 +187,7 @@ struct MinimalDetailState {
     height: f64,
     generation: u64,
     caret: Option<f64>,
+    right: Option<bool>,
 }
 
 impl PanelState {
@@ -968,32 +969,27 @@ fn minimal_panel_frame(
 }
 
 /// Position the independent card from the rail's current top-left, never by
-/// changing the rail frame. The centre of each 64-point slot advances by 68.
-///
-/// The card never rises above the rail's own top edge: the rail is the shape the
-/// reader is pointing at, and a card whose head sat above it read as a second panel
-/// that had escaped the first. A card too tall for the room below the rail's top is
-/// therefore pushed *down*, and the caret follows the ring it belongs to rather than
-/// the card's own centre.
+/// changing the rail frame. Each 64-point slot advances by 68.
 fn minimal_detail_frame(
     rail: (f64, f64),
     index: u32,
     requested_height: f64,
     grip_visible: bool,
     work: DisplayBounds,
-) -> (f64, f64, f64, f64, f64) {
+) -> (f64, f64, f64, f64, f64, bool) {
     // Reserve the seven-point rail gap inside the transparent child so the
     // card's outward caret is painted inside its native frame. 332 is the card
     // (330) plus the detail's own border on both sides; the same number is
     // `MINIMAL_DETAIL_WIDTH` in `src/desktop/panel/minimal-layout.ts`.
-    let width = 339.0_f64.min((rail.0 - work.left()).max(1.0));
+    let right = rail.0 - work.left() < 339.0;
+    let x = if right { rail.0 + 58.0 } else { rail.0 - 339.0 };
+    let width = 339.0_f64.min(if right { work.right() - x } else { rail.0 - work.left() }.max(1.0));
     let height = requested_height.max(1.0).min(work.height);
-    let x = (rail.0 - width).max(work.left());
-    let anchor_y = rail.1 + 37.0 + (if grip_visible { 16.0 } else { 0.0 }) + f64::from(index) * 68.0;
-    let top = rail.1.max(work.top());
-    let y = (anchor_y - height / 2.0).clamp(top, (work.bottom() - height).max(top));
+    let item_top = rail.1 + 5.0 + (if grip_visible { 16.0 } else { 0.0 }) + f64::from(index) * 68.0;
+    let anchor_y = item_top + 32.0;
+    let y = item_top.clamp(work.top(), (work.bottom() - height).max(work.top()));
     let caret = (anchor_y - y).clamp(14.0, (height - 14.0).max(14.0));
-    (x, y, width, height, caret)
+    (x, y, width, height, caret, right)
 }
 
 #[tauri::command]
@@ -1083,6 +1079,7 @@ fn panel_set_minimal_detail(app: AppHandle, selection: Option<String>, index: u3
         detail.selection = selection.clone();
         detail.index = index;
         detail.caret = None;
+        detail.right = None;
         detail.generation = detail.generation.wrapping_add(1);
         detail.generation
     };
@@ -1131,7 +1128,7 @@ fn panel_detail_dismiss(app: AppHandle, focus: bool) {
 }
 
 /// Only the child frame moves or changes height. The rail stays 58 points wide.
-fn place_minimal_detail(app: &AppHandle) -> Option<(f64, f64)> {
+fn place_minimal_detail(app: &AppHandle) -> Option<(f64, f64, bool)> {
     let rail = app.get_webview_window("panel")?;
     let detail = app.get_webview_window(MINIMAL_DETAIL_LABEL)?;
     let origin = window_origin_points(&rail)?;
@@ -1145,7 +1142,7 @@ fn place_minimal_detail(app: &AppHandle) -> Option<(f64, f64)> {
     let requested_height = state.height;
     drop(state);
     let grip_visible = *app.state::<PanelState>().minimal_header_visible.lock().unwrap_or_else(|p| p.into_inner());
-    let (x, y, width, height, caret) = minimal_detail_frame(origin, index, requested_height, grip_visible, work);
+    let (x, y, width, height, caret, right) = minimal_detail_frame(origin, index, requested_height, grip_visible, work);
     let scale = detail.scale_factor().unwrap_or(1.0);
     let current_size = detail.outer_size().ok();
     if current_size.is_none_or(|size| {
@@ -1161,17 +1158,19 @@ fn place_minimal_detail(app: &AppHandle) -> Option<(f64, f64)> {
     }
     let state = app.state::<PanelState>();
     let mut selection = state.minimal_detail.lock().unwrap_or_else(|p| p.into_inner());
-    let changed = selection.caret.is_none_or(|previous| (previous - caret).abs() > 0.5);
+    let changed = selection.caret.is_none_or(|previous| (previous - caret).abs() > 0.5)
+        || selection.right != Some(right);
     if changed {
         selection.caret = Some(caret);
+        selection.right = Some(right);
     }
     drop(selection);
     if changed {
         let _ = detail.eval(format!(
-            "window.dispatchEvent(new CustomEvent('panel:minimal-detail-caret', {{ detail: {caret} }}))"
+            "window.dispatchEvent(new CustomEvent('panel:minimal-detail-caret', {{ detail: {{ caret: {caret}, right: {right} }} }}))"
         ));
     }
-    Some((caret, height))
+    Some((caret, height, right))
 }
 
 #[tauri::command]
@@ -1183,12 +1182,12 @@ fn panel_detail_layout(app: AppHandle, height: f64) -> Option<Value> {
         detail.selection.as_ref()?;
         detail.height = height;
     }
-    let (caret, applied_height) = place_minimal_detail(&app)?;
+    let (caret, applied_height, right) = place_minimal_detail(&app)?;
     diag_log(&format!("detail layout requested={height:.0} applied={applied_height:.0}"));
     if let Some(window) = app.get_webview_window(MINIMAL_DETAIL_LABEL) {
         let _ = window.show();
     }
-    Some(json!({ "caret": caret, "height": applied_height }))
+    Some(json!({ "caret": caret, "height": applied_height, "right": right }))
 }
 
 // The settings-window commands are declared *after* `panel_open_web_version` on
@@ -3109,39 +3108,39 @@ mod tests {
     }
 
     #[test]
-    fn independent_detail_sits_beside_a_fixed_rail_and_clamps_to_work_area() {
+    fn independent_detail_uses_the_right_when_the_left_cannot_hold_a_full_card() {
         let work = DisplayBounds { x: 0.0, y: 24.0, width: 1440.0, height: 836.0 };
-        let (x, y, width, height, caret) = minimal_detail_frame((1322.0, 40.0), 1, 300.0, false, work);
+        let (x, y, width, height, caret, right) = minimal_detail_frame((1322.0, 40.0), 1, 300.0, false, work);
         assert_eq!((x, width, height), (983.0, 339.0, 300.0));
+        assert!(!right);
         assert_eq!(x + width, 1322.0);
-        assert!(y >= work.top());
+        assert_eq!(y, 40.0 + 5.0 + 68.0);
         assert!((y + caret - (40.0 + 37.0 + 68.0)).abs() < 0.01);
-        let narrow = DisplayBounds { x: 1100.0, y: 24.0, width: 300.0, height: 500.0 };
-        let (_, _, clipped_width, _, _) = minimal_detail_frame((1322.0, 40.0), 0, 300.0, false, narrow);
-        assert_eq!(clipped_width, 222.0);
+        let exact_fit = DisplayBounds { x: 983.0, ..work };
+        let (_, _, width, _, _, right) = minimal_detail_frame((1322.0, 40.0), 0, 300.0, false, exact_fit);
+        assert_eq!(width, 339.0);
+        assert!(!right);
+        let room_on_right = DisplayBounds { x: 1100.0, y: 24.0, width: 700.0, height: 500.0 };
+        let (x, _, width, _, _, right) = minimal_detail_frame((1322.0, 40.0), 0, 300.0, false, room_on_right);
+        assert!(right);
+        assert_eq!((x, width), (1380.0, 339.0));
     }
 
     #[test]
-    fn the_detail_never_rises_above_the_rail_it_belongs_to() {
-        // A tall card on the top platform wants to be centred on the first ring, which
-        // is 37 points below the rail's top edge — half of a 420-point card would put
-        // its head 173 points above the rail. The card is pushed down instead, and its
-        // caret keeps pointing at the ring it describes.
+    fn the_detail_top_and_caret_follow_the_current_platform() {
         let work = DisplayBounds { x: 0.0, y: 24.0, width: 1440.0, height: 836.0 };
         let rail = (1322.0, 40.0);
-        let (_, y, _, height, caret) = minimal_detail_frame(rail, 0, 420.0, false, work);
-        assert_eq!((y, height), (rail.1, 420.0));
+        let (_, y, _, height, caret, _) = minimal_detail_frame(rail, 0, 420.0, false, work);
+        assert_eq!((y, height), (rail.1 + 5.0, 420.0));
         assert!((y + caret - (rail.1 + 37.0)).abs() < 0.01);
-        // A short card still centres on its ring, which is above the rail's top only
-        // when the ring itself is: the clamp is a floor, not a re-centring.
-        let (_, centred, _, _, _) = minimal_detail_frame(rail, 2, 90.0, false, work);
-        assert!((centred - (rail.1 + 37.0 + 136.0 - 45.0)).abs() < 0.01);
-        let (_, focused, _, _, focused_caret) = minimal_detail_frame(rail, 2, 90.0, true, work);
+        let (_, next, _, _, next_caret, _) = minimal_detail_frame(rail, 2, 90.0, false, work);
+        assert_eq!(next, rail.1 + 5.0 + 136.0);
+        assert_eq!(next_caret, 32.0);
+        let (_, focused, _, _, focused_caret, _) = minimal_detail_frame(rail, 2, 90.0, true, work);
+        assert_eq!(focused, next + 16.0);
         assert!((focused + focused_caret - (rail.1 + 37.0 + 136.0 + 16.0)).abs() < 0.01);
-        // And a display whose work area starts below the rail's top cannot invite the
-        // card back above the rail: the tighter of the two is the bound.
         let lower = DisplayBounds { x: 0.0, y: 200.0, width: 1440.0, height: 400.0 };
-        let (_, y, _, height, _) = minimal_detail_frame(rail, 0, 120.0, false, lower);
+        let (_, y, _, height, _, _) = minimal_detail_frame(rail, 0, 120.0, false, lower);
         assert_eq!((y, height), (200.0, 120.0));
     }
 

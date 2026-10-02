@@ -291,7 +291,8 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
   },
   { what: 'minimal quota and balance value warning', selector: '.minimal-item-value', properties: ['color'] },
   { what: 'minimal quota arc follows the value, warning and zero state', selector: '.minimal-ring-arc', properties: ['stroke-dasharray', 'stroke', 'opacity'] },
-  { what: 'minimal detail caret follows the focused top grip', selector: '.minimal-detail::after', properties: ['top'] },
+  { what: 'minimal detail caret follows the focused top grip and changes direction', selector: '.minimal-detail::after', properties: ['top', 'opacity'] },
+  { what: 'minimal detail caret changes direction', selector: '.minimal-detail::before', properties: ['top', 'opacity'] },
   { what: 'minimal ring fill changes with peak state', selector: '.minimal-ring::before', properties: ['opacity'] },
   { what: 'minimal brand original fades when peak ends', selector: '.minimal-brand-original', properties: ['opacity'] },
   { what: 'minimal brand peak overlay fades when peak ends', selector: '.minimal-brand-peak', properties: ['opacity'] },
@@ -299,7 +300,7 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
   {
     what: 'minimal platform card arrives, leaves, and follows the ring it belongs to',
     selector: '.minimal-detail',
-    properties: ['opacity', 'transform', 'top']
+    properties: ['opacity', 'transform', 'top', 'margin-left']
   },
   {
     what: 'minimal detail content switches between already mounted cards',

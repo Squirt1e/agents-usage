@@ -44,6 +44,14 @@ describe('the open detail card is opaque', () => {
     expect(declaration('.minimal-detail::after', 'background')).toBe('var(--detail-surface)');
   });
 
+  it('moves the transparent caret strip to the rail-facing side on a right-hand detail', () => {
+    expect(declaration('.minimal-detail-window.is-right .minimal-detail', 'margin-left')).toBe('7px');
+    expect(declaration('.minimal-detail::before', 'left')).toBe('-5px');
+    expect(declaration('.minimal-detail::before', 'border-left')).toBe('1px solid var(--card-border)');
+    expect(declaration('.minimal-detail-window.is-right .minimal-detail::before', 'opacity')).toBe('1');
+    expect(declaration('.minimal-detail-window.is-right .minimal-detail::after', 'opacity')).toBe('0');
+  });
+
   it('does not offer scrolling while the native window grows between cards', () => {
     expect(declaration('.minimal-detail-window .minimal-detail-scroll', 'overflow-y')).toBe('hidden');
     expect(declaration('.minimal-detail-window.is-clipped .minimal-detail-scroll', 'overflow-y')).toBe('auto');

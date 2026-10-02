@@ -53,6 +53,27 @@ it('shows a hover selection as soon as the host pushes it', async () => {
   expect(screen.getByTestId('card-glm')).toBeInTheDocument();
 });
 
+it('turns the caret toward the rail when the host moves the card to its right', async () => {
+  const client = createFakeUsageClient({ settings: defaultPanelSettings({ panelDisplayMode: 'minimal' }) });
+  const invoke = vi.fn(async (command: string) => command === 'panel_detail_current'
+    ? { selection: 'codex', index: 0, generation: 1 }
+    : { caret: 32, height: 102, right: true });
+  const bridge: DesktopCommandBridge = { invoke: invoke as DesktopCommandBridge['invoke'] };
+  const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    return { height: this.classList.contains('minimal-detail-content') ? 100 : 0 } as DOMRect;
+  });
+  try {
+    render(<MinimalDetailWindow client={client} bridge={bridge} />);
+    await waitFor(() => expect(document.querySelector('.minimal-detail-window')).toHaveClass('is-right'));
+    act(() => window.dispatchEvent(new CustomEvent('panel:minimal-detail-caret', {
+      detail: { caret: 32, right: false }
+    })));
+    expect(document.querySelector('.minimal-detail-window')).not.toHaveClass('is-right');
+  } finally {
+    rect.mockRestore();
+  }
+});
+
 it('uses the full card peak treatment in the separate detail', async () => {
   const client = createFakeUsageClient({
     settings: defaultPanelSettings({ panelDisplayMode: 'minimal', peakReminder: { deepseek: {
