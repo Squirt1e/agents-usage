@@ -107,9 +107,12 @@
   两套主题共用同一组变量。
 - **注释解释「为什么」**：面板代码里的注释用于记录取舍与踩过的坑（动效部分尤其如此），不要
   写复述代码的注释。
-- **改动后的验证**：`npm run typecheck`、`npm run lint`、`npm test`。涉及桌面面板样式或行为的
-  改动必须跑 `npm test`；涉及 `crates/` 或 `src-tauri/` 还要跑 `npm run rust:test` 与
-  `npm run rust:clippy`（见 `docs/desktop/README.md`）。
+- **改动后的验证按范围选**：默认只跑直接相关的检查和测试，不因小改动运行全量测试。纯配色变量
+  改动只跑 `tests/panel/panel-palette.test.ts`；涉及桌面面板其他样式或行为时跑对应测试，涉及
+  TypeScript / JavaScript 时按影响运行 `npm run typecheck` 与 `npm run lint`；改动跨模块或发版门禁
+  有具体风险时再跑全量 `npm test`。仅改 Rust 源码时才追加 `npm run rust:test` 与
+  `npm run rust:clippy`（见 `docs/desktop/README.md`）。用户明确限定验证范围或要求不跑测试时
+  按用户要求执行，并说明未运行的验证。
 - **规格先行**：行为变化先进 `openspec/changes/`，实现与规格必须对得上；工程说明同步更新
   `docs/desktop/`。
 
