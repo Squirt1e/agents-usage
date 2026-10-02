@@ -94,8 +94,6 @@ function overviewSnapshot(): PanelSnapshot {
 function renderPanel(options: { client?: FakeUsageClient; settings?: Partial<PanelSettings>; host?: Partial<PanelHostProps> } = {}) {
   const client = options.client ?? createFakeUsageClient({ snapshot: overviewSnapshot(), settings: options.settings });
   const host: PanelHostProps = {
-    pinned: false,
-    onTogglePin: vi.fn(),
     onRequestHide: vi.fn(),
     onSetHeight: vi.fn(),
     ...options.host
@@ -174,7 +172,7 @@ describe('panel overview', () => {
     // The overview never shows a platform picker.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '设置' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '置顶面板' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /置顶/ })).not.toBeInTheDocument();
     expect(client.methodCalls('deleteCredential')).toHaveLength(0);
   });
 

@@ -69,8 +69,6 @@ function renderPanel(
     ...(options.refreshedSnapshot ? { refreshedSnapshot: options.refreshedSnapshot } : {})
   });
   const host: PanelHostProps = {
-    pinned: false,
-    onTogglePin: vi.fn(),
     onRequestHide: vi.fn(),
     onSetHeight: vi.fn()
   };

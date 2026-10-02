@@ -1,6 +1,6 @@
 /**
  * The panel shell: 350 logical pixels wide, header with the title, the top icon row
- * (refresh / settings / pin), a body that scrolls inside the window's height, and
+ * (refresh / settings), a body that scrolls inside the window's height, and
  * the frame's bottom status module.
  *
  * It is purely presentational — `PanelApp` owns the data. There is no page state
@@ -19,8 +19,8 @@ export interface PanelProps {
   /**
    * Whether the header is meant to be on screen. `false` marks the panel with
    * `data-header-hidden` (the CSS visibility/border steps key on it) and starts
-   * the collapse travel in `panel-header.ts`; the collapse is host-driven (a
-   * pinned panel's header settles away while the panel is out of focus), so this
+   * the collapse travel in `panel-header.ts`; the collapse is host-driven (the
+   * standing panel's header settles away when the pointer leaves), so this
    * only renders the intent.
    */
   headerVisible?: boolean;
@@ -84,9 +84,7 @@ export function Panel(props: PanelProps) {
 
 export interface PanelIconButtonProps {
   label: string;
-  pressed?: boolean;
   disabled?: boolean;
-  active?: boolean;
   busy?: boolean;
   onClick(): void;
   buttonRef?: (node: HTMLButtonElement | null) => void;
@@ -97,10 +95,9 @@ export function PanelIconButton(props: PanelIconButtonProps) {
   return (
     <button
       type="button"
-      className={`icon-button${props.active ? ' is-active' : ''}${props.busy ? ' is-busy' : ''}`}
+      className={`icon-button${props.busy ? ' is-busy' : ''}`}
       aria-label={props.label}
       aria-busy={props.busy || undefined}
-      {...(props.pressed === undefined ? {} : { 'aria-pressed': props.pressed })}
       disabled={props.disabled === true}
       onClick={props.onClick}
       ref={props.buttonRef}

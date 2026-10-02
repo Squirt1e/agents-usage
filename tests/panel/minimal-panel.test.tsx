@@ -70,6 +70,46 @@ const centreOf = (index: number) =>
   index * (RAIL_GEOMETRY.itemHeight + RAIL_GEOMETRY.itemGap);
 
 describe('minimal panel', () => {
+  it('exposes a drag handle with the action icons only while focused', async () => {
+    renderPanel({ client: client() });
+    const grip = await screen.findByTestId('minimal-drag');
+    expect(grip).toHaveAttribute('data-tauri-drag-region', 'deep');
+    expect(grip).toHaveAttribute('aria-label', '拖动面板');
+    expect(grip.querySelector('svg')).not.toBeNull();
+    expect(grip).not.toHaveAttribute('role', 'button');
+    expect(grip).toHaveAttribute('aria-hidden', 'false');
+    expect(grip.nextElementSibling).toHaveClass('minimal-stack');
+    expect(grip.querySelectorAll('circle')).toHaveLength(3);
+  });
+
+  it('clears the selected platform as soon as the pointer reaches the drag grip', async () => {
+    renderPanel({ client: client() });
+    const codex = await ring(/Codex.*详情/);
+    fireEvent.pointerOver(codex);
+    await waitFor(() => expect(card()).not.toBeNull());
+    codex.focus();
+    const grip = await screen.findByTestId('minimal-drag');
+    fireEvent.pointerOver(grip);
+    await waitFor(() => expect(card()).toBeNull());
+    fireEvent.pointerOver(await ring(/Codex.*详情/));
+    await waitFor(() => expect(card()).not.toBeNull());
+    fireEvent.pointerOver(screen.getByRole('button', { name: '刷新全部平台' }));
+    await waitFor(() => expect(card()).toBeNull());
+  });
+
+  it('hides the rounded arc cap when a quota reaches zero', async () => {
+    const zeroClient = createFakeUsageClient({
+      settings: defaultPanelSettings({ panelDisplayMode: 'minimal', platformOrder: ['codex'] }),
+      snapshot: snapshotOf([providerStateOf('codex', [
+        metricOf({ key: 'quota.5h.used', unit: 'percent', direction: 'used', value: 100, windowSeconds: 18000 }),
+        metricOf({ key: 'quota.5h.remaining', unit: 'percent', direction: 'remaining', value: 0, windowSeconds: 18000 })
+      ])])
+    });
+    renderPanel({ client: zeroClient });
+    const codex = await ring(/Codex.*详情/);
+    expect(codex.querySelector('.minimal-ring-arc')).toHaveClass('is-zero');
+  });
+
   it('keeps the native rail at 58 points while an independent detail is selected', async () => {
     const view = renderPanel({ client: client() });
     const onSetMinimalDetail = vi.fn();
@@ -325,15 +365,19 @@ describe('minimal panel', () => {
     const view = renderPanel({ client: client() });
     const strip = await rail();
     const tools = strip.querySelector('.minimal-tools') as HTMLElement;
+    const grip = strip.querySelector('.minimal-drag') as HTMLElement;
     expect(tools).toHaveAttribute('aria-hidden', 'false');
+    expect(grip).toHaveAttribute('aria-hidden', 'false');
     expect(view.host.onSetMinimalLayout).toHaveBeenCalledWith(58, expect.any(Number), true);
     const blurredHost = { ...view.host, headerVisible: false };
     view.rerender(<PanelApp client={view.client} host={blurredHost} now={NOW} onOpenSettings={view.onOpenSettings} />);
     expect(tools).toHaveAttribute('aria-hidden', 'true');
+    expect(grip).toHaveAttribute('aria-hidden', 'true');
     expect(within(tools).getByRole('button', { name: '设置', hidden: true })).toBeDisabled();
     expect(view.host.onSetMinimalLayout).toHaveBeenLastCalledWith(58, expect.any(Number), false);
     view.rerender(<PanelApp client={view.client} host={{ ...blurredHost, headerVisible: true }} now={NOW} onOpenSettings={view.onOpenSettings} />);
     expect(tools).toHaveAttribute('aria-hidden', 'false');
+    expect(grip).toHaveAttribute('aria-hidden', 'false');
   });
   it('keeps settings reachable when all platforms are hidden', async () => {
     const { onOpenSettings } = renderPanel({ settings: { panelDisplayMode: 'minimal', platformVisibility: { codex: false, glm: false, deepseek: false } } });
@@ -466,8 +510,8 @@ describe('minimal panel', () => {
     expect(within(card).getByRole('button', { name: '配置 Codex' })).toBeInTheDocument();
   });
 
-  it('shows refresh, settings and pin on the focused rail', async () => {
-    const { client: fake, host, onOpenSettings } = renderPanel({ client: client() });
+  it('shows refresh and settings on the focused rail without a pin control', async () => {
+    const { client: fake, onOpenSettings } = renderPanel({ client: client() });
     const strip = await rail();
     expect(within(strip).getByRole('button', { name: '设置' })).toBeEnabled();
     expect(within(strip).getByRole('button', { name: /刷新/ })).toBeEnabled();
@@ -477,10 +521,79 @@ describe('minimal panel', () => {
     expect(onOpenSettings).toHaveBeenCalledWith('codex');
     fireEvent.click(within(strip).getByRole('button', { name: '刷新全部平台' }));
     await waitFor(() => expect(fake.methodCalls('refresh').length).toBeGreaterThan(0));
-    fireEvent.click(within(strip).getByRole('button', { name: '置顶面板' }));
-    expect(host.onTogglePin).toHaveBeenCalled();
+    expect(within(strip).queryByRole('button', { name: /置顶/ })).not.toBeInTheDocument();
     fireEvent.click(within(strip).getByRole('button', { name: '设置' }));
     expect(onOpenSettings).toHaveBeenCalledWith('appearance');
+  });
+
+  it('shows busy refresh feedback until every platform settles', async () => {
+    const fake = client();
+    const asked: string[] = [];
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    fake.refresh = async (provider) => {
+      asked.push(provider);
+      await gate;
+      return { provider, status: 'requested', at: NOW.toISOString() };
+    };
+    renderPanel({ client: fake });
+    const strip = await rail();
+
+    fireEvent.click(within(strip).getByRole('button', { name: '刷新全部平台' }));
+    const busy = within(strip).getByRole('button', { name: '正在刷新' });
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute('aria-busy', 'true');
+    expect(busy).toHaveClass('is-busy');
+    expect(asked).toHaveLength(3);
+
+    release();
+    await waitFor(() => {
+      const settled = within(strip).getByRole('button', { name: '刷新全部平台' });
+      expect(settled).toBeEnabled();
+      expect(settled).not.toHaveAttribute('aria-busy');
+      expect(settled).not.toHaveClass('is-busy');
+    });
+  });
+
+  it('replays the minimal reading after each successful manual refresh even when its value is unchanged', async () => {
+    const fake = client();
+    renderPanel({ client: fake });
+    const strip = await rail();
+    const codex = await ring(/Codex.*详情/);
+    const deepseek = await ring(/DeepSeek.*详情/);
+    expect(codex.querySelector('.minimal-ring-arc.is-replaying')).toBeNull();
+    expect(codex.querySelector('.rolling-number-reel')).toBeNull();
+
+    fireEvent.click(within(strip).getByRole('button', { name: '刷新全部平台' }));
+    await waitFor(() => expect(codex.querySelector('.minimal-ring-arc.is-replaying')).not.toBeNull());
+    const first = codex.querySelector('.minimal-item-value');
+    expect(first!.querySelectorAll('.rolling-number-reel')).toHaveLength(2);
+    expect(first!.querySelector('.replay-number-target')).toHaveTextContent('76%');
+    expect(deepseek.querySelector('.rolling-number-reel')).not.toBeNull();
+
+    await waitFor(() => expect(within(strip).getByRole('button', { name: '刷新全部平台' })).toBeEnabled());
+    fireEvent.click(within(strip).getByRole('button', { name: '刷新全部平台' }));
+    await waitFor(() => expect(codex.querySelector('.minimal-item-value')).not.toBe(first));
+    expect(codex.querySelector('.rolling-number-reel')).not.toBeNull();
+  });
+
+  it('keeps the refreshed reading static when reduced motion is preferred', async () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    })));
+    try {
+      renderPanel({ client: client() });
+      const strip = await rail();
+      const codex = await ring(/Codex.*详情/);
+      fireEvent.click(within(strip).getByRole('button', { name: '刷新全部平台' }));
+      await waitFor(() => expect(within(strip).getByRole('button', { name: '刷新全部平台' })).toBeEnabled());
+      expect(codex.querySelector('.rolling-number-reel')).toBeNull();
+      expect(codex.querySelector('.minimal-item-value')).toHaveTextContent('76%');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('names the monthly window in the card when no shorter window is trusted', async () => {
@@ -621,7 +734,7 @@ describe('minimal panel', () => {
     expect(host.onSetHeight).not.toHaveBeenCalled();
   });
 
-  it('does not move the card when the rail’s action column unfolds', async () => {
+  it('keeps the detail caret pointed at its ring when the top grip unfolds', async () => {
     // The actions unroll a moment after the pointer arrives (the host polls the
     // cursor), and the connection badge appears with a failing connection — both while
     // a card is open. A placement clamped against either moved the card under the
@@ -655,8 +768,7 @@ describe('minimal panel', () => {
     const centre = centreOf(2);
     expect(Number.parseFloat(placed) + Number.parseFloat(caret)).toBeCloseTo(centre);
     renderAt(true);
-    expect(detail.style.top).toBe(placed);
-    expect(detail.style.getPropertyValue('--caret')).toBe(caret);
+    expect(Number.parseFloat(detail.style.top) + Number.parseFloat(detail.style.getPropertyValue('--caret'))).toBeCloseTo(centre + RAIL_GEOMETRY.dragHeight);
   });
 
   it('keeps the detail’s space until the card has finished fading out', async () => {

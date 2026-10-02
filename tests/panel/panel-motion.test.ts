@@ -290,7 +290,8 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
     properties: ['background', 'color']
   },
   { what: 'minimal quota and balance value warning', selector: '.minimal-item-value', properties: ['color'] },
-  { what: 'minimal quota arc follows the value and warning', selector: '.minimal-ring-arc', properties: ['stroke-dasharray', 'stroke'] },
+  { what: 'minimal quota arc follows the value, warning and zero state', selector: '.minimal-ring-arc', properties: ['stroke-dasharray', 'stroke', 'opacity'] },
+  { what: 'minimal detail caret follows the focused top grip', selector: '.minimal-detail::after', properties: ['top'] },
   { what: 'minimal ring fill changes with peak state', selector: '.minimal-ring::before', properties: ['opacity'] },
   { what: 'minimal brand original fades when peak ends', selector: '.minimal-brand-original', properties: ['opacity'] },
   { what: 'minimal brand peak overlay fades when peak ends', selector: '.minimal-brand-peak', properties: ['opacity'] },
@@ -432,6 +433,7 @@ const TRANSITION_SWITCHES: TransitionSwitch[] = [
     properties: ['background-color', 'box-shadow']
   },
   { what: 'drag grip brightens on hover', selector: '.drag-handle', properties: ['color'] },
+  { what: 'minimal window grip reveals with focused controls and brightens on hover', selector: '.minimal-drag', properties: ['height', 'opacity', 'color', 'background-color'] },
   {
     // The disabled fade is part of the same switch: its own save greys the
     // control out and back, and that has to travel like every other state change.
@@ -551,6 +553,8 @@ interface AnimationSwitch {
 
 const ANIMATION_SWITCHES: AnimationSwitch[] = [
   { what: 'the refresh icon turns while requests are in flight', selectors: ['.icon-button.is-busy svg'], animation: 'panel-refresh-spin' },
+  { what: 'the minimal refresh icon turns while requests are in flight', selectors: ['.minimal-tool.is-busy svg'], animation: 'panel-refresh-spin' },
+  { what: 'successful minimal quota refresh redraws the arc', selectors: ['.minimal-ring-arc.is-replaying'], animation: 'minimal-refresh-fill' },
   { what: 'successful refresh restarts quota fill from zero', selectors: ['.quota-item.is-replaying .quota-shape-fill'], animation: 'quota-refresh-fill' },
   { what: 'successful refresh rolls visible digit columns from zero', selectors: ['.rolling-number-strip'], animation: 'replay-digit-roll' },
   { what: 'a message arrives in the stack', selectors: ['.panel-toast'], animation: 'panel-toast-in' },

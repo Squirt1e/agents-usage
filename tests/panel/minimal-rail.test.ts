@@ -25,6 +25,7 @@ import {
   MINIMAL_DETAIL_MARGIN,
   MINIMAL_DETAIL_PADDING,
   MINIMAL_DETAIL_WIDTH,
+  MINIMAL_DRAG_HEIGHT,
   MINIMAL_ALERT_HEIGHT,
   MINIMAL_ITEM_RADIUS,
   MINIMAL_ITEM_WIDTH,
@@ -205,15 +206,13 @@ describe('the rail is one narrow column with reachable targets', () => {
     );
   });
 
-  it('drags on the rail itself and reveals tools on focus', () => {
-    expect(declaration(sheet, '.minimal-drag', 'height')).toBeUndefined();
-    expect(panelSource).not.toContain('minimal-drag');
+  it('reveals a compact drag grip above the platform readings', () => {
+    expect(pxOf(sheet, '.minimal-drag', 'height')).toBe(0);
+    expect(pxOf(sheet, '.minimal-panel.is-focused .minimal-drag', 'height')).toBe(MINIMAL_DRAG_HEIGHT);
+    expect(declaration(sheet, '.minimal-drag', 'cursor')).toBe('move');
+    expect(panelSource).toContain('minimal-drag');
     expect(panelSource).toContain('minimal-tools');
     expect(panelSource).toContain('data-tauri-drag-region');
-    // The padding band is what the pointer can drag from.
-    expect(leadingPx(declaration(sheet, '.minimal-rail', 'padding'))).toBe(
-      RAIL_GEOMETRY.railPaddingTop
-    );
   });
 
   it('gives the rail the same band at the head and the foot', () => {
@@ -340,16 +339,13 @@ describe('the card is a fixed size that the window only uncovers', () => {
     expect(panelSource).toContain("'.minimal-detail-scroll.is-current .minimal-detail-content'");
   });
 
-  it('places the card from the card and the platforms, never from the rail’s furniture', () => {
-    // The action column unrolls the moment the host reports the pointer and the
-    // connection badge appears with a failing connection — both while a card is open.
-    // A clamp that included either moved the card under the pointer: it is the jump
-    // the reader sees on entering the panel and on leaving it. The placement is the
-    // card's own geometry, so it asks for the window without that furniture.
+  it('places the card from the card, platforms and top grip, not the lower controls', () => {
+    // The top grip moves the platforms, so the caret follows it. Lower controls and
+    // a connection badge must not move the card relative to its platform.
     expect(panelSource).toMatch(/minimalPanelHeight\(\s*props\.summaries\.length,\s*height\s*\)/);
     const placement = /minimalDetailPlacement\(([\s\S]*?)\);/.exec(panelSource);
     expect(placement, 'the card is not placed through minimalDetailPlacement').not.toBeNull();
-    expect(placement![1]).not.toContain('props.focused');
+    expect(placement![1]).toContain('props.focused');
     expect(placement![1]).not.toContain('props.issues');
   });
 });
@@ -362,6 +358,8 @@ describe('the rail’s window height is the stylesheet’s arithmetic', () => {
   };
 
   it('agrees with every rule the height is built from', () => {
+    expect(px('.minimal-drag', 'height')).toBe(0);
+    expect(px('.minimal-panel.is-focused .minimal-drag', 'height')).toBe(RAIL_GEOMETRY.dragHeight);
     expect(px('.minimal-item', 'min-height')).toBe(RAIL_GEOMETRY.itemHeight);
     // The placeholder replaces an item, so it has to be exactly one item tall.
     expect(px('.minimal-empty', 'min-height')).toBe(RAIL_GEOMETRY.emptyHeight);
@@ -376,9 +374,9 @@ describe('the rail’s window height is the stylesheet’s arithmetic', () => {
     expect(padding[0]).toBe(RAIL_GEOMETRY.railPaddingTop);
     expect(padding[2]).toBe(RAIL_GEOMETRY.railPaddingBottom);
     expect(px('.minimal-rail', 'border')).toBe(RAIL_GEOMETRY.railBorder);
-    // The action column unrolls to three rows the height of one button, the gaps
+    // The action column unrolls to two rows the height of one button, the gap
     // between them, and the four points of focus-ring room on every side.
-    const rows = 3 * px('.minimal-tool', 'height') + 2 * px('.minimal-tools', 'gap');
+    const rows = 2 * px('.minimal-tool', 'height') + px('.minimal-tools', 'gap');
     const toolsPadding = (declaration(sheet, '.minimal-panel.is-focused .minimal-tools', 'padding') ?? '')
       .split(/\s+/)
       .map((value) => Number.parseFloat(value));
@@ -392,8 +390,7 @@ describe('the rail’s window height is the stylesheet’s arithmetic', () => {
   });
 
   it('adds up to the height the host is asked for', () => {
-    // Two platforms: their two 64-point slots, the gap between them, the rail's
-    // padding on both ends, and its border.
+    // Two platforms: their slots and gap, padding and border. The grip opens only on focus.
     expect(minimalRailHeight(2)).toBe(
       2 * RAIL_GEOMETRY.itemHeight +
         RAIL_GEOMETRY.itemGap +
@@ -404,11 +401,11 @@ describe('the rail’s window height is the stylesheet’s arithmetic', () => {
     // With every platform hidden the placeholder occupies one item's worth — and a
     // lone slot has no gap to add.
     expect(minimalRailHeight(0)).toBe(minimalRailHeight(1));
-    expect(minimalRailHeight(3, true) - minimalRailHeight(3)).toBe(MINIMAL_TOOLS_HEIGHT);
+    expect(minimalRailHeight(3, true) - minimalRailHeight(3)).toBe(MINIMAL_TOOLS_HEIGHT + MINIMAL_DRAG_HEIGHT);
     // The badge is on screen whether or not the pointer is.
     expect(minimalRailHeight(3, false, true) - minimalRailHeight(3)).toBe(MINIMAL_ALERT_HEIGHT);
     expect(minimalRailHeight(3, true, true)).toBe(
-      minimalRailHeight(3) + MINIMAL_TOOLS_HEIGHT + MINIMAL_ALERT_HEIGHT
+      minimalRailHeight(3) + MINIMAL_TOOLS_HEIGHT + MINIMAL_DRAG_HEIGHT + MINIMAL_ALERT_HEIGHT
     );
     // A card taller than the rail sets the window; a short one does not shrink it.
     expect(minimalPanelHeight(3, 400)).toBe(400 + MINIMAL_DETAIL_MARGIN * 2);
@@ -457,6 +454,8 @@ describe('the card follows the ring it belongs to', () => {
     expect(top + caret).toBe(centreOf(1));
     expect(top).toBeGreaterThanOrEqual(MINIMAL_DETAIL_MARGIN);
     expect(top + 90).toBeLessThanOrEqual(panel - MINIMAL_DETAIL_MARGIN);
+    const focused = minimalDetailPlacement(1, 90, minimalPanelHeight(3, 90, true), true);
+    expect(focused.top + focused.caret).toBe(centreOf(1) + MINIMAL_DRAG_HEIGHT);
   });
 
   it('slides back inside the window and keeps pointing at the item', () => {

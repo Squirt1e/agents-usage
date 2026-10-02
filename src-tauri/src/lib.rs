@@ -143,7 +143,6 @@ struct ServiceEndpoint {
 
 /// Shared panel state.
 struct PanelState {
-    pinned: Mutex<bool>,
     minimal_mode: Mutex<bool>,
     minimal_detail: Mutex<MinimalDetailState>,
     /// Guarded so a command that finds the service gone can replace the
@@ -158,6 +157,8 @@ struct PanelState {
     /// the delayed hide task only fires when the generation it captured is
     /// still the current one. Same model as [`VisibilityState`].
     header_generation: Mutex<u64>,
+    /// The focused rail reveals its grip above the rings, shifting their centres.
+    minimal_header_visible: Mutex<bool>,
     /// Which settings section the window should be showing.
     ///
     /// The host keeps it rather than relying only on the event it emits, because the
@@ -185,6 +186,7 @@ struct MinimalDetailState {
     index: u32,
     height: f64,
     generation: u64,
+    caret: Option<f64>,
 }
 
 impl PanelState {
@@ -623,23 +625,6 @@ async fn panel_delete_credential(
 }
 
 #[tauri::command]
-fn panel_pinned_state(state: tauri::State<'_, PanelState>) -> bool {
-    *state
-        .pinned
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-#[tauri::command]
-fn panel_set_pinned(app: AppHandle, state: tauri::State<'_, PanelState>, pinned: bool) -> bool {
-    set_pinned(&app, pinned);
-    if let Ok(mut guard) = state.pinned.lock() {
-        *guard = pinned;
-    }
-    pinned
-}
-
-#[tauri::command]
 fn panel_hide(app: AppHandle) {
     // Escape (or the panel's own close affordance) hides with the same
     // transition as a tray toggle.
@@ -994,6 +979,7 @@ fn minimal_detail_frame(
     rail: (f64, f64),
     index: u32,
     requested_height: f64,
+    grip_visible: bool,
     work: DisplayBounds,
 ) -> (f64, f64, f64, f64, f64) {
     // Reserve the seven-point rail gap inside the transparent child so the
@@ -1003,7 +989,7 @@ fn minimal_detail_frame(
     let width = 339.0_f64.min((rail.0 - work.left()).max(1.0));
     let height = requested_height.max(1.0).min(work.height);
     let x = (rail.0 - width).max(work.left());
-    let anchor_y = rail.1 + 37.0 + f64::from(index) * 68.0;
+    let anchor_y = rail.1 + 37.0 + (if grip_visible { 16.0 } else { 0.0 }) + f64::from(index) * 68.0;
     let top = rail.1.max(work.top());
     let y = (anchor_y - height / 2.0).clamp(top, (work.bottom() - height).max(top));
     let caret = (anchor_y - y).clamp(14.0, (height - 14.0).max(14.0));
@@ -1096,6 +1082,7 @@ fn panel_set_minimal_detail(app: AppHandle, selection: Option<String>, index: u3
         }
         detail.selection = selection.clone();
         detail.index = index;
+        detail.caret = None;
         detail.generation = detail.generation.wrapping_add(1);
         detail.generation
     };
@@ -1154,8 +1141,11 @@ fn place_minimal_detail(app: &AppHandle) -> Option<(f64, f64)> {
     let state = state.minimal_detail.lock().unwrap_or_else(|p| p.into_inner());
     state.selection.as_ref()?;
     if state.height <= 0.0 { return None; }
-    let (x, y, width, height, caret) = minimal_detail_frame(origin, state.index, state.height, work);
+    let index = state.index;
+    let requested_height = state.height;
     drop(state);
+    let grip_visible = *app.state::<PanelState>().minimal_header_visible.lock().unwrap_or_else(|p| p.into_inner());
+    let (x, y, width, height, caret) = minimal_detail_frame(origin, index, requested_height, grip_visible, work);
     let scale = detail.scale_factor().unwrap_or(1.0);
     let current_size = detail.outer_size().ok();
     if current_size.is_none_or(|size| {
@@ -1168,6 +1158,18 @@ fn place_minimal_detail(app: &AppHandle) -> Option<(f64, f64)> {
         (current_x - x).abs() > 0.5 || (current_y - y).abs() > 0.5
     }) {
         let _ = detail.set_position(LogicalPosition::new(x, y));
+    }
+    let state = app.state::<PanelState>();
+    let mut selection = state.minimal_detail.lock().unwrap_or_else(|p| p.into_inner());
+    let changed = selection.caret.is_none_or(|previous| (previous - caret).abs() > 0.5);
+    if changed {
+        selection.caret = Some(caret);
+    }
+    drop(selection);
+    if changed {
+        let _ = detail.eval(format!(
+            "window.dispatchEvent(new CustomEvent('panel:minimal-detail-caret', {{ detail: {caret} }}))"
+        ));
     }
     Some((caret, height))
 }
@@ -1291,7 +1293,7 @@ const PANEL_HEADER_HIDE_DELAY_MS: u64 = 5_000;
 
 /// How long the rail waits before collapsing its actions: not at all.
 ///
-/// The rail's three actions are a hover affordance that only has room while the
+/// The rail's controls are a hover affordance that only has room while the
 /// pointer is on the rail, so the moment the pointer leaves is the moment they go;
 /// waiting reads as the actions being left behind on a shape that has already moved
 /// on. The full panel keeps `PANEL_HEADER_HIDE_DELAY_MS`, so a pointer that dips out
@@ -1326,31 +1328,6 @@ fn build_panel_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .disable_drag_drop_handler()
         .visible(false)
         .build()?;
-
-    // Temporary popup collapses when it loses focus; a pinned panel stays open
-    // (task 5.4). The header's collapse follows the pointer, but Tauri filters the
-    // window server's cursor enter/leave out of `WindowEvent`, and a non-key
-    // window's webview receives no pointer events — so the host polls the cursor
-    // against the window bounds instead (see `start_cursor_tracking`). Record the
-    // focus-hide time so a tray click that lands right after is not mistaken for a
-    // fresh "show".
-    let app_handle = app.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Focused(focused) = event {
-            let pinned = panel_pinned(&app_handle);
-            let visible = app_handle
-                .get_webview_window("panel")
-                .and_then(|window| window.is_visible().ok())
-                .unwrap_or(false);
-            diag_log(&format!(
-                "focus({focused}) pinned={pinned} window_visible={visible}"
-            ));
-            if !*focused && !pinned && visible
-                && !(panel_is_minimal(&app_handle) && cursor_over_detail(&app_handle) == Some(true)) {
-                hide_panel(&app_handle);
-            }
-        }
-    });
 
     Ok(window)
 }
@@ -1462,9 +1439,15 @@ fn header_tracking_transition(
     inside: &mut Option<bool>,
     visible: bool,
     pointer_inside: Option<bool>,
+    mouse_down: bool,
 ) -> Option<bool> {
     if !visible {
         *inside = None;
+        return None;
+    }
+    // A native window drag can make one sampled pointer position miss the moving
+    // frame. Keep the previous state until mouse-up gives us a stable sample.
+    if mouse_down {
         return None;
     }
     let Some(now_inside) = pointer_inside else {
@@ -1498,10 +1481,12 @@ fn start_cursor_tracking(app: &AppHandle) {
                 continue;
             };
             let visible = panel.is_visible().ok().unwrap_or(false);
+            let mouse_down = primary_mouse_pressed(&app_handle).await.unwrap_or(true);
             let action = header_tracking_transition(
                 &mut inside,
                 visible,
                 visible.then(|| cursor_over_panel(&app_handle)).flatten(),
+                mouse_down,
             );
             let detail_open = panel_is_minimal(&app_handle)
                 && app_handle.state::<PanelState>()
@@ -1509,7 +1494,7 @@ fn start_cursor_tracking(app: &AppHandle) {
                     .selection.is_some()
                 && app_handle.get_webview_window(MINIMAL_DETAIL_LABEL)
                     .and_then(|window| window.is_visible().ok()) == Some(true);
-            if detail_open
+            if !mouse_down && detail_open
                 && cursor_over_panel(&app_handle) == Some(false)
                 && cursor_over_detail(&app_handle) == Some(false)
             {
@@ -1686,7 +1671,7 @@ fn panel_is_minimal(app: &AppHandle) -> bool {
 /// seconds — the pointer coming back, the panel being hidden, a tray toggle —
 /// bumps the generation, and the task wakes up only to find its invite obsolete.
 ///
-/// The rail has no delay. Its three actions are a hover affordance that the rail
+/// The rail has no delay. Its controls are a hover affordance that the rail
 /// only has room for while the pointer is on it, and waiting reads as the actions
 /// being left behind on a shape that has already moved on; the full panel keeps the
 /// delay so a pointer that dips out for a moment does not make its header flicker.
@@ -1707,7 +1692,12 @@ fn schedule_header_hide(app: &AppHandle) {
             .get_webview_window("panel")
             .and_then(|window| window.is_visible().ok())
             .unwrap_or(false);
-        if !visible || cursor_over_panel(&app_handle) != Some(false) {
+        // A zero-delay minimal hide can be due while AppKit still owns a native
+        // drag. The mouse sample waits for that drag to finish on the main thread.
+        if primary_mouse_pressed(&app_handle).await != Some(false)
+            || !visible
+            || cursor_over_panel(&app_handle) != Some(false)
+        {
             diag_log("header hide cancelled");
             return;
         }
@@ -1723,6 +1713,7 @@ fn schedule_header_hide(app: &AppHandle) {
             return;
         }
         diag_log("header hide due");
+        *state.minimal_header_visible.lock().unwrap_or_else(|p| p.into_inner()) = false;
         let _ = app_handle.emit(PANEL_HEADER_EVENT, json!({ "visible": false }));
     });
 }
@@ -1739,6 +1730,7 @@ fn restore_panel_header(app: &AppHandle) {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     *guard = guard.wrapping_add(1);
+    *state.minimal_header_visible.lock().unwrap_or_else(|p| p.into_inner()) = true;
     diag_log("header restored");
     let _ = app.emit(PANEL_HEADER_EVENT, json!({ "visible": true }));
 }
@@ -1753,39 +1745,13 @@ fn bump_header_generation(app: &AppHandle) -> u64 {
     *guard
 }
 
-/// Whether the panel is pinned to the screen.
-fn panel_pinned(app: &AppHandle) -> bool {
-    let state = app.state::<PanelState>();
-    let guard = state
-        .pinned
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    *guard
-}
-
-/// Put the window into the shape a pin state asks for.
-///
-/// Split from [`set_pinned`] so startup can apply the state the panel was
-/// created with (the dev default) without emitting a pin event to a webview that
-/// has not loaded its listeners yet.
-fn apply_pinned(app: &AppHandle, pinned: bool) {
+/// Keep the panel visible on every desktop, including after a focus change.
+fn keep_panel_on_all_desktops(app: &AppHandle) {
     let Some(window) = app.get_webview_window("panel") else {
         return;
     };
-    // The panel stays floating in both states; pinning only decides whether
-    // it survives a focus-out (task 5.4). Unpinning must not hide it.
     let _ = window.set_always_on_top(true);
-    // A pinned panel belongs to the user rather than to one desktop: joining
-    // every Space is what keeps it on screen when they switch desktops.
-    // Clearing the behaviour on unpin is what keeps the transient popup off
-    // desktops the user never opened it on.
-    let _ = window.set_visible_on_all_workspaces(pinned);
-}
-
-fn set_pinned(app: &AppHandle, pinned: bool) {
-    apply_pinned(app, pinned);
-    // Keep the panel's pin indicator in sync when the state changes.
-    let _ = app.emit("panel://pinned", pinned);
+    let _ = window.set_visible_on_all_workspaces(true);
 }
 
 /// A display's bounds in the points macOS arranges displays in, top edge first.
@@ -2116,7 +2082,7 @@ fn set_full_layout(app: &AppHandle) {
 /// Keep the tray's toggle item saying what a click would do next.
 ///
 /// Called wherever the panel's intended visibility changes. The label is read when
-/// the user opens the menu, so a stale one from a focus-out hide would offer the
+/// the user opens the menu, so a stale one after an explicit hide would offer the
 /// wrong action: "隐藏面板" on a panel that is already gone.
 fn sync_tray_toggle(app: &AppHandle) {
     let state = app.state::<PanelState>();
@@ -2471,7 +2437,7 @@ fn build_settings_window(app: &AppHandle, section: Option<&str>) -> tauri::Resul
         "origin": app.state::<PanelState>().service_endpoint().origin,
         "sessionToken": app.state::<PanelState>().service_endpoint().session_token,
         "webUrl": app.state::<PanelState>().service_endpoint().origin,
-        "capabilities": { "pin": false, "hide": false, "openWebVersion": false },
+        "capabilities": { "hide": false, "openWebVersion": false },
         "settingsSection": section,
     });
 
@@ -2558,17 +2524,6 @@ fn build_minimal_detail_window(app: &AppHandle, panel: &WebviewWindow) -> tauri:
     // it is shown as a plain floating surface instead. Clicks still reach it: a
     // non-key window is still the window under the pointer.
     let _ = window.set_focusable(false);
-    let app_handle = app.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Focused(false) = event {
-            if !panel_pinned(&app_handle)
-                && cursor_over_panel(&app_handle) != Some(true)
-                && cursor_over_detail(&app_handle) != Some(true)
-            {
-                hide_panel(&app_handle);
-            }
-        }
-    });
     Ok(window)
 }
 
@@ -2661,7 +2616,7 @@ pub fn build(context: tauri::Context) -> tauri::App {
                 "origin": service.origin,
                 "sessionToken": service.session_token,
                 "webUrl": service.origin,
-                "capabilities": { "pin": true, "hide": true, "openWebVersion": true }
+                "capabilities": { "hide": true, "openWebVersion": true }
             });
             let panel = build_panel_window(app.handle())?;
 
@@ -2673,16 +2628,13 @@ pub fn build(context: tauri::Context) -> tauri::App {
                 let _ = window.eval(&script);
             }
 
-            // Dev builds start pinned so the panel survives focus loss while
-            // styles are edited; packaged builds keep the popup behaviour.
-            let pinned = tauri::is_dev();
             app.manage(PanelState {
-                pinned: Mutex::new(pinned),
                 minimal_mode: Mutex::new(false),
                 minimal_detail: Mutex::new(MinimalDetailState::default()),
                 service: Mutex::new(service),
                 visibility: Mutex::new(VisibilityState::default()),
                 header_generation: Mutex::new(0),
+                minimal_header_visible: Mutex::new(true),
                 settings_section: Mutex::new(SETTINGS_DEFAULT_SECTION),
                 tray_toggle: Mutex::new(None),
                 tray_mode: Mutex::new(Vec::new()),
@@ -2690,11 +2642,7 @@ pub fn build(context: tauri::Context) -> tauri::App {
             });
             build_minimal_detail_window(app.handle(), &panel)?;
 
-            // The window has to agree with that first state instead of waiting
-            // for the first button press: a panel that reads as pinned but is
-            // still tied to one desktop would only start following the user's
-            // desktops after they unpinned and pinned it again.
-            apply_pinned(app.handle(), pinned);
+            keep_panel_on_all_desktops(app.handle());
 
             // Drive the header from the pointer: poll the cursor against the
             // window bounds (the header state machine needs `PanelState` managed
@@ -2859,8 +2807,6 @@ pub fn build(context: tauri::Context) -> tauri::App {
             panel_refresh,
             panel_validate_credential,
             panel_delete_credential,
-            panel_pinned_state,
-            panel_set_pinned,
             panel_hide,
             panel_set_height,
             panel_set_minimal_layout,
@@ -3165,13 +3111,13 @@ mod tests {
     #[test]
     fn independent_detail_sits_beside_a_fixed_rail_and_clamps_to_work_area() {
         let work = DisplayBounds { x: 0.0, y: 24.0, width: 1440.0, height: 836.0 };
-        let (x, y, width, height, caret) = minimal_detail_frame((1322.0, 40.0), 1, 300.0, work);
+        let (x, y, width, height, caret) = minimal_detail_frame((1322.0, 40.0), 1, 300.0, false, work);
         assert_eq!((x, width, height), (983.0, 339.0, 300.0));
         assert_eq!(x + width, 1322.0);
         assert!(y >= work.top());
         assert!((y + caret - (40.0 + 37.0 + 68.0)).abs() < 0.01);
         let narrow = DisplayBounds { x: 1100.0, y: 24.0, width: 300.0, height: 500.0 };
-        let (_, _, clipped_width, _, _) = minimal_detail_frame((1322.0, 40.0), 0, 300.0, narrow);
+        let (_, _, clipped_width, _, _) = minimal_detail_frame((1322.0, 40.0), 0, 300.0, false, narrow);
         assert_eq!(clipped_width, 222.0);
     }
 
@@ -3183,17 +3129,19 @@ mod tests {
         // caret keeps pointing at the ring it describes.
         let work = DisplayBounds { x: 0.0, y: 24.0, width: 1440.0, height: 836.0 };
         let rail = (1322.0, 40.0);
-        let (_, y, _, height, caret) = minimal_detail_frame(rail, 0, 420.0, work);
+        let (_, y, _, height, caret) = minimal_detail_frame(rail, 0, 420.0, false, work);
         assert_eq!((y, height), (rail.1, 420.0));
         assert!((y + caret - (rail.1 + 37.0)).abs() < 0.01);
         // A short card still centres on its ring, which is above the rail's top only
         // when the ring itself is: the clamp is a floor, not a re-centring.
-        let (_, centred, _, _, _) = minimal_detail_frame(rail, 2, 90.0, work);
+        let (_, centred, _, _, _) = minimal_detail_frame(rail, 2, 90.0, false, work);
         assert!((centred - (rail.1 + 37.0 + 136.0 - 45.0)).abs() < 0.01);
+        let (_, focused, _, _, focused_caret) = minimal_detail_frame(rail, 2, 90.0, true, work);
+        assert!((focused + focused_caret - (rail.1 + 37.0 + 136.0 + 16.0)).abs() < 0.01);
         // And a display whose work area starts below the rail's top cannot invite the
         // card back above the rail: the tighter of the two is the bound.
         let lower = DisplayBounds { x: 0.0, y: 200.0, width: 1440.0, height: 400.0 };
-        let (_, y, _, height, _) = minimal_detail_frame(rail, 0, 120.0, lower);
+        let (_, y, _, height, _) = minimal_detail_frame(rail, 0, 120.0, false, lower);
         assert_eq!((y, height), (200.0, 120.0));
     }
 
@@ -3511,22 +3459,21 @@ mod tests {
     }
 
     #[test]
-    fn minimal_mode_does_not_add_a_second_set_of_window_rules() {
+    fn neither_panel_window_hides_on_focus_loss() {
         let source = include_str!("lib.rs");
-        let focus = source
-            .split("window.on_window_event")
-            .nth(1)
-            .expect("focus handler")
-            .split("Ok(window)")
-            .next()
-            .expect("end of the panel window builder");
-        // Pinning, focus-hide and desktop behaviour are shared by both modes. A mode
-        // branch inside this handler would give the rail its own copy of those rules,
-        // and the two would drift.
-        assert!(
-            !focus.contains("minimal_mode"),
-            "pin and focus rules belong to the panel, not to one of its shapes"
-        );
+        for builder in ["fn build_panel_window", "fn build_minimal_detail_window"] {
+            let body = source
+                .split(builder)
+                .nth(1)
+                .expect("window builder")
+                .split("Ok(window)")
+                .next()
+                .expect("end of window builder");
+            assert!(
+                !body.contains("window.on_window_event"),
+                "{builder} must not hide on focus loss"
+            );
+        }
     }
 
     #[test]
@@ -3852,7 +3799,7 @@ mod tests {
     fn the_cursor_poll_hands_the_rail_the_pointer_it_cannot_see() {
         // The rail opens a platform's card on hover, and hover needs pointer events — which
         // a webview only receives while its window is key. The host's poll is therefore what
-        // keeps a pinned, always-on-top rail usable while the reader works in another app or
+        // keeps the standing rail usable while the reader works in another app or
         // while the settings window holds key. The guard reads the loop because the failure
         // is silent: everything still runs, the rail simply stops answering the pointer.
         let source = include_str!("lib.rs");
@@ -3923,7 +3870,7 @@ mod tests {
         let rail = 4242;
         assert!(frontmost_is_ours(rail, rail));
         // Nothing at the point, or nothing readable: the probe stays alive. Failing the
-        // other way would take hover away from a pinned rail, which is what it is for.
+        // other way would take hover away from the standing rail, which is what it is for.
         assert!(frontmost_is_ours(0, rail));
         assert!(frontmost_is_ours(rail, 0));
         // The Dock, a menu, another window: not a hover on the rail.
@@ -3933,29 +3880,47 @@ mod tests {
     #[test]
     fn header_tracking_schedules_on_first_visible_outside_sample() {
         let mut inside = None;
-        assert_eq!(header_tracking_transition(&mut inside, false, None), None);
+        assert_eq!(header_tracking_transition(&mut inside, false, None, false), None);
         assert_eq!(
-            header_tracking_transition(&mut inside, true, Some(false)),
+            header_tracking_transition(&mut inside, true, Some(false), false),
             Some(false)
         );
         assert_eq!(
-            header_tracking_transition(&mut inside, true, Some(false)),
+            header_tracking_transition(&mut inside, true, Some(false), false),
             None
         );
         assert_eq!(
-            header_tracking_transition(&mut inside, true, Some(true)),
+            header_tracking_transition(&mut inside, true, Some(true), false),
             Some(true)
         );
-        assert_eq!(header_tracking_transition(&mut inside, false, None), None);
+        assert_eq!(header_tracking_transition(&mut inside, false, None, false), None);
         assert_eq!(
-            header_tracking_transition(&mut inside, true, Some(false)),
+            header_tracking_transition(&mut inside, true, Some(false), false),
             Some(false)
         );
         // A transient window-server read failure must not permanently consume
         // the outside edge if a pending hide is cancelled at its due time.
-        assert_eq!(header_tracking_transition(&mut inside, true, None), None);
+        assert_eq!(header_tracking_transition(&mut inside, true, None, false), None);
         assert_eq!(
-            header_tracking_transition(&mut inside, true, Some(false)),
+            header_tracking_transition(&mut inside, true, Some(false), false),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn header_tracking_holds_its_expanded_state_while_mouse_is_down() {
+        let mut inside = Some(true);
+        assert_eq!(
+            header_tracking_transition(&mut inside, true, Some(false), true),
+            None
+        );
+        assert_eq!(inside, Some(true));
+        assert_eq!(
+            header_tracking_transition(&mut inside, true, Some(true), false),
+            None
+        );
+        assert_eq!(
+            header_tracking_transition(&mut inside, true, Some(false), false),
             Some(false)
         );
     }
@@ -4181,19 +4146,16 @@ mod tests {
     }
 
     #[test]
-    fn pinning_is_what_ties_the_panel_to_every_desktop() {
+    fn the_panel_stays_on_every_desktop_without_a_pin_state() {
         // Nothing under `cargo test` can observe the window server, so this
-        // guards the wiring instead: joining every Space follows the pin flag.
-        // Passing a constant `true` would drag the transient popup onto desktops
-        // the user never opened it on — a panel appearing over unrelated work —
-        // and dropping the call hides a pinned panel on the next desktop switch.
+        // guards the wiring instead: the panel joins every Space by default.
         let source = include_str!("lib.rs");
         // Spelled in two pieces on purpose: written whole, the needle would match
         // this test's own text and the assertion could never fail.
-        let pinned_call = format!("set_visible_on_all_workspaces({})", "pinned");
+        let all_desktops_call = format!("set_visible_on_all_workspaces({})", "true");
         assert!(
-            source.contains(&pinned_call),
-            "the panel must join every desktop exactly while it is pinned"
+            source.contains(&all_desktops_call),
+            "the panel must always join every desktop"
         );
     }
 

@@ -43,8 +43,6 @@ export function renderPanel(options: PanelHarnessOptions = {}) {
   const client = options.client ?? createFakeUsageClient({ settings: options.settings ?? {} });
   const onOpenSettings = vi.fn<(section: SettingsSection) => void>();
   const host: PanelHostProps = {
-    pinned: false,
-    onTogglePin: vi.fn(),
     onRequestHide: options.onRequestHide ?? vi.fn(),
     onSetHeight: vi.fn(),
     ...(options.canReshapeWindow === false ? {} : { onSetMinimalLayout: vi.fn() })

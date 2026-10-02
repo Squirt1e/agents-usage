@@ -5,9 +5,7 @@
  * - `createDesktopUsageClient()` talks to the Tauri host when the panel runs in
  *   the app, and degrades to the loopback HTTP service in a browser,
  * - `createDesktopHostControls()` asks the host to hide the window (Escape with no
- *   overlay open), to pin/unpin it, and to open the companion web page,
- * - the pinned state comes from the host: the panel renders what the host reports
- *   and never keeps a private copy, so a menu-bar click and the pin button agree,
+ *   overlay open) and to open the companion web page,
  * - the header's collapse follows the pointer: the host tracks the window's cursor
  *   enter/leave (a non-key window's webview sees no pointer events) and reports the
  *   intended header visibility here.
@@ -86,12 +84,11 @@ function mount(): void {
   const setMinimalDetail: NonNullable<PanelHostProps['onSetMinimalDetail']> = (selection, index) => {
     void detailBridge?.invoke('panel_set_minimal_detail', { selection, index });
   };
-  // Outside Tauri there is nothing to hide or pin; the panel stays fully usable
+  // Outside Tauri there is nothing to hide; the panel stays fully usable
   // (this is also the path the panel tests and the browser preview take).
   const host = controls ?? createBrowserFallbackHost(() => client.openWebVersion());
   const root = createRoot(container);
 
-  let pinned = false;
   // The panel's header follows the pointer, and the host owns the pointer
   // tracking (cursor enter/leave fire even when the window is not key). The
   // panel only renders what the host reports, so a re-show or a hover that never
@@ -164,14 +161,7 @@ function mount(): void {
 
   const render = () => {
     const hostProps: PanelHostProps = {
-      pinned,
       headerVisible,
-      onTogglePin: () => {
-        void host.setPinned(!pinned).then((next) => {
-          pinned = next;
-          render();
-        });
-      },
       onRequestHide: () => {
         void host.hide();
       },
@@ -203,17 +193,6 @@ function mount(): void {
   };
 
   render();
-  void host.readPinned().then((value) => {
-    if (value === pinned) return;
-    pinned = value;
-    render();
-  });
-  // The host can change the pin state on its own (menu-bar menu, focus rules).
-  host.subscribePinned((value) => {
-    if (value === pinned) return;
-    pinned = value;
-    render();
-  });
   // The header's collapse is host-driven: the host hides it after the pointer has
   // been away for the delay and restores it when the pointer returns or the panel
   // is shown again. Repeated values are dropped, so a hover that never left

@@ -14,8 +14,6 @@
  *   settings window writes them too,
  * - Escape closes the connection detail first and only then asks the host to
  *   collapse the window,
- * - the pin state is host-driven: this component renders what the host reports
- *   and never keeps a private copy,
  * - hiding a platform only writes `platformVisibility`: no credential is deleted
  *   and collection keeps running.
  */
@@ -50,7 +48,7 @@ import {
   type PanelToast
 } from './panel-toasts';
 import type { StatusTone } from '../components/StatusRow';
-import { GearIcon, PinIcon, RefreshIcon } from '../components/icons';
+import { GearIcon, RefreshIcon } from '../components/icons';
 import { formatClockTime, latestAttemptFailed, providerView, visibleSyncSummary } from '../lib/metrics';
 import { minimalSummaries } from './minimal-summary';
 import { MINIMAL_RAIL_DETAIL_WIDTH, MINIMAL_RAIL_WIDTH, minimalPanelHeight } from './minimal-layout';
@@ -85,15 +83,12 @@ const NO_PROVIDERS: ReadonlySet<ProviderId> = new Set<ProviderId>();
 
 /** Window controls the panel asks the host for; the host owns the real state. */
 export interface PanelHostProps {
-  /** Current pinned state as reported by the host. */
-  pinned: boolean;
   /**
    * Whether the panel's header should be on screen, as reported by the host
-   * (a pinned panel's header settles away while the panel is out of focus).
+   * (the standing panel's header settles away when the pointer leaves).
    * Absent/`undefined` reads as visible, so existing callers stay valid.
    */
   headerVisible?: boolean;
-  onTogglePin(): void;
   /** Ask the host to collapse the panel (Escape with no overlay open). */
   onRequestHide(): void;
   /** Ask the host to size the window to the panel's content. Must be stable. */
@@ -644,9 +639,8 @@ export function PanelApp(props: PanelAppProps) {
         onOpenSettings={props.onOpenSettings}
         onRefresh={refreshDisplayed}
         refreshing={refreshingAll}
-        pinned={host.pinned}
+        replayKeys={replayKeys}
         focused={host.headerVisible !== false}
-        onTogglePin={host.onTogglePin}
         issues={issues}
         connectionOpen={detailsOpen}
         externalDetail={props.host.onSetMinimalDetail !== undefined}
@@ -698,9 +692,6 @@ export function PanelApp(props: PanelAppProps) {
           </PanelIconButton>
           <PanelIconButton label="设置" onClick={() => props.onOpenSettings('appearance')}>
             <GearIcon />
-          </PanelIconButton>
-          <PanelIconButton label={host.pinned ? '取消置顶' : '置顶面板'} pressed={host.pinned} active={host.pinned} onClick={host.onTogglePin}>
-            <PinIcon />
           </PanelIconButton>
         </>
       }

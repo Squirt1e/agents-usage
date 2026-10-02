@@ -1190,7 +1190,7 @@ describe('local failures stay local', () => {
       providerStateOf('deepseek', [metricOf({ key: 'wallet.CNY.total', value: 86.42, unit: 'CNY', direction: 'balance' })])
     ]);
     const client = createFakeUsageClient({ snapshot });
-    const host: PanelHostProps = { pinned: false, onTogglePin: noop, onRequestHide: noop, onSetHeight: noop };
+    const host: PanelHostProps = { onRequestHide: noop, onSetHeight: noop };
     render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
 
     expect(await screen.findByRole('button', { name: '连接异常 1' })).toBeInTheDocument();
@@ -1306,7 +1306,7 @@ describe('local failures stay local', () => {
       error: { kind: 'network' as const, message: 'DeepSeek balance request failed', at: '2026-09-10T08:05:00.000Z' }
     };
     const client = createFakeUsageClient({ snapshot: snapshotOf([state]) });
-    const host: PanelHostProps = { pinned: false, onTogglePin: noop, onRequestHide: noop, onSetHeight: noop };
+    const host: PanelHostProps = { onRequestHide: noop, onSetHeight: noop };
     render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
 
     expect(await screen.findByText('¥86.42')).toBeInTheDocument();

@@ -25,11 +25,12 @@ import type { ProviderId } from '../../shared/contracts';
 import { providerDisplayName, type PanelSettings, type PanelSnapshot } from '../../shared/desktop-contract';
 import { formatMoney } from '../lib/metrics';
 import { effectivePeakDef, peakStateAt } from '../lib/peak-windows';
-import { GearIcon, PinIcon, RefreshIcon } from '../components/icons';
+import { GearIcon, RefreshIcon } from '../components/icons';
 import { MetricRow } from './MetricRow';
 import { probePoint } from './probe-hover';
 import { CardSection } from './CardSection';
 import { ProviderCardView } from './ProviderCardView';
+import { ReplayNumber } from './ReplayNumber';
 import type { ConnectionIssue } from './connection-issues';
 import { issueHeading } from './connection-issues';
 import type { MinimalSummary } from './minimal-summary';
@@ -122,9 +123,8 @@ export interface MinimalPanelProps {
   onOpenSettings(provider: ProviderId | 'appearance' | 'platforms'): void;
   onRefresh(): void;
   refreshing: boolean;
-  pinned: boolean;
+  replayKeys: Partial<Record<ProviderId, number>>;
   focused: boolean;
-  onTogglePin(): void;
   issues: ConnectionIssue[];
   connectionOpen: boolean;
   onToggleConnection(): void;
@@ -264,20 +264,17 @@ export function MinimalPanel(props: MinimalPanelProps) {
     const height = lastHeight.current ?? 0;
     const index = provider === null ? 0 : Math.max(0, props.summaries.findIndex((entry) => entry.provider === provider));
     /**
-     * Placed from the card and the platforms alone — never from the rail's furniture.
+     * Placed from the card and the platform positions, including the top grip.
      *
-     * The clamp is what the card is slid back inside, and it must not include the
-     * action column or the connection badge: both change while a card is open (the
-     * actions unroll the moment the host reports the pointer, the badge appears with a
-     * failing connection), and a clamp that followed them moved the card under the
-     * reader's pointer — the jump seen on entering and on leaving the panel. Placing
-     * against the shorter, furniture-free window is also always safe: it can only clamp
-     * the card *higher*, and the window the host is asked for is never shorter.
+     * The grip moves the rings, so the caret follows its focus state. The action
+     * column and connection badge sit below the rings; neither changes their centre
+     * or belongs in the placement clamp.
      */
     const next = minimalDetailPlacement(
       index,
       height,
-      minimalPanelHeight(props.summaries.length, height)
+      minimalPanelHeight(props.summaries.length, height),
+      props.focused
     );
     setPlacement((current) =>
       current !== null && current.top === next.top && current.caret === next.caret ? current : next
@@ -346,7 +343,7 @@ export function MinimalPanel(props: MinimalPanelProps) {
   }
 
   /** What the pointer is on, from either input: a real event's target, or a probe point. */
-  function notePointerOn(under: Element | null | undefined): void {
+  function notePointerOn(under: Element | null | undefined, activePointer = false): void {
     const provider = under?.closest<HTMLElement>('.minimal-item')?.dataset.provider as
       | ProviderId
       | undefined;
@@ -357,6 +354,16 @@ export function MinimalPanel(props: MinimalPanelProps) {
     // The card is part of the platform's own surface — travelling into it is not leaving
     // the platform — so a point on it answers the same question a ring does.
     if (under?.closest('.minimal-detail')) return;
+    // A rail control owns the pointer as soon as it is under it; the former
+    // platform must not keep its selected card while another control is hovered.
+    if (under?.closest('.minimal-drag, .minimal-tool, .minimal-alert, .minimal-empty button')) {
+      if (offPlatform.current) window.clearTimeout(offPlatform.current);
+      offPlatform.current = 0;
+      // A stationary host probe must not undo a keyboard activation. An actual
+      // pointer move owns focus and clears the old platform immediately.
+      if (selected !== null && (activePointer || !document.activeElement?.closest('.minimal-item'))) props.onLeavePlatform();
+      return;
+    }
     if (selected !== null) offPlatformSoon();
   }
 
@@ -365,7 +372,7 @@ export function MinimalPanel(props: MinimalPanelProps) {
    *
    * A webview only receives pointer events while its window is key, and the rail's is
    * often not — the reader is working in another app, the settings window holds key, or
-   * the panel was pinned and left standing. The host samples the pointer anyway (it
+   * the panel was left standing. The host samples the pointer anyway (it
    * needs it for the header), so it forwards the position and this answers the question
    * a real `pointerenter` would: which ring is under it. The selection keeps one owner;
    * the host only supplies the fact the webview cannot get for itself. The same event
@@ -408,12 +415,12 @@ export function MinimalPanel(props: MinimalPanelProps) {
       onPointerEnter={(event) => {
         pointerOnRail.current = true;
         closedUnderPointer.current = null;
-        notePointerOn(event.target as Element);
+        notePointerOn(event.target as Element, true);
       }}
       onPointerMove={(event) => {
         pointerOnRail.current = true;
         closedUnderPointer.current = null;
-        notePointerOn(event.target as Element);
+        notePointerOn(event.target as Element, true);
       }}
       onPointerLeave={() => {
         pointerOnRail.current = false;
@@ -426,7 +433,7 @@ export function MinimalPanel(props: MinimalPanelProps) {
       }}
       onPointerDown={(event) => {
         // Touch and pen have no hover to leave, so a tap outside is their close.
-        if (selected !== null && !(event.target as Element).closest('.minimal-detail, .minimal-item')) {
+        if (selected !== null && !(event.target as Element).closest('.minimal-detail, .minimal-item, .minimal-drag')) {
           onSelect(null);
         }
       }}
@@ -491,11 +498,15 @@ export function MinimalPanel(props: MinimalPanelProps) {
       <div
         className="minimal-rail"
         data-testid="minimal-rail"
-        // The rail's own padding band is the drag surface. A grip cost a row of its
-        // own and pointed at nothing; Tauri walks the event path and a button blocks
-        // the drag by itself, so platform taps still land.
+        // Tauri walks the event path, so the grip below can drag while the platform
+        // buttons still receive their own clicks.
         data-tauri-drag-region="deep"
       >
+        <div className="minimal-drag" data-testid="minimal-drag" data-tauri-drag-region="deep" aria-label="拖动面板" aria-hidden={!props.focused} inert={!props.focused} title={props.focused ? '拖动面板' : undefined}>
+          <svg viewBox="0 0 18 4" aria-hidden="true">
+            <circle cx="4" cy="2" r="1" /><circle cx="9" cy="2" r="1" /><circle cx="14" cy="2" r="1" />
+          </svg>
+        </div>
         <div className="minimal-stack">
           {props.summaries.length === 0 ? (
             <div className="minimal-empty">
@@ -508,6 +519,8 @@ export function MinimalPanel(props: MinimalPanelProps) {
             const isQuota = summary.kind === 'quota';
             const state = summaryState(summary);
             const fraction = Math.max(0, Math.min(100, isQuota ? summary.value : 0));
+            const replayKey = props.replayKeys[summary.provider] ?? 0;
+            const ringDash = `${fraction * (RING_LENGTH / 100)} ${RING_LENGTH}`;
             const peakDef = effectivePeakDef(props.settings, summary.provider);
             const isPeak = peakDef !== undefined && peakStateAt(peakDef, props.now).period === 'peak';
             return (
@@ -536,11 +549,12 @@ export function MinimalPanel(props: MinimalPanelProps) {
                         here would claim a percentage nothing measures. */}
                     {isQuota ? (
                       <circle
-                        className="minimal-ring-arc"
+                        key={replayKey}
+                        className={`minimal-ring-arc${fraction === 0 ? ' is-zero' : ''}${replayKey > 0 ? ' is-replaying' : ''}`}
                         cx="20"
                         cy="20"
                         r="17"
-                        style={{ strokeDasharray: `${fraction * (RING_LENGTH / 100)} ${RING_LENGTH}` }}
+                        style={{ strokeDasharray: ringDash, '--minimal-refresh-dash': ringDash } as CSSProperties}
                       />
                     ) : null}
                   </svg>
@@ -549,7 +563,7 @@ export function MinimalPanel(props: MinimalPanelProps) {
                   ) : <img className="minimal-brand minimal-brand-original" src={BRAND_MARKS[summary.provider]} alt={name} />}
                   <span className="minimal-brand minimal-brand-peak" aria-hidden="true" style={brandMaskStyle(summary.provider)} />
                 </span>
-                <span className="minimal-item-value">{summaryText(summary)}</span>
+                <span key={replayKey} className="minimal-item-value"><ReplayNumber text={summaryText(summary)} replay={replayKey > 0 && !prefersReducedMotion()} /></span>
               </button>
             );
           })}
@@ -574,9 +588,8 @@ export function MinimalPanel(props: MinimalPanelProps) {
           </button>
         ) : null}
         <div className="minimal-tools" aria-hidden={!props.focused}>
-          <button type="button" className="minimal-tool" aria-label={props.refreshing ? '正在刷新' : '刷新全部平台'} disabled={!props.focused || props.refreshing || props.summaries.length === 0} tabIndex={props.focused ? 0 : -1} onClick={props.onRefresh}><RefreshIcon /></button>
+          <button type="button" className={`minimal-tool${props.refreshing ? ' is-busy' : ''}`} aria-label={props.refreshing ? '正在刷新' : '刷新全部平台'} aria-busy={props.refreshing || undefined} disabled={!props.focused || props.refreshing || props.summaries.length === 0} tabIndex={props.focused ? 0 : -1} onClick={props.onRefresh}><RefreshIcon /></button>
           <button type="button" className="minimal-tool" aria-label="设置" disabled={!props.focused} tabIndex={props.focused ? 0 : -1} onClick={() => props.onOpenSettings('appearance')}><GearIcon /></button>
-          <button type="button" className={`minimal-tool${props.pinned ? ' is-active' : ''}`} aria-label={props.pinned ? '取消置顶' : '置顶面板'} aria-pressed={props.pinned} disabled={!props.focused} tabIndex={props.focused ? 0 : -1} onClick={props.onTogglePin}><PinIcon /></button>
         </div>
       </div>
     </div>

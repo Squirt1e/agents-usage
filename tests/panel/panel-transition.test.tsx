@@ -69,11 +69,11 @@ describe('the panel has one page', () => {
     const gear = await screen.findByRole('button', { name: '设置' });
 
     // The row used to fade out on a sub-page (`aria-hidden`, opacity 0, visibility
-    // hidden) while its three buttons stayed mounted. With no sub-page there is
+    // hidden) while its buttons stayed mounted. With no sub-page there is
     // nothing to fade for, so it is an ordinary visible control.
     expect(document.querySelector('.panel-tools')).not.toHaveAttribute('aria-hidden');
     expect(gear).toBeInTheDocument();
-    expect(document.querySelectorAll('.panel-tools .icon-button')).toHaveLength(3);
+    expect(document.querySelectorAll('.panel-tools .icon-button')).toHaveLength(2);
   });
 
   it('has no page-entrance animation left in the sheet', () => {

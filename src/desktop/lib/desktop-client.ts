@@ -17,8 +17,6 @@
  * | `panel_validate_credential` | `{ target, secret }` | masked `CredentialStatus` |
  * | `panel_delete_credential` | `{ target }`     | —                             |
  * | `panel_open_web_version`  | —                | —                             |
- * | `panel_pinned_state`      | —                | `boolean`                     |
- * | `panel_set_pinned`        | `{ pinned }`     | `boolean`                     |
  * | `panel_hide`              | —                | —                             |
  * | `panel_set_height`        | `{ height }`     | applied (clamped) height      |
  * | `panel_set_minimal_layout` | `{ width, height, anchor }` | applied size |
@@ -29,7 +27,7 @@
  * Events emitted towards the panel: `panel://snapshot` (`PanelSnapshot`),
  * `panel://provider` (`{ provider, state }`), `panel://settings`
  * (`PanelSettings`), `panel://connection` (`{ status, message? }`),
- * `panel://pinned` (`boolean`) and `panel://visibility` (`{ visible }`).
+ * `panel://visibility` (`{ visible }`).
  * The header's collapse is driven by the pointer in the webview, not by a host
  * event.
  *
@@ -79,8 +77,6 @@ export const DESKTOP_COMMANDS = {
   validateCredential: 'panel_validate_credential',
   deleteCredential: 'panel_delete_credential',
   openWebVersion: 'panel_open_web_version',
-  pinnedState: 'panel_pinned_state',
-  setPinned: 'panel_set_pinned',
   hide: 'panel_hide',
   setHeight: 'panel_set_height',
   setMinimalLayout: 'panel_set_minimal_layout',
@@ -97,7 +93,6 @@ export const DESKTOP_EVENTS = {
   provider: 'panel://provider',
   settings: 'panel://settings',
   connection: 'panel://connection',
-  pinned: 'panel://pinned',
   /** Host -> panel: intended visibility, so the panel can animate in/out. */
   visibility: 'panel://visibility',
   /**
@@ -125,7 +120,7 @@ export interface InjectedDesktopConfig {
   origin?: string;
   sessionToken?: string;
   webUrl?: string;
-  capabilities?: { pin?: boolean; hide?: boolean; openWebVersion?: boolean };
+  capabilities?: { hide?: boolean; openWebVersion?: boolean };
   /**
    * Settings window only: the section this window was created for. Injected at
    * build time because it is part of the window's identity, not a later request —
@@ -368,15 +363,13 @@ export function createDesktopUsageClient(options: DesktopUsageClientOptions = {}
 }
 
 // ---------------------------------------------------------------------------
-// Host window controls (hide / pin / open web version)
+// Host window controls (hide / open web version)
 // ---------------------------------------------------------------------------
 
 /**
  * Controls the panel exposes to the host.
  *
- * Hiding and pinning are *host* decisions: the panel asks, and renders the state
- * the host reports back. It never keeps a private copy of `pinned`, so a menu-bar
- * click, a pin toggle and an outside click all stay consistent.
+ * Hiding is a host decision: the panel asks, then renders the visibility event.
  */
 export interface PanelHostControls {
   /** Ask the host to collapse the panel (Escape with no overlay open). */
@@ -388,12 +381,6 @@ export interface PanelHostControls {
    */
   setHeight(height: number): Promise<void>;
   setMinimalLayout(width: number, height: number, anchor: boolean): Promise<void>;
-  /** Read the host's current pinned state. */
-  readPinned(): Promise<boolean>;
-  /** Ask the host to change the pinned state; resolves with the new state. */
-  setPinned(pinned: boolean): Promise<boolean>;
-  /** Subscribe to host-driven changes of the pinned state. */
-  subscribePinned(listener: (pinned: boolean) => void): () => void;
   /**
    * Subscribe to the host's intended visibility so the panel can play its
    * enter/leave transition around the window being shown or hidden.
@@ -419,7 +406,7 @@ export interface PanelHostControls {
 /**
  * Build the host controls for a bridge. Returns `null` when no Tauri bridge is
  * present, in which case the panel runs in the browser fallback: hiding is a
- * no-op, pinning is unavailable and the web version opens as a normal tab.
+ * no-op and the web version opens as a normal tab.
  */
 export function createDesktopHostControls(bridge: DesktopCommandBridge | null = detectDesktopBridge()): PanelHostControls | null {
   if (!bridge) return null;
@@ -433,18 +420,6 @@ export function createDesktopHostControls(bridge: DesktopCommandBridge | null = 
     },
     async setMinimalLayout(width, height, anchor) {
       await invoke(DESKTOP_COMMANDS.setMinimalLayout, { width, height, anchor }).catch(() => undefined);
-    },
-    async readPinned() {
-      const value = await invoke<unknown>(DESKTOP_COMMANDS.pinnedState).catch(() => false);
-      return value === true;
-    },
-    async setPinned(pinned) {
-      const value = await invoke<unknown>(DESKTOP_COMMANDS.setPinned, { pinned }).catch(() => pinned);
-      return value === true;
-    },
-    subscribePinned(listener) {
-      if (!bridge.listen) return () => undefined;
-      return bridge.listen(DESKTOP_EVENTS.pinned, (payload) => listener(payload === true));
     },
     subscribeVisibility(listener) {
       if (!bridge.listen) return () => undefined;
@@ -473,7 +448,7 @@ export function createDesktopHostControls(bridge: DesktopCommandBridge | null = 
  * The settings window's own host controls.
  *
  * A separate surface from `PanelHostControls` on purpose: the settings window never
- * hides itself, never pins and never sizes itself — the host fixes it at 600x400.
+ * hides itself and never sizes itself — the host fixes it at 600x400.
  * What it needs instead is to name the section it was opened on and to say when its
  * first render is on screen, and both of those exist only under Tauri; in a browser
  * this returns `null` and the settings surface renders as a sheet instead.
@@ -525,7 +500,7 @@ export function createSettingsWindowHost(
 }
 
 /**
- * Browser fallback host: no menubar window to hide and nothing to pin, but the
+ * Browser fallback host: no menubar window to hide, but the
  * companion web page still opens. Used by `main.tsx` when the panel runs outside
  * Tauri (Vite dev server, tests).
  */
@@ -538,15 +513,6 @@ export function createBrowserFallbackHost(openWebVersion: () => void | Promise<v
     },
     async setMinimalLayout() {
       // The browser preview uses CSS width directly.
-    },
-    async readPinned() {
-      return false;
-    },
-    async setPinned(pinned) {
-      return pinned;
-    },
-    subscribePinned() {
-      return () => undefined;
     },
     subscribeVisibility() {
       // Outside Tauri the panel is a normal page: it does not fade in and out.

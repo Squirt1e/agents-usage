@@ -591,16 +591,9 @@ describe('desktop usage client', () => {
   it('exposes host window controls only when the host is present', async () => {
     expect(createDesktopHostControls(null)).toBeNull();
 
-    const invoke = vi.fn(async (command: string) => {
-      if (command === DESKTOP_COMMANDS.pinnedState) return true;
-      if (command === DESKTOP_COMMANDS.setPinned) return true;
-      return undefined;
-    });
+    const invoke = vi.fn(async () => undefined);
     const controls = createDesktopHostControls({ invoke: invoke as unknown as DesktopCommandBridge['invoke'] });
     expect(controls).not.toBeNull();
-    expect(await controls?.readPinned()).toBe(true);
-    expect(await controls?.setPinned(true)).toBe(true);
-    expect(invoke).toHaveBeenCalledWith(DESKTOP_COMMANDS.setPinned, { pinned: true });
     await controls?.hide();
     expect(invoke).toHaveBeenCalledWith(DESKTOP_COMMANDS.hide, undefined);
     await controls?.openWebVersion();

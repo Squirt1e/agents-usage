@@ -47,7 +47,7 @@ describe('the card period row', () => {
       settings: settingsWith({ panelDisplayMode: 'minimal', peakReminder: { deepseek: { mode: 'builtin' } } })
     });
     const host: PanelHostProps = {
-      pinned: false, onTogglePin: vi.fn(), onRequestHide: vi.fn(),
+      onRequestHide: vi.fn(),
       onSetHeight: vi.fn(), onSetMinimalDetail: vi.fn(), onSetMinimalLayout: vi.fn()
     };
     const view = render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={noop} />);
@@ -393,7 +393,7 @@ describe('the custom window editor', () => {
 describe('the crossing toast', () => {
   it('shows nothing at all while the reminder has never been chosen', async () => {
     const client = createFakeUsageClient({ snapshot: deepseekSnapshot(), settings: settingsWith() });
-    const host: PanelHostProps = { pinned: false, onTogglePin: vi.fn(), onRequestHide: vi.fn(), onSetHeight: vi.fn() };
+    const host: PanelHostProps = { onRequestHide: vi.fn(), onSetHeight: vi.fn() };
     const view = render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
     await screen.findByTestId('card-deepseek');
     // Default off: no period presentation on the card, no announcements, and
@@ -408,7 +408,7 @@ describe('the crossing toast', () => {
       snapshot: deepseekSnapshot(),
       settings: settingsWith({ peakReminder: { deepseek: { mode: 'builtin' } } })
     });
-    const host: PanelHostProps = { pinned: false, onTogglePin: vi.fn(), onRequestHide: vi.fn(), onSetHeight: vi.fn() };
+    const host: PanelHostProps = { onRequestHide: vi.fn(), onSetHeight: vi.fn() };
     const view = render(<PanelApp client={client} host={host} now={NOW} onOpenSettings={() => undefined} />);
     // First observation of the peak: nothing to announce, but the card carries it.
     await screen.findByTestId('card-deepseek');

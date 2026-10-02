@@ -542,13 +542,6 @@ button {
   }
 }
 
-.icon-button.is-active,
-.icon-button[aria-pressed="true"] {
-  border-color: var(--active-border);
-  background: var(--active-bg);
-  color: var(--action);
-}
-
 .panel-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -2978,11 +2971,8 @@ body:has(.minimal-panel),
    * host drives frame by frame) re-uses them instead of repainting the column. It has
    * no transform of its own: this is the hint, not an effect. */
   will-change: transform;
-  /* The vertical padding is the drag band: a pointer on it is on the rail itself,
-     and a pointer on a ring is on a button, which Tauri lets block the drag. Both
-     ends are the same four points (`MINIMAL_RAIL_PADDING_TOP` / `…_BOTTOM`): the
-     frame reads lopsided when the foot is twice the head, and the action column
-     already brings its own room when it unrolls. */
+  /* Both ends keep the same four-point inset. The visible drag row below owns the
+     gesture; the inset only keeps its icon and the action column off the frame. */
   padding: 4px 0 4px;
   /* The rail wears the panel's own surface — the same gradient and the same edge the
      full panel draws — so the two shapes read as one material. It used to keep a
@@ -3004,6 +2994,58 @@ body:has(.minimal-panel),
      while the actions faded in on top of it, which is exactly what swept the buttons
      across the rings on their way to the bottom. The room now comes from the action
      column's own height (`.minimal-tools`), so the rail is only the box around it. */
+}
+
+/* The narrow grip sits above the platform readings. It follows the tools' focus
+   state so the idle rail stays about platform data; a button would consume Tauri's
+   native drag gesture. */
+.minimal-drag {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: move;
+  touch-action: none;
+  transition:
+    height 220ms ease,
+    opacity 150ms ease,
+    visibility 0s linear 220ms,
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+.minimal-panel.is-focused .minimal-drag {
+  height: 16px;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    height 220ms ease,
+    opacity 150ms ease,
+    visibility 0s linear 0s,
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+.minimal-drag:hover,
+.minimal-drag:active {
+  background: var(--control-bg);
+  color: var(--text);
+}
+
+.minimal-drag svg {
+  width: 14px;
+  height: 4px;
+  fill: currentColor;
+  pointer-events: none;
 }
 
 /* The platform slots, one gap apart.
@@ -3064,7 +3106,7 @@ body:has(.minimal-panel),
  */
 .minimal-tools {
   display: grid;
-  grid-template-rows: repeat(3, 24px);
+  grid-template-rows: repeat(2, 24px);
   gap: 2px;
   justify-items: center;
   box-sizing: border-box;
@@ -3083,7 +3125,7 @@ body:has(.minimal-panel),
 }
 
 .minimal-panel.is-focused .minimal-tools {
-  height: 88px;
+  height: 62px;
   padding: 8px 4px 4px;
   opacity: 1;
   visibility: visible;
@@ -3110,7 +3152,14 @@ body:has(.minimal-panel),
 }
 
 .minimal-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.minimal-tool:hover, .minimal-tool.is-active { background: var(--minimal-selection); color: var(--text); }
+/* The gear's stroke sits left of the refresh stroke inside the same viewBox. */
+.minimal-tool[aria-label="设置"] svg { transform: translateX(2px); }
+.minimal-tool:hover { background: var(--minimal-selection); color: var(--text); }
+
+/* The rail shares the overview's request state; its narrow control has no text
+   affordance, so the icon carries progress without changing the rail's size. */
+.minimal-tool.is-busy { color: var(--action); }
+.minimal-tool.is-busy svg { transform-origin: center; animation: panel-refresh-spin 0.8s linear infinite; }
 
 /* The host probe's twin of `:hover` (see `MinimalPanel`).
  *
@@ -3158,12 +3207,24 @@ body:has(.minimal-panel),
 .minimal-ring-arc {
   stroke: var(--minimal-codex-ring);
   stroke-linecap: round;
-  transition: stroke-dasharray 240ms ease, stroke 150ms ease;
+  transition: stroke-dasharray 240ms ease, stroke 150ms ease, opacity 150ms ease;
 }
+
+/* A zero-length dash still paints one rounded cap. Fade the arc itself at zero. */
+.minimal-ring-arc.is-zero { opacity: 0; }
 
 .minimal-item[data-provider='glm'] .minimal-ring-arc { stroke: var(--minimal-glm-ring); }
 
 .minimal-item.is-warning .minimal-ring-arc { stroke: var(--low-value-warning); }
+
+/* Remount only the stroke on a successful request. The ring's button and its
+   hover-owned detail stay mounted, including when the value is unchanged. */
+.minimal-ring-arc.is-replaying { animation: minimal-refresh-fill 260ms ease both; }
+
+@keyframes minimal-refresh-fill {
+  from { stroke-dasharray: 0 106.8; }
+  to { stroke-dasharray: var(--minimal-refresh-dash); }
+}
 
 /* The mark sits inside the ring, so it is sized to leave the stroke its own room.
    Codex has no brand colour of its own: it travels as a mask filled with the text
@@ -3321,6 +3382,7 @@ body:has(.minimal-panel),
      own fill rather than the translucent card colour it used to take. */
   background: var(--detail-surface);
   transform: rotate(45deg);
+  transition: top 220ms ease;
 }
 
 /* The card is never cut off, so this box never scrolls: the window itself grows to

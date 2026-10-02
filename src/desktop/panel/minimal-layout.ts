@@ -55,10 +55,12 @@ export const MINIMAL_RAIL_PADDING_TOP = 4;
 /**
  * The band below the last row.
  *
- * Equal to the top band by the symmetry rule above; this is also the room the action
- * column unrolls in front of, and the drag surface the rail keeps at its foot.
+ * Equal to the top band by the symmetry rule above; the action column unrolls above it.
  */
 export const MINIMAL_RAIL_PADDING_BOTTOM = 4;
+
+/** Compact one-line grip above the platforms; it shares the action column's focus state. */
+export const MINIMAL_DRAG_HEIGHT = 16;
 
 /**
  * The box the reused card gets, which is the box it has in the overview.
@@ -93,11 +95,11 @@ export const MINIMAL_DETAIL_MARGIN = 6;
 /**
  * The action column, revealed with the host's header state.
  *
- * Three 24-point buttons, the 2-point gap between them, and the room their focus ring
+ * Two 24-point buttons, the 2-point gap between them, and the room their focus ring
  * needs on every side: the column unrolls from nothing to this, which is what makes the
  * rail taller rather than letting the buttons be painted on top of the rings.
  */
-export const MINIMAL_TOOLS_HEIGHT = 88;
+export const MINIMAL_TOOLS_HEIGHT = 62;
 
 /**
  * The connection badge's row, including the gap above it.
@@ -120,6 +122,8 @@ export const MINIMAL_RAIL_DETAIL_WIDTH =
 
 /** One rule in `panel.css` each; the guard checks the pairing both ways. */
 export const RAIL_GEOMETRY = {
+  /** `.minimal-drag` — a narrow focused row above the platform readings. */
+  dragHeight: MINIMAL_DRAG_HEIGHT,
   /** `.minimal-item` — one platform: a 40-point ring, one value line under it. */
   itemHeight: 64,
   /** `.minimal-stack` — the gap between one platform's slot and the next. Without it
@@ -137,10 +141,10 @@ export const RAIL_GEOMETRY = {
 } as const;
 
 /**
- * The rail's own height: its items, the gaps between them, its padding and its border.
+ * The rail's own height: its items, the gaps, padding and border, plus focused controls.
  *
- * Dragging happens on the rail's own padding band. The actions occupy the bottom
- * only while the host reports the same visible-header state used by the full panel,
+ * The grip and actions occupy the bottom only while the host reports the same
+ * visible-header state used by the full panel,
  * and the rail collapses them the moment the pointer leaves (the host does not wait
  * out the full panel's header delay in this mode — see `schedule_header_hide`). The
  * connection badge sits between the two, and is there whenever a connection is
@@ -152,7 +156,7 @@ export function minimalRailHeight(platformCount: number, focused = false, alert 
   const items = platformCount > 0 ? platformCount * itemHeight : emptyHeight;
   // One gap *between* items, so a single platform (and the placeholder) has none.
   const gaps = platformCount > 1 ? (platformCount - 1) * itemGap : 0;
-  const tools = focused ? MINIMAL_TOOLS_HEIGHT : 0;
+  const tools = focused ? MINIMAL_DRAG_HEIGHT + MINIMAL_TOOLS_HEIGHT : 0;
   const warning = alert ? MINIMAL_ALERT_HEIGHT : 0;
   return items + gaps + railPaddingTop + railPaddingBottom + railBorder * 2 + tools + warning;
 }
@@ -185,10 +189,11 @@ export function minimalPanelHeight(
 export function minimalDetailPlacement(
   itemIndex: number,
   detailHeight: number,
-  panelHeight: number
+  panelHeight: number,
+  focused = false
 ): { top: number; caret: number } {
   const { itemHeight, itemGap, railPaddingTop, railBorder } = RAIL_GEOMETRY;
-  const centre = railBorder + railPaddingTop + (itemHeight / 2) + itemIndex * (itemHeight + itemGap);
+  const centre = railBorder + railPaddingTop + (focused ? MINIMAL_DRAG_HEIGHT : 0) + (itemHeight / 2) + itemIndex * (itemHeight + itemGap);
   const tallest = panelHeight - MINIMAL_DETAIL_MARGIN * 2;
   const height = Math.min(detailHeight, tallest > 0 ? tallest : detailHeight);
   const travel = Math.max(0, panelHeight - height - MINIMAL_DETAIL_MARGIN * 2);

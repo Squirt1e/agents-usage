@@ -2,7 +2,7 @@
  * Inline monochrome icons.
  *
  * The panel ships no icon dependency; these are the strokes the confirmed design
- * uses (refresh, platform management grid, pin, gear, tune sliders, back
+ * uses (refresh, platform management grid, gear, tune sliders, back
  * chevron). Everything inherits `currentColor` so the CSS controls the accent
  * colour.
  */
@@ -22,14 +22,6 @@ export function ManagePlatformsIcon() {
       <rect x="12.5" y="2.5" width="5" height="5" rx="1" />
       <rect x="2.5" y="12.5" width="5" height="5" rx="1" />
       <path d="M15 12v6m-3-3h6" />
-    </svg>
-  );
-}
-
-export function PinIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-      <path d="m7 3 6 0-1 5 3 3v1H5v-1l3-3-1-5Zm3 9v6" />
     </svg>
   );
 }

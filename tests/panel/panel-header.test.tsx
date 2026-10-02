@@ -58,9 +58,7 @@ const header = () => document.querySelector('.panel-header') as HTMLElement;
   function renderPanel(headerVisible: boolean | undefined, onSetHeight: (height: number) => void = () => undefined) {
     const client = createFakeUsageClient();
     const host: PanelHostProps = {
-      pinned: true,
       headerVisible,
-    onTogglePin: vi.fn(),
     onRequestHide: vi.fn(),
     onSetHeight
   };

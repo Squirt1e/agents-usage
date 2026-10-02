@@ -84,6 +84,15 @@ export function MinimalDetailWindow(props: { client: UsageClient; bridge: Deskto
   usePanelTheme(settings.theme);
 
   useEffect(() => {
+    const follow = (event: Event) => {
+      const next = Number((event as CustomEvent).detail);
+      if (Number.isFinite(next)) setCaret((current) => current === next ? current : next);
+    };
+    window.addEventListener('panel:minimal-detail-caret', follow);
+    return () => window.removeEventListener('panel:minimal-detail-caret', follow);
+  }, []);
+
+  useEffect(() => {
     const adopt = (payload: unknown) => {
       const value = payload as { selection?: unknown; index?: unknown; generation?: unknown } | null;
       const incoming = Number(value?.generation);
