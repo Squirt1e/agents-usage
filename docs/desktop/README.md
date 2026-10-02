@@ -157,7 +157,7 @@ bash tools/cargo.sh run -p usage-service -- --self-check   # 不触碰网络/钥
    全新检出时联网下载工具链，而本项目没有使用 nightly 特性。要求由
    `Cargo.toml` 的 `rust-version` 与状态说明描述。
 4. **图标**：应用图标的唯一源图是
-   `assets/brand/agents-usage-gauge-v1.png`（1024×1024、全出血方形画布）。运行
+   `assets/brand/agents-usage-gauge-v1.png`（1024×1024、透明圆角画布）。运行
    `./node_modules/.bin/tauri icon assets/brand/agents-usage-gauge-v1.png --output src-tauri/icons`
    生成各平台资源；本仓库是 macOS-only，配置引用 `src-tauri/icons/icon.icns`（应用包）和
    `src-tauri/icons/icon.png`（Tauri 的 Unix 运行时默认窗口图标）。ICNS 容器包含 16、32、128、
