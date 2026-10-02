@@ -33,8 +33,9 @@ jobs:
     # 读 package.json 的版本号，并决定这次推送要不要出包。
     # 三个条件缺一不可：这次推送的是标签（分支推送到此为止）、标签名与版本号一致
     # （不一致说明标签打错了版本，照 package.json 打包会发出一份张冠李戴的 release）、
-    # 这个版本还没发过（`v<version>` 这个 tag 或被它标着的 release 已经存在就算发过；
-    # `gh release view` 连手工建的 draft 也看得见）。要出包还得有正文：
+    # 这个版本还没发过（同名 release 已存在就算发过；`gh release view` 连手工建的
+    # draft 也看得见）。触发这次 run 的 tag 此时必然已在远端，不能拿它判已发布。
+    # 要出包还得有正文：
     # `docs/release-notes/v<version>.md` 缺了就这里失败，不往下走。
     #
     # 修一个发出去了但有问题的版本：删掉它的 release 与 tag 再重跑本次 run
@@ -67,10 +68,9 @@ jobs:
           elif [[ "$GITHUB_REF_NAME" != "$tag" ]]; then
             echo "::error::标签 $GITHUB_REF_NAME 与 package.json 的版本号 $version 不一致；改对版本号或标签后再推" >&2
             exit 1
-          elif gh release view "$tag" >/dev/null 2>&1 ||
-            git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+          elif gh release view "$tag" >/dev/null 2>&1; then
             echo "pack=false" >> "$GITHUB_OUTPUT"
-            echo "### \`$tag\` 已经存在：这个版本发过包了，这次推送不出包" >> "$GITHUB_STEP_SUMMARY"
+            echo "### \`$tag\` 的 release 已经存在：这个版本发过包了，这次推送不出包" >> "$GITHUB_STEP_SUMMARY"
           else
             # 正文缺失是提交时就能发现的问题：在这里失败，别先花掉 macOS 上一整轮构建。
             # 失败不留半成品——什么都没建，补上文件再推一次，判定仍是「要打包」。
@@ -80,7 +80,7 @@ jobs:
               exit 1
             fi
             echo "pack=true" >> "$GITHUB_OUTPUT"
-            echo "### \`$tag\` 还不存在：这次标签推送会打包，并用 $notes 当正文直接发布" >> "$GITHUB_STEP_SUMMARY"
+            echo "### \`$tag\` 尚无 release：这次标签推送会打包，并用 $notes 当正文直接发布" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   verify:
@@ -159,8 +159,8 @@ jobs:
             echo "expected exactly one dmg, found ${#dmgs[@]}" >&2
             exit 1
           fi
-          # plan 已经确认过这个 tag 不存在；万一构建期间它冒出来了（别人建的 release、
-          # 或者同一版本被手工打过标签），宁可失败也不去覆盖那些已经发出去的资产。
+          # plan 已确认没有同名 release；万一构建期间有人建了它，宁可失败也不去
+          # 覆盖已经发出去的资产。触发构建的标签本来就存在。
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "::error::$tag 已经存在，流水线不替换已发布版本的资产；要重新发版请升 package.json 的版本号" >&2
             exit 1

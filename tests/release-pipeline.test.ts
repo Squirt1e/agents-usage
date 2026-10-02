@@ -115,10 +115,11 @@ describe('发布流水线', () => {
     expect(release).not.toContain('--notes-file "$notes" "${dmgs[0]}"');
   });
 
-  it('同一个版本只打一次：tag 或 release 已存在就整段跳过打包', () => {
-    // 判据两条：远端 tag 与 release（`gh release view` 连手工建的 draft 也看得见）。
-    expect(workflow).toContain('refs/tags/$tag');
-    expect(workflow).toContain('gh release view "$tag"');
+  it('首次标签推送会打包，已有 release 的版本才跳过', () => {
+    const plan = jobBlock(workflow, 'plan');
+    // 标签推送触发的 run 里，远端 tag 已经存在；把它当作已发布会永远跳过首次打包。
+    expect(plan).not.toContain('git ls-remote');
+    expect(plan).toContain('gh release view "$tag"');
     // 打包作业挂在这个判断上，所以版本没变时连 macOS runner 都不会起。
     expect(workflow).toContain("needs.plan.outputs.pack == 'true'");
   });
