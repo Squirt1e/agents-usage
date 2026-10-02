@@ -79,6 +79,7 @@
   --badge-bg: rgba(255, 255, 255, 0.05);
   --detail-border: #555965;
   --ring-track: #50535e;
+  --quota-secondary: #a394ff;
   --bar-track: #50535e;
   --status-border: #525560;
   --notice-bg: rgba(32, 33, 38, 0.7);
@@ -189,6 +190,7 @@
   --badge-bg: #f2f2f7;
   --detail-border: #dedee3;
   --ring-track: #e5e5ea;
+  --quota-secondary: #5856d6;
   --minimal-selection: #dce7f3;
   --minimal-ring-track: #dbe5f1;
   --minimal-codex-ring: #69d1cd;
@@ -2844,7 +2846,7 @@ button {
 }
 
 .quota-item:nth-child(2) .quota-shape-fill {
-  stroke: var(--indigo);
+  stroke: var(--quota-secondary);
 }
 
 /* Ring-centred percent + label: SVG text, so it is centred on the ring's own

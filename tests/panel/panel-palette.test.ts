@@ -137,6 +137,8 @@ describe('panel palette', () => {
     expect(contrast(variable(dark, '--text-dim')!, card)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(variable(dark, '--text-faint')!, card)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(variable(dark, '--mint')!, variable(dark, '--ring-track')!)).toBeGreaterThanOrEqual(3);
+    expect(contrast(variable(dark, '--quota-secondary')!, variable(dark, '--ring-track')!)).toBeGreaterThanOrEqual(3);
+    expect(block(clean, '.quota-item:nth-child(2) .quota-shape-fill')).toMatch(/stroke:\s*var\(--quota-secondary\)/);
     expect(contrast(variable(dark, '--minimal-codex-ring')!, variable(dark, '--minimal-ring-track')!)).toBeGreaterThanOrEqual(3);
   });
 

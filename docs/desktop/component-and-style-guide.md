@@ -41,7 +41,7 @@
 - `--switch-bg`、`--switch-thumb` 表示开关关闭：状态由轨道承担，旋钮在关闭与开启两态都是同一个
   白色滑块，`--switch-thumb-shadow` 只负责在浅色主题里给白色旋钮补出边界。
 - `--switch-on-*` 表示开关已启用；禁用不另设颜色，走面板统一的淡化。
-- `--mint`、`--lime`、`--indigo` 表示平台、额度和数据身份。
+- `--mint`、`--lime`、`--indigo` 表示平台和数据身份；`--quota-secondary` 表示第二个额度环。
 - `--warning`、`--danger`、`--estimate` 表示状态或数据置信度；`--low-value-warning` 用于低额度和低余额读数。
 
 浅色主题中这些角色必须保持可区分；不要用平台色代替系统操作色，也不要用“警告色”装饰普通信息。
@@ -132,7 +132,7 @@ PanelApp                                  SettingsApp
 十六进制、`rgb()` 或 `rgba()` 字面量。完整值以 [`panel.css`](../../src/desktop/panel.css) 顶部的
 两个主题块为准。
 
-深色主题使用中性灰面板与不透明的抬升卡片，让卡片与背景靠明度分层；主读数用高对比文字，蓝色用于额度与交互强调。
+深色主题使用中性灰面板与不透明的抬升卡片，让卡片与背景靠明度分层；主读数用高对比文字，蓝色用于首个额度环与交互强调，饱和紫色用于第二个额度环。
 标准模式、极简竖栏和设置窗口继承同一套深色变量，避免分别调色后出现不一致。
 
 | Token 组 | 用途 | 使用规则 |
@@ -142,7 +142,7 @@ PanelApp                                  SettingsApp
 | `--text`、`--text-dim`、`--text-faint` | 主信息、辅助信息、弱提示 | 不用 opacity 临时制造新的文字层级 |
 | `--action`、`--active-*` | 操作、焦点、选中 | 不承担平台身份或健康状态 |
 | `--switch-*`（含 `--switch-thumb-shadow`）、`--switch-on-*` | 开关关闭与开启 | 状态由轨道表达，旋钮两态都是同一个白色滑块；与选中按钮的 `--active-*` 分开 |
-| `--mint`、`--lime`、`--indigo`、`--ring-*` | 平台和额度识别 | Codex / GLM / DeepSeek 保持既有映射 |
+| `--mint`、`--lime`、`--indigo`、`--ring-*`、`--quota-secondary` | 平台和额度识别 | Codex / GLM / DeepSeek 保持既有映射；第二个额度环用饱和紫色与轨道区分 |
 | `--warning*`、`--danger*`、`--estimate*`、`--low-value-warning` | 警告、错误、估算、低值提醒 | 额度只改变填充与百分比数字，余额只改变金额；错误色不用于普通强调 |
 | `--cover-*`、`--toast-*`、`--overlay-*` | 覆盖层和浮层 | 只用于对应层级，避免随意创建新的半透明层 |
 
