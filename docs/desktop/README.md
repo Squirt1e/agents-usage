@@ -126,8 +126,8 @@ SHA-256 由 GitHub 现算）。流水线不生成正文、不留 draft，所以�
   `npm run dev:service`——它遇到已运行实例会按 CLI 语义直接退出。
 - Vite 开发服务器由 `tauri.conf.json` 的 `beforeDevCommand` 唯一持有（端口 5174），
   退出时随之回收；不要再手动另起 `npm run dev:desktop-web`，否则会端口竞争。
-- 打包版不受影响：面板仍是隐藏、点击托盘展开的弹层行为（自动显示只存在于
-  `tauri::is_dev()` 分支）。dev 构建使用独立标识（`src-tauri/tauri.dev.conf.json`），
+- 开发版与打包版启动后都默认显示面板；用户仍可从托盘菜单或按 Escape 主动隐藏，
+  再从托盘菜单显示。dev 构建使用独立标识（`src-tauri/tauri.dev.conf.json`），
   可与已安装的打包版同时运行，两者共用同一个本地服务；停止 dev 会话用 Ctrl+C（或退出
   面板应用）。
 

@@ -637,7 +637,7 @@ fn panel_hide(app: AppHandle) {
 ///
 /// tao turns a *physical* position into window coordinates with the scale factor
 /// of the display the window is on right now, so reading and writing a position
-/// both have to go through that factor — the same reason `position_near_tray`
+/// both have to go through that factor — the same reason `full_panel_target`
 /// builds a logical target.
 fn window_origin_points(window: &tauri::WebviewWindow) -> Option<(f64, f64)> {
     let scale = window.scale_factor().unwrap_or(1.0);
@@ -2022,38 +2022,6 @@ fn full_panel_target(
     Some(LogicalPosition::new(x.max(work.left()), y.max(work.top())))
 }
 
-/// Move an already-sized panel to its tray anchor.
-fn position_near_tray(app: &AppHandle, anchor: Option<tauri::Rect>) {
-    let Some(window) = app.get_webview_window("panel") else {
-        return;
-    };
-    let Ok(size) = window.outer_size() else {
-        return;
-    };
-    // The window reports its own size in the units of the display it is on.
-    let window_scale = window.scale_factor().unwrap_or(1.0);
-    let window_scale = if window_scale.is_finite() && window_scale > 0.0 {
-        window_scale
-    } else {
-        1.0
-    };
-    let width = size.width as f64 / window_scale;
-    let height = size.height as f64 / window_scale;
-    let Some(target) = full_panel_target(app, &window, anchor, width, height) else {
-        return;
-    };
-    // Showing may follow a recent tray click on the same display, so avoid a
-    // window-server round trip if it is already at the target.
-    if let Ok(current) = window.outer_position() {
-        let current_x = f64::from(current.x) / window_scale;
-        let current_y = f64::from(current.y) / window_scale;
-        if (current_x - target.x).abs() < 0.5 && (current_y - target.y).abs() < 0.5 {
-            return;
-        }
-    }
-    let _ = window.set_position(target);
-}
-
 /// Put a panel that is already on screen back into its full shape.
 ///
 /// Switching the display mode is not a show: the window stays up, and the panel's
@@ -2189,9 +2157,9 @@ fn show_panel(app: &AppHandle, anchor: Option<tauri::Rect>) {
     // transition. Everything below this point is a transition: re-anchoring would
     // teleport a panel the reader is looking at, and the visibility event restarts
     // the panel's enter animation — which the panel can only read as "I was hidden
-    // and now I am back", because it never saw a hide. In dev the host shows the
-    // panel before the webview subscribes, so the panel starts out believing it is
-    // hidden; a redundant announce there was a visible fade-out and fade-in.
+    // and now I am back", because it never saw a hide. At startup the host shows
+    // the panel before the webview subscribes, so the panel starts out believing
+    // it is hidden; a redundant announce there was a visible fade-out and fade-in.
     let was_visible = window.is_visible().unwrap_or(false);
     if was_visible {
         let _ = window.set_focus();
@@ -2203,9 +2171,8 @@ fn show_panel(app: &AppHandle, anchor: Option<tauri::Rect>) {
         let _ = panel_set_minimal_layout(app.clone(), 58.0, height, true);
     } else {
         // The window may have been hidden in the rail's shape, so the full frame is
-        // solved and applied here rather than left to `position_near_tray`: that reads
-        // the size the window has *now*, which is the rail's 58 points until a queued
-        // resize lands.
+        // solved and applied here with the full width: the window may still be
+        // the rail's 58 points wide until a queued resize lands.
         show_full_panel(app, &window, anchor, height);
     }
     let _ = window.show();
@@ -2649,32 +2616,6 @@ pub fn build(context: tauri::Context) -> tauri::App {
             start_cursor_tracking(app.handle());
             start_boundary_tracking(app.handle());
 
-            // Dev loop convenience: `tauri dev` serves the panel from the Vite
-            // dev server (hot reload), so put the window on screen right away
-            // instead of waiting for a tray click. Must run after `manage` so a
-            // focus event cannot reach the not-yet-managed state.
-            if tauri::is_dev() {
-                if let Some(window) = app.get_webview_window("panel") {
-                    // A host hot-reload recreates this window. Centering every
-                    // new dev window makes a panel placed at the upper right
-                    // appear to jump to the middle after the reload.
-                    position_near_tray(app.handle(), None);
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                    // This show did not go through `show_panel`, so record it:
-                    // otherwise the first tray click would "show" an
-                    // already-visible panel, replaying its enter fade and
-                    // jumping it to the tray.
-                    let state = app.state::<PanelState>();
-                    let mut visibility = state
-                        .visibility
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    visibility.showing = true;
-                    visibility.generation = visibility.generation.wrapping_add(1);
-                }
-            }
-
             // Forward the service's loopback API into host events so the panel
             // updates live without polling.
             spawn_event_forwarder(app.handle().clone());
@@ -2764,10 +2705,9 @@ pub fn build(context: tauri::Context) -> tauri::App {
             let _ = tray;
 
             // The items were created on their opening state: the toggle on the
-            // hidden-panel label (a dev build has already put the panel on screen by
-            // now), and the two groups on the settings contract's defaults, which are
-            // also what the host assumes until the webview's settings read says
-            // otherwise.
+            // hidden-panel label; the startup show below corrects it after the
+            // handle is stored. The two groups start on the settings contract's
+            // defaults until the webview's settings read corrects them.
             {
                 let state = app.state::<PanelState>();
                 state
@@ -2796,6 +2736,10 @@ pub fn build(context: tauri::Context) -> tauri::App {
             sync_tray_toggle(app.handle());
             sync_tray_mode(app.handle());
             sync_tray_theme(app.handle(), TRAY_DEFAULT_THEME);
+
+            // Both dev and packaged launches open the same panel. Wait until the
+            // tray item is stored so the show path also gives it the right label.
+            show_panel(app.handle(), None);
 
             Ok(())
         })
@@ -3306,6 +3250,27 @@ mod tests {
     }
 
     #[test]
+    fn startup_shows_the_panel_after_tray_state_is_ready() {
+        let source = include_str!("lib.rs");
+        let setup = source
+            .split(".setup(|app| {")
+            .nth(1)
+            .expect("desktop setup")
+            .split(".invoke_handler")
+            .next()
+            .expect("end of desktop setup");
+        let stored_toggle = setup.find(".replace(toggle_item)").expect("tray item stored");
+        let show = setup
+            .find("show_panel(app.handle(), None)")
+            .expect("startup shows the panel");
+        assert!(stored_toggle < show, "the show must update the tray item");
+        assert!(
+            !setup.contains("if tauri::is_dev()"),
+            "packaged launches must take the same show path as dev launches"
+        );
+    }
+
+    #[test]
     fn showing_an_already_visible_panel_is_not_a_transition() {
         let source = include_str!("lib.rs");
         let show = source
@@ -3316,8 +3281,8 @@ mod tests {
             .next()
             .expect("end of show_panel");
         // The panel's enter animation is driven by this event, and the panel has no
-        // way to tell a redundant announce from a real re-show: in dev the host shows
-        // the panel before the webview subscribes, so the panel believes it is hidden
+        // way to tell a redundant announce from a real re-show: at startup the host
+        // shows the panel before the webview subscribes, so it believes it is hidden
         // and would fade out and back in. Re-anchoring has the same problem — it moves
         // a window the reader is looking at — so both sit behind the same guard.
         let guard = show
